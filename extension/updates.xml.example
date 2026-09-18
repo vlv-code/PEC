@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Пример update manifest для GPO ExtensionInstallForcelist -->
+<!-- URL этого файла указывается в GPO: <extension_id>;https://mini-server.ic.local/updates/updates.xml -->
+<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+  <app appid='YOUR_32_CHAR_EXTENSION_ID_HERE'>
+    <updatecheck codebase='https://mini-server.ic.local/updates/corp-proxy-auth-1.0.0.crx' version='1.0.0' />
+  </app>
+</gupdate>

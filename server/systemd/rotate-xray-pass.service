@@ -1,0 +1,9 @@
+[Unit]
+Description=Rotate Xray inbound password via 3x-ui API
+
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/mini-server/env
+ExecStart=/opt/mini-server/venv/bin/python /opt/mini-server/rotate.py
+User=mini-server
+Group=mini-server

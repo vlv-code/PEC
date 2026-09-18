@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Corp Proxy Auth",
+  "version": "1.0.0",
+  "description": "Supplies rotating Basic-Auth credentials for the corporate VPN-routed proxy (Xray/3x-ui inbound).",
+  "permissions": ["webRequest", "webRequestAuthProvider", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "storage": {
+    "managed_schema": "managed_schema.json"
+  },
+  "minimum_chrome_version": "96"
+}

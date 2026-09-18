@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-server:
+    name: Server Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'server/requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt
+
+      - name: Check compilation
+        run: |
+          python -m py_compile server/app.py server/rotate.py extension/scripts/pack.py
+
+      - name: Run server unit tests
+        run: |
+          python server/tests/test_server.py
+
+  test-extension:
+    name: Extension Syntax & Schema Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify JavaScript syntax
+        run: |
+          node -c extension/background.js
+
+      - name: Validate JSON schemas and manifests
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json', 'utf8'));"
+          node -e "JSON.parse(require('fs').readFileSync('extension/managed_schema.json', 'utf8'));"
+
+      - name: Test packaging CLI help
+        run: |
+          python extension/scripts/pack.py --help

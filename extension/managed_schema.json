@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "extToken": {
+      "type": "string",
+      "description": "Общий токен для аутентификации на мини-сервере. Раздаётся через GPO ExtensionSettings (policy JSON для этого extension-id), не хранится в коде расширения."
+    },
+    "credsUrl": {
+      "type": "string",
+      "description": "URL эндпоинта /creds мини-сервера. Опционально — переопределяет DEFAULT_CREDS_URL в background.js, если нужно менять без пересборки расширения."
+    }
+  }
+}
