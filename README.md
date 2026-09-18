@@ -7,7 +7,7 @@
 
 Готовое корпоративное решение для **избирательного доступа к прокси через членство в Active Directory группе**.
 
-Вместо тяжелого стека со Squid, NTLM/Kerberos и расшифровкой SSL, система использует связку **Active Directory GPO + Chrome Extension (MV3) + Xray (3x-ui) + ротация паролей**.
+Система использует связку **Active Directory GPO + Chrome Extension (MV3) + Xray (3x-ui) + ротация паролей**.
 
 ---
 
