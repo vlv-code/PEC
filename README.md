@@ -1,4 +1,4 @@
-# Corp Proxy Auth & Rotation System
+# proxy-extension-corp
 
 [![CI Status](https://github.com/corp/proxy-extension-corp/actions/workflows/ci.yml/badge.svg)](https://github.com/corp/proxy-extension-corp/actions)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
