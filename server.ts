@@ -2313,7 +2313,7 @@ pm2 startup</pre>
           'for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove("active");' +
           'var contents = document.querySelectorAll(".tab-content");' +
           'for (var j = 0; j < contents.length; j++) contents[j].classList.remove("active");' +
-          'var btn = document.querySelector(\'.tab-btn[data-tab="\' + tabId + \'"]\');' +
+          'var btn = document.querySelector(".tab-btn[data-tab=" + JSON.stringify(tabId) + "]");' +
           'if (btn) btn.classList.add("active");' +
           'var tgt = document.getElementById(tabId);' +
           'if (tgt) tgt.classList.add("active");' +
