@@ -1,0 +1,138 @@
+[
+  {
+    "id": "profile_default_split",
+    "name": "Direct by Default (Selective Proxy)",
+    "description": "Default: all traffic goes DIRECT. Only chosen AI, Media or custom domains go through PROXY. Corporate stays DIRECT.",
+    "defaultPolicy": "direct",
+    "isDefault": true,
+    "targetScope": "all",
+    "rules": [
+      {
+        "id": "r1",
+        "name": "Bypass Corporate Intranet",
+        "targetType": "preset",
+        "pattern": "preset:corporate_internal",
+        "action": "direct",
+        "enabled": true
+      },
+      {
+        "id": "r2",
+        "name": "Route AI Services to Proxy",
+        "targetType": "preset",
+        "pattern": "preset:ai_services",
+        "action": "proxy",
+        "enabled": true
+      },
+      {
+        "id": "r3",
+        "name": "Block Telemetry & Trackers",
+        "targetType": "preset",
+        "pattern": "preset:ad_telemetry_block",
+        "action": "block",
+        "enabled": true
+      }
+    ],
+    "updatedAt": "2026-09-22T10:31:30.748Z"
+  },
+  {
+    "id": "profile_full_proxy",
+    "name": "Full Proxy Tunnel (Bypass Intranet)",
+    "description": "Default: all traffic goes through PROXY. Only corporate internal subnets & RU services stay DIRECT.",
+    "defaultPolicy": "proxy",
+    "isDefault": false,
+    "targetScope": "group",
+    "targetGroup": "SEC-Proxy-VPN-VIP",
+    "rules": [
+      {
+        "id": "r_corp",
+        "name": "Keep Corporate Direct",
+        "targetType": "preset",
+        "pattern": "preset:corporate_internal",
+        "action": "direct",
+        "enabled": true
+      },
+      {
+        "id": "r_ru",
+        "name": "Direct RU Services",
+        "targetType": "preset",
+        "pattern": "preset:geosite_ru",
+        "action": "direct",
+        "enabled": true
+      },
+      {
+        "id": "r_block",
+        "name": "Sinkhole Trackers",
+        "targetType": "preset",
+        "pattern": "preset:ad_telemetry_block",
+        "action": "block",
+        "enabled": true
+      }
+    ],
+    "updatedAt": "2026-09-22T10:31:30.751Z"
+  },
+  {
+    "id": "prof_3a7e28e8",
+    "name": "Test Split Tunnel",
+    "description": "",
+    "defaultPolicy": "direct",
+    "rules": [
+      {
+        "id": "r1",
+        "name": "Route AI to Proxy",
+        "targetType": "preset",
+        "pattern": "preset:ai_services",
+        "action": "proxy",
+        "enabled": true
+      },
+      {
+        "id": "r2",
+        "name": "Sinkhole Trackers",
+        "targetType": "preset",
+        "pattern": "preset:ad_telemetry_block",
+        "action": "block",
+        "enabled": true
+      }
+    ],
+    "targetScope": "all",
+    "isDefault": false,
+    "updatedAt": "2026-09-22T10:31:30.851Z"
+  },
+  {
+    "id": "prof_vip_test",
+    "name": "VIP Direct Preset",
+    "description": "",
+    "defaultPolicy": "direct",
+    "rules": [],
+    "targetScope": "group",
+    "targetGroup": "SEC-VIP-GROUP",
+    "isDefault": false,
+    "updatedAt": "2026-09-22T11:05:47.290Z"
+  },
+  {
+    "id": "prof_31571379",
+    "name": "Test Split Tunnel",
+    "description": "",
+    "defaultPolicy": "direct",
+    "rules": [
+      {
+        "id": "r1",
+        "name": "Route AI to Proxy",
+        "targetType": "preset",
+        "pattern": "preset:ai_services",
+        "action": "proxy",
+        "enabled": true
+      },
+      {
+        "id": "r2",
+        "name": "Sinkhole Trackers",
+        "targetType": "preset",
+        "pattern": "preset:ad_telemetry_block",
+        "action": "block",
+        "enabled": true
+      }
+    ],
+    "targetScope": "all",
+    "isDefault": false,
+    "updatedAt": "2026-09-22T11:05:47.289Z"
+  }
+]

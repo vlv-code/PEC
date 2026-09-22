@@ -3,11 +3,19 @@
   "properties": {
     "extToken": {
       "type": "string",
-      "description": "Общий токен для аутентификации на мини-сервере. Раздаётся через GPO ExtensionSettings (policy JSON для этого extension-id), не хранится в коде расширения."
+      "description": "Shared corporate token for authentication on the mini-server (via X-Ext-Token header)."
     },
     "credsUrl": {
       "type": "string",
-      "description": "URL эндпоинта /creds мини-сервера. Опционально — переопределяет DEFAULT_CREDS_URL в background.js, если нужно менять без пересборки расширения."
+      "description": "Direct URL for /creds endpoint. Defaults to https://mini-server.ic.local/creds."
+    },
+    "syncUrl": {
+      "type": "string",
+      "description": "URL for /api/sync endpoint to receive dynamic proxy configuration and send heartbeat."
+    },
+    "autoConfigureProxy": {
+      "type": "boolean",
+      "description": "If true, extension manages chrome.proxy.settings dynamically according to the mini-server config."
     }
   }
 }
