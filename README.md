@@ -1,149 +1,145 @@
-# proxy-extension-corp
+# PEC - Proxy Extension Corp
 
-[![CI Status](https://github.com/corp/proxy-extension-corp/actions/workflows/ci.yml/badge.svg)](https://github.com/corp/proxy-extension-corp/actions)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Chrome Extension](https://img.shields.io/badge/manifest-v3-green.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
+[![Release](https://img.shields.io/badge/release-v1.3.0-blue.svg)](https://github.com/corp/pec-proxy-extension-corp/releases)
+[![Node.js](https://img.shields.io/badge/node.js-%3E%3D20-green.svg)](https://nodejs.org/)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
+[![Chrome Extension](https://img.shields.io/badge/chrome%20extension-MV3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Готовое корпоративное решение для **избирательного доступа к прокси через членство в Active Directory группе**.
-
-Система использует связку **Active Directory GPO + Chrome Extension (MV3) + Xray (3x-ui) + ротация паролей**.
+**PEC - Proxy Extension Corp** — корпоративная система безопасного управления прокси, сборки и кастомизации браузерных расширений (Chrome Manifest V3), распространения через Active Directory GPO и автоматической ротации учетных данных в панелях Xray / 3x-ui.
 
 ---
 
-## Архитектура решения
+## 🌟 Ключевые возможности
+
+1. **Конструктор и сборщик расширений (Extension Studio)**:
+   - Автоматическая компиляция и подпись `.CRX` пакета 2048-битным RSA ключом.
+   - Генерация файла автоматического обновления `updates.xml` для корпоративного развертывания.
+   - Три пресета интерфейса: **Self-Service Pro** (полный UI с диагностикой и кнопкой временного обхода), **Kiosk / Restricted** (read-only попап для киосков и учебных классов), **Stealth Agent** (невидимая фоновая служба).
+   - Выбор цветовых стилей (Cyber Blue, Obsidian, Emerald, Sunset, Minimal Light) и векторных иконок.
+   - Интерактивный интерактивный предпросмотр (**Live Extension Interactive Preview**) с переключением вкладок и реактивным симулятором состояний (**Simulated Extension State**).
+
+2. **Маршрутизация и Гео-базы (Smart PAC Generator)**:
+   - Профили маршрутизации: выборочный прокси (DIRECT по умолчанию) или полный туннель (PROXY по умолчанию).
+   - Встроенные гео-базы и категории: Корпоративный интранет, AI-сервисы (ChatGPT, Claude, Gemini), Социальные сети, Стриминговые платформы, Блокировка рекламы/телеметрии.
+   - Поддержка масок доменов (`*.corp.internal`), регулярных выражений и IP/CIDR правил (`10.0.0.0/8`, `192.168.0.0/16`).
+   - Защита от PAC script injection с валидацией входных паттернов.
+
+3. **Автоматическая ротация учетных данных 3x-ui / Xray**:
+   - Автоматическая смена паролей в инбаунде 3x-ui по расписанию (15 мин, 1 час, 6 часов, 24 часа).
+   - Атомарная запись учетных данных на диск с защитой от повреждения хранилища.
+   - Защита от перебора: Rate-limiting и криптостойкое сравнение токенов (`crypto.timingSafeEqual`).
+
+4. **Централизованный флот устройств (Fleet Management)**:
+   - Регистрация подключенных инстансов расширения через heartbeat (`POST /api/sync`).
+   - Мониторинг версий, IP-адресов, времени отклика и назначение профилей маршрутизации группам устройств.
+   - Аварийный рубильник (**Global Kill-Switch**), моментально переводящий весь парк устройств в прямой режим.
+
+5. **Готовые сценарии установки**:
+   - 🐳 **Docker & Docker Compose**: изолированный production multi-stage образ с постоянными томами.
+   - 🐧 **Linux systemd служба**: автоматический скрипт установки для Ubuntu / Debian / RHEL с запуском от непривилегированного пользователя `pecuser`.
+   - 🛡️ **Nginx Reverse Proxy & SSL**: конфигурация с поддержкой WebSocket, защитой заголовков и кешированием PAC/CRX.
+   - 🏢 **Active Directory GPO**: генерация готовых файлов реестра Windows (`.reg`) и JSON-схемы политик `ExtensionInstallForcelist`.
+
+---
+
+## 🏗 Архитектура решения
 
 ```text
-Пользователь (Windows, Chrome)
+  Клиентские компьютеры (Windows / macOS / Linux)
+  ├── Браузер Google Chrome с расширением PEC (MV3)
+  │    ├── Автоподстановка логина и пароля через onAuthRequired
+  │    ├── Периодический опрос /api/sync для получения актуальных настроек
+  │    └── Применение PAC-скрипта (локальная избирательная маршрутизация)
   │
-  │  PAC-файл (раздаётся всем через GPO; домены из списка → PROXY/HTTPS xray-host:10809, иначе DIRECT)
   ▼
-Xray / 3x-ui (http-inbound :10809)
-  │  Basic-Auth — логин/пароль автоматически подставляет расширение через onAuthRequired
-  │  пароль ротируется мини-сервером ежедневно через API 3x-ui
-  ▼
-Remnawave outbound (ключи подписки, routing по inboundTag)
-  ▼
-Интернет
-
-┌──────────────────────────────────────────────┐     ┌──────────────────────────────────────────────┐
-│        Chrome Extension (extension/)         │     │             Mini-Server (server/)            │
-│  — Доставляется через GPO группе AD          │────>│  — FastAPI эндпоинт /creds                   │
-│  — Дедупликация параллельных запросов        │     │  — Nginx (TLS + корпоративные подсети)       │
-│  — Защита от зацикливания 407                │     │  — Ежедневная атомарная ротация пароля       │
-│  — In-memory кэширование без записи на диск  │     │  — Хостинг обновлений /updates/ (.crx)       │
-└──────────────────────────────────────────────┘     └──────────────────────────────────────────────┘
+  PEC Server (:3000 / :443 HTTPS через Nginx)
+  ├── GET /proxy.pac          ── Динамический PAC-скрипт с правилами профиля
+  ├── GET /creds              ── Безопасная выдача логина/пароля (защита токеном)
+  ├── POST /api/sync          ── Heartbeat флота и телеметрия инстансов
+  ├── GET /updates/extension.crx ── Раздача подписанного пакета расширения
+  └── Планировщик ротации     ── Обращается к API 3x-ui и обновляет пароль
+        │
+        ▼
+  Шлюз Xray / 3x-ui (:10808/:10809) ──> Внешний интернет / Корпоративные ресурсы
 ```
 
 ---
 
-## Преимущества подхода
+## 🚀 Сценарии развертывания
 
-- **Zero-Friction для пользователя**: сайты из списка открываются прозрачно, без единого окна ввода логина и пароля.
-- **Простое управление доступом через AD**: достаточно добавить пользователя в доменную группу `SEC-Proxy-VPN` — расширение установится автоматически при следующем входе. При удалении из группы расширение удаляется, и доступ прекращается.
-- **Защита от утечки пароля**: пароль прокси ротируется ежедневно через API 3x-ui. Даже если сотрудник перехватит текущий пароль, он станет недействительным в течение суток.
-- **Безопасность сетевого уровня**: расширение поддерживает схему `HTTPS xray-host:10809; DIRECT` (Secure Web Proxy), защищая учетные данные от перехвата в корпоративной сети.
-
----
-
-## Структура репозитория
-
-| Каталог / Файл | Описание |
-|---|---|
-| [`extension/`](extension/) | Исходный код Chrome Extension (Manifest V3), схема GPO и утилита упаковки `.crx` |
-| ├── [`manifest.json`](extension/manifest.json) | Манифест расширения с разрешениями `webRequestAuthProvider` и `storage` |
-| ├── [`background.js`](extension/background.js) | Service Worker: обработка `onAuthRequired`, дедупликация и кэш |
-| ├── [`managed_schema.json`](extension/managed_schema.json) | Описание параметров политики для оснастки GPO |
-| └── [`scripts/pack.py`](extension/scripts/pack.py) | Скрипт сборки `.crx` и генерации `updates.xml` для GPO |
-| [`server/`](server/) | Серверная часть: раздача кредов и скрипт ротации пароля |
-| ├── [`app.py`](server/app.py) | Легковесный FastAPI-сервер для отдачи учетных данных расширению |
-| ├── [`rotate.py`](server/rotate.py) | Скрипт ежедневной ротации пароля инбаунда в 3x-ui |
-| ├── [`nginx.conf.example`](server/nginx.conf.example) | Конфигурация Nginx: TLS, ограничение подсетей и хостинг `.crx` |
-| └── [`systemd/`](server/systemd/) | Готовые systemd-сервисы и таймер ротации |
-| [`docs/`](docs/) | Подробная техническая документация и пошаговый план внедрения |
-| └── [`architecture-plan.md`](docs/architecture-plan.md) | Полный план внедрения, настройка GPO, PAC-файла и Xray |
-
----
-
-## Быстрый старт
-
-### 1. Серверная часть
-Подробная инструкция доступна в [server/README.md](server/README.md).
+### Вариант 1: Docker Compose (Рекомендуемый)
 
 ```bash
-# Клонирование и установка зависимостей
-sudo mkdir -p /opt/mini-server
-sudo cp -r server/* /opt/mini-server/
-cd /opt/mini-server
-python3 -m venv venv
-./venv/bin/pip install -r requirements.txt
+# Клонирование репозитория
+git clone https://github.com/corp/pec-proxy-extension-corp.git
+cd pec-proxy-extension-corp
 
-# Настройка переменных окружения
-cp env.example env && chmod 600 env
-# Заполнить EXT_SHARED_TOKEN и доступы к 3x-ui API
+# Запуск в фоновом режиме
+docker compose up -d --build
 
-# Запуск сервиса и таймера ротации
-sudo cp systemd/* /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now mini-server.service rotate-xray-pass.timer
+# Проверка статуса
+docker compose ps
+docker compose logs -f pec-server
 ```
 
-### 2. Сборка расширения для GPO
-Подробная инструкция доступна в [extension/README.md](extension/README.md).
+Панель управления будет доступна по адресу `http://<IP_СЕРВЕРА>:3000`.
+
+### Вариант 2: Linux systemd служба (Ubuntu / Debian / CentOS)
 
 ```bash
-# Сборка пакета .crx и генерация updates.xml
-python extension/scripts/pack.py --base-url https://mini-server.ic.local/updates
+sudo bash deploy/install-systemd.sh
 ```
 
-Команда автоматически:
-1. Создаст постоянный ключ `extension/key.pem` (сохраните его!).
-2. Соберет пакет `.crx` в папку `dist/`.
-3. Рассчитает постоянный **Extension ID** и сформирует `dist/updates.xml`.
-4. Выведет готовые строки для оснастки управления групповыми политиками Active Directory (GPO).
+Скрипт автоматически:
+- Установит зависимости Node.js 20 LTS;
+- Создаст системного пользователя `pecuser`;
+- Разместит сервис в `/opt/pec-proxy-server`;
+- Создаст безопасный токен и зарегистрирует systemd unit `pec-server.service`;
+- Запустит службу в автозагрузке.
 
-### 3. Развертывание через Active Directory (GPO)
-1. В GPO настройте политику `ExtensionInstallForcelist`:
-   ```text
-   <extension_id>;https://mini-server.ic.local/updates/updates.xml
-   ```
-2. В политике `ExtensionSettings` передайте JSON с общим токеном `extToken`:
-   ```json
-   {
-     "<extension_id>": {
-       "installation_mode": "force_installed",
-       "update_url": "https://mini-server.ic.local/updates/updates.xml",
-       "extToken": "YOUR_EXT_SHARED_TOKEN_HERE",
-       "credsUrl": "https://mini-server.ic.local/creds"
-     }
-   }
-   ```
-3. Примените Security Filtering на доменную группу `SEC-Proxy-VPN`.
-
----
-
-## Тестирование и верификация
-
-Запуск полного набора юнит-тестов сервера:
-
+Управление службой:
 ```bash
-python server/tests/test_server.py
+sudo systemctl status pec-server
+sudo journalctl -u pec-server -f
+sudo systemctl restart pec-server
 ```
 
-Проверка синтаксиса расширения:
+### Вариант 3: Реверс-прокси Nginx + SSL
 
+Скопируйте конфигурацию из `deploy/nginx-proxy.conf` в `/etc/nginx/sites-available/pec-proxy.conf`, укажите домен и сертификаты Let's Encrypt:
 ```bash
-node -c extension/background.js
+sudo cp deploy/nginx-proxy.conf /etc/nginx/sites-available/pec-proxy.conf
+sudo ln -s /etc/nginx/sites-available/pec-proxy.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ---
 
-## Безопасность
+## 🔒 Безопасность
 
-Подробное описание модели угроз и правил безопасной эксплуатации приведено в [SECURITY.md](SECURITY.md).
+- **Защита от перебора токена**: Сравнение корпоративного токена `X-Ext-Token` выполняется в постоянном времени с помощью `crypto.timingSafeEqual`, предотвращая тайминг-атаки.
+- **Санитайзинг PAC-скрипта**: Все домены, маски и IP-диапазоны очищаются от управляющих символов и кавычек перед конструированием функции `FindProxyForURL`.
+- **Изоляция окружения**: Dockerfile использует non-root пользователя `pecuser` (UID 1001), а systemd служба защищена параметрами `NoNewPrivileges=true`, `ProtectSystem=full`, `PrivateTmp=true`.
+- **Защита данных**: Приватные ключи подписи (`key.pem`) и файлы сессий пользователей исключены из системы контроля версий через `.gitignore`.
 
 ---
 
-## Лицензия
+## 🧪 Тестирование и Сборка
 
-Проект распространяется под лицензией [MIT](LICENSE).
+```bash
+# Проверка типов TypeScript
+npm run lint
+
+# Запуск набора модульных тестов
+npm test
+
+# Сборка production бандла
+npm run build
+```
+
+---
+
+## 📄 Лицензия
+
+Проект распространяется под лицензией MIT. Подробнее см. в файле [LICENSE](LICENSE).

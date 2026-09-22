@@ -1,15 +1,33 @@
 {
   "manifest_version": 3,
-  "name": "Corp Proxy Auth",
-  "version": "1.0.0",
-  "description": "Supplies rotating Basic-Auth credentials for the corporate VPN-routed proxy (Xray/3x-ui inbound).",
-  "permissions": ["webRequest", "webRequestAuthProvider", "storage"],
-  "host_permissions": ["<all_urls>"],
+  "name": "PEC - Proxy Extension Corp",
+  "short_name": "PEC Corp",
+  "version": "1.3.0",
+  "description": "Корпоративное расширение Chrome для автоматической синхронизации HTTP/SOCKS5 прокси и ротируемой аутентификации.",
+  "permissions": [
+    "webRequest",
+    "webRequestAuthProvider",
+    "storage",
+    "proxy",
+    "alarms",
+    "privacy"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "storage": {
     "managed_schema": "managed_schema.json"
   },
-  "minimum_chrome_version": "96"
+  "minimum_chrome_version": "96",
+  "action": {
+    "default_title": "PEC - Proxy Extension Corp",
+    "default_popup": "popup.html",
+    "default_icon": "icon.svg"
+  },
+  "icons": {
+    "128": "icon.svg"
+  }
 }

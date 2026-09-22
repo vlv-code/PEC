@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PEC - Proxy Extension Corp</title>
+  <style>
+    :root {
+      --primary: #0284c7;
+      --bg: #0b1120;
+      --card: #131d36;
+      --border: #22345c;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 340px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.4;
+      user-select: none;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+    .brand-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+    .status-badge.bypass {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+    .status-badge.bypass .dot { background: var(--warning); }
+
+    /* Nav Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 4px;
+      border-radius: 5px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .tab-btn.active {
+      background: var(--card);
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; }
+    .label { color: var(--text-muted); font-size: 11px; }
+    .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; font-size: 12px; }
+    
+    .btn-primary {
+      width: 100%;
+      background: var(--primary);
+      color: #0b1120;
+      font-weight: 600;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-sec {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 7px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-top: 6px;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .btn-sec:hover { background: rgba(255, 255, 255, 0.1); }
+    .btn-sec.warning { border-color: rgba(245, 158, 11, 0.4); color: var(--warning); }
+
+    .tag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(2, 132, 199, 0.15);
+      color: var(--primary);
+      border: 1px solid rgba(2, 132, 199, 0.3);
+    }
+    .rule-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+      font-size: 11px;
+    }
+    .rule-item:last-child { border-bottom: none; }
+    .support-box { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🛡️</div>
+      <span>PEC Corp</span>
+    </div>
+    <div class="status-badge" id="badge">
+      <span class="dot"></span>
+      <span id="statusText">Активен</span>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-conn" onclick="window.switchPopupTab('tab-conn')">Подключение</button>
+    <button class="tab-btn" data-tab="tab-rules" onclick="window.switchPopupTab('tab-rules')">Маршрутизация</button>
+    <button class="tab-btn" data-tab="tab-diag" onclick="window.switchPopupTab('tab-diag')">Диагностика</button>
+    <button class="tab-btn" data-tab="tab-help" onclick="window.switchPopupTab('tab-help')">Поддержка</button>
+  </div>
+
+  <!-- TAB 1: Connection -->
+  <div class="tab-content active" id="tab-conn">
+    <div class="card">
+      <div class="row">
+        <span class="label">Режим прокси</span>
+        <span class="val" id="modeVal">HTTP / SOCKS5</span>
+      </div>
+      <div class="row">
+        <span class="label">Прокси-сервер</span>
+        <span class="val" id="serverVal">proxy.corp.internal</span>
+      </div>
+      <div class="row">
+        <span class="label">Профиль правил</span>
+        <span class="val" id="profileVal">Selective (PAC)</span>
+      </div>
+      <div class="row">
+        <span class="label">Задержка (Пинг)</span>
+        <span class="val" id="pingVal" style="color: var(--success);">28 ms</span>
+      </div>
+    </div>
+
+    <button id="btnSync" class="btn-primary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+      <span>Синхронизировать сейчас</span>
+    </button>
+
+    
+    <button id="btnToggleBypass" class="btn-sec warning">
+      Временно отключить (15м)
+    </button>
+  </div>
+
+  <!-- TAB 2: Routing -->
+  <div class="tab-content" id="tab-rules">
+    <div class="card">
+      <div class="row" style="margin-bottom: 6px;">
+        <span class="label">По умолчанию</span>
+        <span class="tag">DIRECT</span>
+      </div>
+      <div class="rule-item">
+        <span>🤖 Модели AI и LLM</span>
+        <span class="tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16,185,129,0.3);">PROXY</span>
+      </div>
+      <div class="rule-item">
+        <span>🏢 Корпоративная сеть RFC1918</span>
+        <span class="tag">DIRECT</span>
+      </div>
+      <div class="rule-item">
+        <span>🛡️ Реклама и телеметрия</span>
+        <span class="tag" style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border-color: rgba(239,68,68,0.3);">SINKHOLE</span>
+      </div>
+      <div class="rule-item">
+        <span>🌐 Медиа и соцсети</span>
+        <span class="tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16,185,129,0.3);">PROXY</span>
+      </div>
+    </div>
+    <div style="font-size: 11px; color: var(--text-muted);">
+      Правила управляются централизованно через сервер /proxy.pac.
+    </div>
+  </div>
+
+  <!-- TAB 3: Diagnostics -->
+  <div class="tab-content" id="tab-diag">
+    <div class="card">
+      <div class="row">
+        <span class="label">Защита WebRTC IP</span>
+        <span class="val" style="color: var(--success);">Защищено (без утечки UDP)</span>
+      </div>
+      <div class="row">
+        <span class="label">Защита от подмены DNS</span>
+        <span class="val" style="color: var(--success);">Включена</span>
+      </div>
+      <div class="row">
+        <span class="label">Текущий внешний IP</span>
+        <span class="val" id="exitIpVal">198.51.100.42</span>
+      </div>
+    </div>
+
+    
+    <button id="btnCheckIp" class="btn-sec">
+      Проверить Egress IP и Гео
+    </button>
+  </div>
+
+  <!-- TAB 4: Support -->
+  <div class="tab-content" id="tab-help">
+    <div class="card">
+      <div class="support-box">
+        При возникновении проблем с доступом или для запроса новых политик обратитесь в службу поддержки:
+      </div>
+      <div class="row">
+        <span class="label">Техподдержка</span>
+        <span class="val">mailto:it-support@corp.local</span>
+      </div>
+      <div class="row">
+        <span class="label">Версия сборки</span>
+        <span class="val">v1.3.0</span>
+      </div>
+    </div>
+
+    
+    <a href="mailto:it-support@corp.local" target="_blank" class="btn-sec" style="text-decoration: none; display: block;">
+      Написать в службу поддержки
+    </a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

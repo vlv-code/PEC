@@ -1,25 +1,40 @@
-// background.js — MV3 service worker
+// background.js — Enterprise Chrome MV3 Service Worker
 //
-// Отвечает на Basic-Auth challenge от Xray HTTP-инбаунда (details.isProxy === true).
-// Креды не персистятся: только in-memory кэш процесса, TTL ниже. При рестарте
-// service worker'а (Chrome выгружает его через ~30с простоя) кэш теряется —
-// это осознанный компромисс в пользу "не хранить пароль дольше, чем нужно",
-// см. обсуждение в PLAN.md.
+// 1. Centralized proxy synchronization (SOCKS5/HTTP/HTTPS/PAC) pushed by server.
+// 2. Intercepts Basic-Auth proxy challenges (details.isProxy === true).
+// 3. ZERO local credential persistence (strictly in-memory during worker lifecycle).
+// 4. WebRTC IP Leak Protection & Status Badge.
+// 5. Popup messaging support (GET_STATUS, FORCE_SYNC, TOGGLE_BYPASS).
 
-const DEFAULT_CREDS_URL = "https://mini-server.ic.local/creds";
-const TTL_MS = 5 * 60 * 1000; // подстроить под частоту ротации на сервере (rotate.py)
-const MAX_AUTH_ATTEMPTS = 2;   // защита от бесконечного цикла 407 при невалидных credentials
-const FETCH_TIMEOUT_MS = 5000; // таймаут запроса к мини-серверу
+const DEFAULT_SERVER_BASE = "https://mini-server.ic.local";
+const DEFAULT_CREDS_URL = `${DEFAULT_SERVER_BASE}/creds`;
+const DEFAULT_SYNC_URL = `${DEFAULT_SERVER_BASE}/api/sync`;
 
-let cache = null; // { user, pass, fetchedAt }
-let credsPromise = null; // активный промис запроса для дедупликации параллельных вызовов
-const seenRequests = new Map(); // requestId -> число попыток за время жизни воркера
+const TTL_MS = 5 * 60 * 1000;
+const MAX_AUTH_ATTEMPTS = 2;
+const FETCH_TIMEOUT_MS = 6000;
 
-function isValidCredsUrl(url) {
+// Ephemeral in-memory state
+let memoryCredsCache = null; // { user, pass, fetchedAt }
+let syncPromise = null;
+const seenRequests = new Map();
+let currentProxyState = {
+  online: false,
+  protocol: "http",
+  host: "",
+  port: 10809,
+  profileName: "Default Split",
+  bypassActive: false,
+  lastSync: 0,
+};
+
+let ephemeralInstanceId = "inst_" + Math.random().toString(36).substring(2, 10);
+
+function isValidUrl(url) {
   if (typeof url !== "string") return false;
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    const p = new URL(url);
+    return p.protocol === "https:" || p.protocol === "http:" || p.hostname === "localhost" || p.hostname === "127.0.0.1";
   } catch {
     return false;
   }
@@ -27,108 +42,299 @@ function isValidCredsUrl(url) {
 
 async function getManagedConfig() {
   try {
-    const { extToken, credsUrl } = await chrome.storage.managed.get([
+    const managed = await chrome.storage.managed.get([
       "extToken",
       "credsUrl",
+      "syncUrl",
+      "autoConfigureProxy",
+      "targetGroup",
     ]);
-    const validUrl = isValidCredsUrl(credsUrl) ? credsUrl : DEFAULT_CREDS_URL;
-    return { token: extToken || null, url: validUrl };
+
+    const token = managed.extToken || null;
+    const credsUrl = isValidUrl(managed.credsUrl) ? managed.credsUrl : DEFAULT_CREDS_URL;
+    const syncUrl = isValidUrl(managed.syncUrl) ? managed.syncUrl : DEFAULT_SYNC_URL;
+    const autoConfigureProxy = managed.autoConfigureProxy !== false;
+    const targetGroup = managed.targetGroup || "Default Fleet";
+
+    return { token, credsUrl, syncUrl, autoConfigureProxy, targetGroup };
   } catch (e) {
-    console.error("managed storage read failed", e);
-    return { token: null, url: DEFAULT_CREDS_URL };
+    return {
+      token: null,
+      credsUrl: DEFAULT_CREDS_URL,
+      syncUrl: DEFAULT_SYNC_URL,
+      autoConfigureProxy: true,
+      targetGroup: "Default Fleet",
+    };
   }
 }
 
-async function fetchCreds(forceRefresh) {
+// Update Action badge if action API is available
+function updateBadge(text, color) {
+  if (chrome.action && chrome.action.setBadgeText) {
+    try {
+      chrome.action.setBadgeText({ text });
+      if (color && chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color });
+      }
+    } catch {}
+  }
+}
+
+// Enable WebRTC leak protection if privacy permission is granted
+async function applyWebRtcProtection() {
+  if (chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy) {
+    try {
+      await chrome.privacy.network.webRTCIPHandlingPolicy.set({
+        value: "disable_non_proxied_udp",
+        scope: "regular",
+      });
+      console.log("[corp-proxy] WebRTC IP leak protection enforced.");
+    } catch (e) {
+      console.warn("[corp-proxy] Could not set WebRTC IP handling policy:", e);
+    }
+  }
+}
+
+// Apply proxy settings to browser network stack
+async function applyProxyConfig(config) {
+  if (!chrome.proxy || !chrome.proxy.settings) return;
+
+  try {
+    if (currentProxyState.bypassActive || config.killSwitch || !config.enabled || config.protocol === "direct") {
+      console.log("[corp-proxy] Routing set to DIRECT.");
+      await chrome.proxy.settings.set({
+        value: { mode: "direct" },
+        scope: "regular",
+      });
+      updateBadge("DIR", "#f59e0b");
+      return;
+    }
+
+    if (config.protocol === "pac" && config.pacUrl) {
+      console.log("[corp-proxy] Applying PAC URL:", config.pacUrl);
+      await chrome.proxy.settings.set({
+        value: {
+          mode: "pac_script",
+          pacScript: {
+            url: config.pacUrl,
+            mandatory: false,
+          },
+        },
+        scope: "regular",
+      });
+      updateBadge("PAC", "#0284c7");
+      return;
+    }
+
+    // Fixed single proxy server (SOCKS5, HTTP, or HTTPS)
+    const schemeMap = {
+      http: "http",
+      https: "https",
+      socks5: "socks5",
+    };
+    const scheme = schemeMap[config.protocol] || "http";
+    const bypassList = Array.isArray(config.bypassList) ? config.bypassList : ["<local>"];
+
+    console.log(`[corp-proxy] Applying ${scheme.toUpperCase()} Proxy: ${config.host}:${config.port}`);
+    await chrome.proxy.settings.set({
+      value: {
+        mode: "fixed_servers",
+        rules: {
+          singleProxy: {
+            scheme: scheme,
+            host: config.host,
+            port: parseInt(config.port, 10),
+          },
+          bypassList: bypassList,
+        },
+      },
+      scope: "regular",
+    });
+    updateBadge(scheme === "socks5" ? "S5" : "PRX", "#10b981");
+  } catch (err) {
+    console.error("[corp-proxy] Error applying proxy settings:", err);
+    updateBadge("ERR", "#ef4444");
+  }
+}
+
+// Synchronize with server (fetches creds & config)
+async function syncWithServer(forceRefresh = false) {
   const now = Date.now();
-  if (!forceRefresh && cache && now - cache.fetchedAt < TTL_MS) {
-    return cache;
+  if (!forceRefresh && memoryCredsCache && now - memoryCredsCache.fetchedAt < TTL_MS) {
+    return memoryCredsCache;
   }
 
-  // Если уже выполняется сетевой запрос за кредами, переиспользуем его
-  if (!forceRefresh && credsPromise) {
-    return credsPromise;
+  if (!forceRefresh && syncPromise) {
+    return syncPromise;
   }
 
   if (forceRefresh) {
-    cache = null;
+    memoryCredsCache = null;
   }
 
-  credsPromise = (async () => {
+  syncPromise = (async () => {
     try {
-      const { token, url } = await getManagedConfig();
-      const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-      const res = await fetch(url, {
-        headers: token ? { "X-Ext-Token": token } : {},
-        signal,
-      });
-      if (!res.ok) {
-        throw new Error(`creds fetch failed: ${res.status}`);
+      const { token, syncUrl, credsUrl, autoConfigureProxy, targetGroup } = await getManagedConfig();
+      const manifest = chrome.runtime.getManifest();
+
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["X-Ext-Token"] = token;
+
+      let syncSuccessful = false;
+
+      try {
+        const res = await fetch(syncUrl, {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify({
+            instanceId: ephemeralInstanceId,
+            version: manifest.version,
+            extensionId: chrome.runtime.id,
+            activeProxyMode: currentProxyState.protocol,
+            group: targetGroup,
+          }),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload.creds && payload.creds.user && payload.creds.pass) {
+            memoryCredsCache = {
+              user: payload.creds.user,
+              pass: payload.creds.pass,
+              fetchedAt: Date.now(),
+            };
+            syncSuccessful = true;
+          }
+
+          if (payload.config) {
+            currentProxyState = {
+              ...currentProxyState,
+              online: true,
+              protocol: payload.config.protocol || "http",
+              host: payload.config.host || "",
+              port: payload.config.port || 10809,
+              profileName: payload.profileName || "Default Profile",
+              lastSync: Date.now(),
+            };
+
+            if (autoConfigureProxy) {
+              await applyProxyConfig(payload.config);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[corp-proxy] Sync endpoint error, trying fallback /creds:", err);
       }
-      const data = await res.json();
-      if (!data.user || !data.pass) {
-        throw new Error("invalid creds response format");
+
+      // Fallback to /creds
+      if (!syncSuccessful) {
+        const resFallback = await fetch(credsUrl, {
+          headers: token ? { "X-Ext-Token": token } : {},
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+
+        if (!resFallback.ok) {
+          currentProxyState.online = false;
+          throw new Error(`Creds fetch failed: HTTP ${resFallback.status}`);
+        }
+
+        const data = await resFallback.json();
+        if (!data.user || !data.pass) {
+          throw new Error("Invalid creds payload from server");
+        }
+
+        memoryCredsCache = {
+          user: data.user,
+          pass: data.pass,
+          fetchedAt: Date.now(),
+        };
+        currentProxyState.online = true;
+        currentProxyState.lastSync = Date.now();
       }
-      cache = { user: data.user, pass: data.pass, fetchedAt: Date.now() };
-      return cache;
+
+      return memoryCredsCache;
     } finally {
-      credsPromise = null;
+      syncPromise = null;
     }
   })();
 
-  return credsPromise;
+  return syncPromise;
 }
 
+// Proxy authentication handler (handles 407 challenge)
 chrome.webRequest.onAuthRequired.addListener(
   (details, asyncCallback) => {
     if (!details.isProxy) {
-      // не наш случай — не встреваем в обычные сайтовые Basic-Auth формы
       asyncCallback({});
       return;
     }
 
-    if (seenRequests.size > 1000) {
-      seenRequests.clear();
-    }
+    if (seenRequests.size > 1000) seenRequests.clear();
     const attempts = (seenRequests.get(details.requestId) || 0) + 1;
     seenRequests.set(details.requestId, attempts);
 
-    // Защита от бесконечного цикла: если сервер отклонил даже обновленные креды,
-    // прерываем запрос вместо зависания страницы
     if (attempts > MAX_AUTH_ATTEMPTS) {
-      console.warn(`auth attempts exceeded (${attempts}) for requestId=${details.requestId}`);
+      console.warn(`[corp-proxy] Max auth attempts exceeded for requestId=${details.requestId}`);
       seenRequests.delete(details.requestId);
       asyncCallback({ cancel: true });
       return;
     }
 
-    // повторный вызов (attempts > 1) означает, что прошлые creds браузер отклонил (407) —
-    // форсируем обновление, сбрасывая кэш
-    fetchCreds(attempts > 1)
-      .then(({ user, pass }) => {
-        asyncCallback({ authCredentials: { username: user, password: pass } });
+    const forceRefresh = attempts > 1;
+    syncWithServer(forceRefresh)
+      .then((creds) => {
+        if (!creds || !creds.user || !creds.pass) {
+          throw new Error("No valid credentials returned");
+        }
+        asyncCallback({ authCredentials: { username: creds.user, password: creds.pass } });
       })
-      .catch((e) => {
-        console.error("auth failed", e);
+      .catch((err) => {
+        console.error("[corp-proxy] onAuthRequired error:", err);
         seenRequests.delete(details.requestId);
-        asyncCallback({}); // отдать браузеру дефолтное поведение
+        asyncCallback({});
       });
   },
   { urls: ["<all_urls>"] },
   ["asyncBlocking"]
 );
 
-// Очистка записей seenRequests по завершении запроса для предотвращения утечки памяти
+// Clear request tracker
 chrome.webRequest.onCompleted.addListener(
-  (details) => {
-    seenRequests.delete(details.requestId);
-  },
+  (details) => seenRequests.delete(details.requestId),
   { urls: ["<all_urls>"] }
 );
 
 chrome.webRequest.onErrorOccurred.addListener(
-  (details) => {
-    seenRequests.delete(details.requestId);
-  },
+  (details) => seenRequests.delete(details.requestId),
   { urls: ["<all_urls>"] }
 );
+
+// Listen for popup messages
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "GET_STATUS") {
+    sendResponse(currentProxyState);
+    return true;
+  }
+  if (msg.action === "FORCE_SYNC") {
+    syncWithServer(true).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg.action === "TOGGLE_BYPASS") {
+    currentProxyState.bypassActive = !currentProxyState.bypassActive;
+    syncWithServer(true).then(() => sendResponse({ ok: true, bypassActive: currentProxyState.bypassActive }));
+    return true;
+  }
+});
+
+// Periodic Sync Alarm
+chrome.alarms.create("corp_proxy_sync", { periodInMinutes: 5 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "corp_proxy_sync") {
+    syncWithServer(false).catch((e) => console.warn("[corp-proxy] Periodic sync error:", e));
+  }
+});
+
+// Initialize on service worker start
+applyWebRtcProtection();
+syncWithServer(false).catch((e) => console.warn("[corp-proxy] Initial boot sync warning:", e));

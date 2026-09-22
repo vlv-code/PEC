@@ -1,0 +1,35 @@
+services:
+  pec-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pec-proxy-extension-corp:latest
+    container_name: pec-proxy-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - EXT_SHARED_TOKEN=${EXT_SHARED_TOKEN:-corp-proxy-secret-token-change-me}
+      - CREDS_STORE=/app/data/current_creds.json
+      - BUILDER_CONFIG=/app/data/extension_build_config.json
+    volumes:
+      - pec_data:/app/data
+      - pec_extension:/app/extension
+      - pec_updates:/app/dist/updates
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  pec_data:
+    driver: local
+  pec_extension:
+    driver: local
+  pec_updates:
+    driver: local
