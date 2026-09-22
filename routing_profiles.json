@@ -106,7 +106,7 @@
     "targetScope": "group",
     "targetGroup": "SEC-VIP-GROUP",
     "isDefault": false,
-    "updatedAt": "2026-09-22T11:05:47.290Z"
+    "updatedAt": "2026-09-22T11:13:00.897Z"
   },
   {
     "id": "prof_31571379",
@@ -134,5 +134,32 @@
     "targetScope": "all",
     "isDefault": false,
     "updatedAt": "2026-09-22T11:05:47.289Z"
+  },
+  {
+    "id": "prof_548af632",
+    "name": "Test Split Tunnel",
+    "description": "",
+    "defaultPolicy": "direct",
+    "rules": [
+      {
+        "id": "r1",
+        "name": "Route AI to Proxy",
+        "targetType": "preset",
+        "pattern": "preset:ai_services",
+        "action": "proxy",
+        "enabled": true
+      },
+      {
+        "id": "r2",
+        "name": "Sinkhole Trackers",
+        "targetType": "preset",
+        "pattern": "preset:ad_telemetry_block",
+        "action": "block",
+        "enabled": true
+      }
+    ],
+    "targetScope": "all",
+    "isDefault": false,
+    "updatedAt": "2026-09-22T11:13:00.896Z"
   }
 ]
