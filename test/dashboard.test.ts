@@ -54,6 +54,14 @@ test("dashboard render: login gate is present (token is entered, not embedded)",
   assert.match(html, /autocomplete="off"/);
 });
 
+test("dashboard render: no external font dependencies (CSP would block them anyway)", () => {
+  const html = render(false);
+  assert.ok(!html.includes("fonts.googleapis.com"), "Google Fonts stylesheet must not be referenced");
+  assert.ok(!html.includes("fonts.gstatic.com"), "Google Fonts preconnect must not be referenced");
+  assert.ok(!html.includes("Plus Jakarta Sans"), "the removed webfont family must not remain in the CSS");
+  assert.ok(html.includes("ui-monospace"), "the mono stack must be system fonts");
+});
+
 test("dashboard render: the studio preview iframe is sandboxed and release names are escaped", () => {
   const html = render(false);
   // sandbox="allow-scripts" gives the preview an opaque origin: the preview
