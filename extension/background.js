@@ -8,12 +8,12 @@
 // 6. Popup messaging support (GET_STATUS, FORCE_SYNC, TOGGLE_BYPASS).
 //
 // Build placeholders (substituted by the PEC packager):
-//   __PEC_SERVER_BASE__        - default management server base URL
-//   __PEC_DEFAULT_TOKEN__      - fallback shared token (GPO extToken overrides)
-//   __PEC_SYNC_INTERVAL_MIN__  - periodic sync alarm, minutes
-//   __PEC_BYPASS_TIMEOUT_MIN__ - auto-revert of a temporary bypass, minutes
-//   __PEC_BADGE_ENABLED__      - whether the toolbar badge indicator is shown
-//   __PEC_TARGET_GROUP__       - default fleet group (GPO targetGroup overrides)
+//   PEC_SERVER_BASE          - default management server base URL
+//   PEC_DEFAULT_TOKEN        - fallback shared token (GPO extToken overrides)
+//   PEC_SYNC_INTERVAL_MIN    - periodic sync alarm, minutes
+//   PEC_BYPASS_TIMEOUT_MIN   - auto-revert of a temporary bypass, minutes
+//   PEC_BADGE_ENABLED        - whether the toolbar badge indicator is shown
+//   PEC_TARGET_GROUP         - default fleet group (GPO targetGroup overrides)
 
 const DEFAULT_SERVER_BASE = "__PEC_SERVER_BASE__";
 const DEFAULT_CREDS_URL = DEFAULT_SERVER_BASE + "/creds";

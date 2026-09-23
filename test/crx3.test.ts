@@ -142,3 +142,37 @@ test("artifacts ship the fleet token and never the admin token", () => {
   assert.ok(regBlob.includes(TEST_TOKEN), "GPO config must carry the fleet token");
   assert.ok(!regBlob.includes(TEST_ADMIN_TOKEN), "GPO config must never contain the admin token");
 });
+
+test("render: hostile template values stay inert string literals", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const { execFileSync } = await import("node:child_process");
+  const { renderBackgroundJs } = await import("../src/extensionTemplates.js");
+  const { TEST_TMP_DIR } = await import("./helpers/setup.js");
+
+  // A token with quotes/backslashes/line separators must not break out of the
+  // JS string literal: it ships JSON-stringified (escaped) and must parse.
+  const evil = '"; evil(); \\" \u2028 back\\slash';
+  const bg = renderBackgroundJs({ defaultToken: evil } as never);
+  assert.ok(bg.includes(JSON.stringify(evil)), "the payload must ship as an escaped inert string literal");
+  assert.ok(!bg.includes("const FALLBACK_TOKEN = \";"), "string literal must remain closed");
+  const tmp = path.join(TEST_TMP_DIR, "rendered-hostile-check.js");
+  fs.writeFileSync(tmp, bg, "utf-8");
+  execFileSync(process.execPath, ["--check", tmp], { stdio: "pipe" });
+});
+
+test("GPO .reg: special characters in token/URLs are escaped and single-line", async () => {
+  const { generateGpoConfig } = await import("../src/packager.js");
+  const gpo = generateGpoConfig("a".repeat(32), "https://pec.example.corp", 'a"b\\c');
+  // quote escaped (\"), backslash doubled (\\), value stays on one line
+  assert.ok(gpo.regContent.includes('"extToken"="a\\"b\\\\c"'), "token must be reg-escaped");
+
+  // No registry value may contain a raw (unescaped) quote or a lone backslash
+  for (const line of gpo.regContent.split("\n")) {
+    if (!line.includes('="')) continue;
+    const inner = line.slice(line.indexOf('="') + 2, -1);
+    const unescaped = inner.replace(/\\\\/g, "").replace(/\\"/g, "");
+    assert.ok(!unescaped.includes('"'), `raw quote inside registry value: ${line}`);
+    assert.ok(!unescaped.includes("\\"), `lone backslash inside registry value: ${line}`);
+  }
+});
