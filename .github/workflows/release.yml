@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify (types, tests, bundle)
+        run: |
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Package release artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p release-assets
+          # Prebuilt server bundle: node pec-server.cjs, no toolchain needed
+          cp dist/server.cjs "release-assets/pec-server-v${VERSION}.cjs"
+          # Extension distribution package (placeholders intact - operators
+          # build their fleet-signed copy in the Studio; this one ships the
+          # documented default token and is for evaluation/local installs)
+          if [ -f dist/updates/extension.zip ]; then
+            cp dist/updates/extension.zip "release-assets/pec-extension-v${VERSION}.zip"
+          fi
+          # Checksums
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { inblock=1; next }
+            inblock && /^## \[/ { exit }
+            inblock { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "See [CHANGELOG.md](https://github.com/vlv-code/PEC/blob/main/CHANGELOG.md)." > RELEASE_NOTES.md
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "PEC $GITHUB_REF_NAME" \
+            --notes-file RELEASE_NOTES.md \
+            release-assets/*

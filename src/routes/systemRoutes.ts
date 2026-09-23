@@ -13,7 +13,7 @@ export function createSystemRouter(options: {
   credsStorePath: string;
 }): Router {
   const router = Router();
-  const currentVersion = "1.3.1";
+  const currentVersion = "1.4.0";
 
   router.get("/healthz", (req: Request, res: Response) => {
     const ip = getClientIp(req);
