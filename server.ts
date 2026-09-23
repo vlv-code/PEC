@@ -40,6 +40,12 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 
+// Express 4 does not route async rejections to the error handler; this net
+// keeps an unforeseen rejected promise from taking the whole server down.
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});
+
 // Trust proxy configuration: controls how Express resolves client IPs from
 // X-Forwarded-For. Leave disabled (default) unless the server runs behind a
 // reverse proxy such as nginx - otherwise clients can spoof their IP and

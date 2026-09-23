@@ -55,16 +55,23 @@ export function createRotationRouter(): Router {
   });
 
   router.post("/api/3xui/test", testLimiter, async (req: Request, res: Response) => {
-    const current = getRotationConfig();
-    const testConfig = {
-      panelUrl: req.body?.panelUrl || current.panelUrl,
-      adminUser: req.body?.adminUser || current.adminUser,
-      adminPass: req.body?.adminPass !== undefined ? req.body.adminPass : current.adminPass,
-      inboundRemark: req.body?.inboundRemark || current.inboundRemark,
-      timeoutSec: 7,
-    };
-    const result = await test3xuiConnection(testConfig);
-    res.json(result);
+    try {
+      const current = getRotationConfig();
+      const testConfig = {
+        panelUrl: req.body?.panelUrl || current.panelUrl,
+        adminUser: req.body?.adminUser || current.adminUser,
+        adminPass: req.body?.adminPass !== undefined ? req.body.adminPass : current.adminPass,
+        inboundRemark: req.body?.inboundRemark || current.inboundRemark,
+        timeoutSec: 7,
+      };
+      const result = await test3xuiConnection(testConfig);
+      res.json(result);
+    } catch (err: unknown) {
+      // Express 4 does not catch async rejections - without this handler an
+      // unexpected failure inside the tester would crash the whole process.
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
   });
 
   return router;
