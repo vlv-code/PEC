@@ -54,6 +54,16 @@ test("dashboard render: login gate is present (token is entered, not embedded)",
   assert.match(html, /autocomplete="off"/);
 });
 
+test("dashboard render: the studio preview iframe is sandboxed and release names are escaped", () => {
+  const html = render(false);
+  // sandbox="allow-scripts" gives the preview an opaque origin: the preview
+  // cannot touch dashboard sessionStorage or its same-origin API surface.
+  assert.match(html, /<iframe id="previewFrame" sandbox="allow-scripts"/);
+
+  // GitHub release names are attacker-influenced and must pass through esc()
+  assert.match(html, /\$\{esc\(data\.latestRelease\.name \|\| \('v' \+ data\.latestRelease\.version\)\)\}/);
+});
+
 test("dashboard render: adminFetch authenticates with X-Admin-Token, fleet header stays for endpoint testers", () => {
   const html = render(false);
   assert.match(html, /'X-Admin-Token': token/, "the management-API client must send the admin token header");
