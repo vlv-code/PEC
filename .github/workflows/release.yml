@@ -26,6 +26,7 @@ jobs:
           npm run lint
           npm test
           npm run build
+          npm run pack:extension
 
       - name: Package release artifacts
         run: |
@@ -47,7 +48,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           awk -v ver="$VERSION" '
-            $0 ~ "^## \\[" ver "\\]" { inblock=1; next }
+            $0 ~ "^## \\[v" ver "\\]" { inblock=1; next }
             inblock && /^## \[/ { exit }
             inblock { print }
           ' CHANGELOG.md > RELEASE_NOTES.md
