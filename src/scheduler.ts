@@ -9,6 +9,7 @@ const HISTORY_FILE = path.resolve(process.env.ROTATION_HISTORY_PATH || "./rotati
 
 const MIN_INTERVAL_MINUTES = 1;
 const MAX_INTERVAL_MINUTES = 60 * 24 * 366; // one year
+const MAX_HISTORY_ENTRIES = 50;
 
 /**
  * Validate and normalize a rotation interval. Prevents NaN / 0 / strings
@@ -54,14 +55,21 @@ try {
 try {
   if (fs.existsSync(HISTORY_FILE)) {
     const raw = fs.readFileSync(HISTORY_FILE, "utf-8");
-    rotationHistory = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      // Cap on load as well: the push path only pops a single entry, so an
+      // oversized store (written by an older version or by hand) would keep
+      // getRotationHistory() above the documented limit of 50 until enough
+      // new rotations push the surplus out.
+      rotationHistory = parsed.slice(0, MAX_HISTORY_ENTRIES);
+    }
   }
 } catch {}
 
 function saveState() {
   try {
     fs.writeFileSync(ROTATION_CONFIG_FILE, JSON.stringify(currentConfig, null, 2), "utf-8");
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(rotationHistory.slice(0, 50), null, 2), "utf-8");
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(rotationHistory.slice(0, MAX_HISTORY_ENTRIES), null, 2), "utf-8");
   } catch (err) {
     console.error("[scheduler] Error persisting state:", err);
   }
@@ -97,7 +105,7 @@ export async function runManualRotation(): Promise<RotationHistoryItem> {
     }
 
     rotationHistory.unshift(result);
-    if (rotationHistory.length > 50) rotationHistory.pop();
+    if (rotationHistory.length > MAX_HISTORY_ENTRIES) rotationHistory.pop();
     saveState();
     return result;
   } catch (err: unknown) {
@@ -121,7 +129,7 @@ export async function runManualRotation(): Promise<RotationHistoryItem> {
       error: errMsg,
     };
     rotationHistory.unshift(failItem);
-    if (rotationHistory.length > 50) rotationHistory.pop();
+    if (rotationHistory.length > MAX_HISTORY_ENTRIES) rotationHistory.pop();
     saveState();
     throw err;
   }
