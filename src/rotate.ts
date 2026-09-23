@@ -9,6 +9,21 @@ export function getCredsStorePath(): string {
   return path.resolve(process.env.CREDS_STORE || CREDS_STORE_DEFAULT);
 }
 
+/**
+ * Create the credentials store with a cryptographically random password if
+ * it does not exist yet. Previously a hardcoded fallback password was baked
+ * into two source locations.
+ */
+export function ensureCredsStore(storePath: string): { user: string; pass: string; updatedAt: string } {
+  const creds = {
+    user: "corp-user",
+    pass: crypto.randomBytes(18).toString("base64url"),
+    updatedAt: new Date().toISOString(),
+  };
+  atomicWriteCreds(storePath, creds);
+  return creds;
+}
+
 export function readCurrentCreds(): { user: string; pass: string; updatedAt?: string } | null {
   const storePath = getCredsStorePath();
   try {
@@ -18,13 +33,8 @@ export function readCurrentCreds(): { user: string; pass: string; updatedAt?: st
         return data;
       }
     } else {
-      // Auto-heal missing creds store
-      const defaultCreds = {
-        user: "corp-user",
-        pass: "InitialRotatingProxyPass2026!",
-        updatedAt: new Date().toISOString(),
-      };
-      atomicWriteCreds(storePath, defaultCreds);
+      // Auto-heal missing creds store (random password, never a hardcoded one)
+      const defaultCreds = ensureCredsStore(storePath);
       console.log(`[rotate] Auto-healed missing creds store at ${storePath}`);
       return defaultCreds;
     }
@@ -147,10 +157,26 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
   const timeoutMs = 10000;
   const credsStorePath = getCredsStorePath();
 
-  // Try 3x-ui API if configured and not placeholder
-  if (panel && xuiUser && xuiPass && !panel.includes("3xui-host") && panel.startsWith("http")) {
+  // 3x-ui mode: only when the panel is explicitly configured (non-placeholder).
+  const panelConfigured = Boolean(
+    panel && xuiUser && xuiPass && !panel.includes("3xui-host") && panel.startsWith("http")
+  );
+
+  if (panelConfigured) {
+    // SECURITY / OPERATIONS: no silent fallback. If the panel is configured,
+    // a failed panel update must NOT write a new local password - that would
+    // desynchronize every extension in the fleet (local store rotated, panel
+    // inbound still on the old password) while history reported success.
+    const panelUrl = panel as string;
+    let failureReason = "";
+
     try {
-      const cleanPanel = panel.replace(/\/+$/, "");
+      const ssrfCheck = validateSafeEndpointUrl(panelUrl);
+      if (!ssrfCheck.valid) {
+        throw new Error(`SSRF Security Check Failed: ${ssrfCheck.error}`);
+      }
+
+      const cleanPanel = panelUrl.replace(/\/+$/, "");
       const loginRes = await fetch(`${cleanPanel}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -213,12 +239,15 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
         success: true,
       };
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.warn(`[rotate] 3x-ui API update failed (${errMsg}); generating standalone atomic credentials.`);
+      failureReason = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `3x-ui rotation failed; credentials were NOT changed to avoid desynchronizing the fleet. Fix the panel connection, then retry. Original error: ${failureReason}`
+      );
     }
   }
 
-  // Standalone atomic rotation
+  // Standalone mode: panel intentionally not configured - rotate the local
+  // store only. This is a deliberate deployment mode, not an error fallback.
   let currentUsername = "corp-user";
   try {
     const existing = readCurrentCreds();

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ensureKeyExists, packageExtension } from "./src/packager.js";
 import { startScheduler } from "./src/scheduler.js";
-import { atomicWriteCreds, getCredsStorePath } from "./src/rotate.js";
+import { atomicWriteCreds, ensureCredsStore, getCredsStorePath } from "./src/rotate.js";
 import { securityHeadersMiddleware, safeCorsMiddleware, createTokenAuthMiddleware } from "./src/middleware/security.js";
 import { createCredsRouter } from "./src/routes/credsRoutes.js";
 import { createRoutingRouter } from "./src/routes/routingRoutes.js";
@@ -58,13 +58,10 @@ const EXT_SHARED_TOKEN = process.env.EXT_SHARED_TOKEN || DEFAULT_TOKEN;
 const isDefaultTokenInUse = EXT_SHARED_TOKEN === DEFAULT_TOKEN;
 const CREDS_STORE = getCredsStorePath();
 
-// Initialize initial credentials if not found
+// Initialize initial credentials if not found (random password, never hardcoded)
 if (!fs.existsSync(CREDS_STORE)) {
   console.log(`[pec-server] Initializing credentials storage at ${CREDS_STORE}`);
-  atomicWriteCreds(CREDS_STORE, {
-    user: "corp-user",
-    pass: "InitialRotatingProxyPass2026!",
-  });
+  ensureCredsStore(CREDS_STORE);
 }
 
 // Ensure RSA private/public key and base extension distribution package exist
