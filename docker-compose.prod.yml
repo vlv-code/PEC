@@ -13,10 +13,25 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOST=0.0.0.0
-      - EXT_SHARED_TOKEN=${EXT_SHARED_TOKEN:-corp-proxy-secret-token-change-me}
+      - EXT_SHARED_TOKEN=${EXT_SHARED_TOKEN:?Set EXT_SHARED_TOKEN in .env (see .env.example)}
+      # All persistent state lives in /app/data (mounted volume below) so
+      # profiles, rotation config and instance metadata survive redeploys.
       - CREDS_STORE=/app/data/current_creds.json
+      - PROXY_CONFIG_PATH=/app/data/proxy_config.json
+      - ROUTING_PROFILES_PATH=/app/data/routing_profiles.json
+      - INSTANCES_META_PATH=/app/data/instances_meta.json
+      - ROTATION_CONFIG_PATH=/app/data/rotation_config.json
+      - ROTATION_HISTORY_PATH=/app/data/rotation_history.json
+      - BUILDER_CONFIG=/app/data/extension_build_config.json
+      # nginx terminates TLS in front of this container -> trust exactly one
+      # proxy hop so client IPs resolve correctly for rate limiting/audit.
+      - TRUST_PROXY=1
+      # Public URL used in updates.xml / GPO artifacts.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
     volumes:
       - pec_data:/app/data
+      # The CRX signing key lives here - a stable key means a stable
+      # extension ID (GPO forcelists break when the ID changes).
       - pec_extension:/app/extension
       - pec_updates:/app/dist/updates
     healthcheck:

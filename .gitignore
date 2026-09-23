@@ -26,6 +26,15 @@ current_creds.json
 instances_meta.json
 *.tmp
 
+
+# Runtime state files (generated at runtime - never commit; may contain secrets)
+rotation_config.json
+rotation_history.json
+proxy_config.json
+routing_profiles.json
+extension_build_config.json
+data/
+
 # Certificates and private keys (protect production secrets)
 *.pem
 *.key

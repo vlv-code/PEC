@@ -10,8 +10,8 @@ WORKDIR /app
 # Install build dependencies for native modules if required
 RUN apk add --no-cache python3 make g++ git
 
-# Copy dependency manifests
-COPY package*.json ./
+# Copy dependency manifests (package-lock.json is committed - npm ci works)
+COPY package.json package-lock.json ./
 
 # Install all dependencies (including devDependencies for build)
 RUN npm ci
@@ -23,7 +23,7 @@ COPY . .
 RUN npm run build
 
 # ==============================================================================
-# Production Runner
+# Production Runner (runtime dependencies only, no sources, no devDependencies)
 # ==============================================================================
 FROM node:20-alpine AS runner
 
@@ -40,18 +40,17 @@ ENV HOST=0.0.0.0
 RUN addgroup -g 1001 -S pecgroup && \
     adduser -u 1001 -S pecuser -G pecgroup
 
-# Copy dependencies and built files
-COPY --from=builder --chown=pecuser:pecgroup /app/node_modules ./node_modules
-COPY --from=builder --chown=pecuser:pecgroup /app/package.json ./package.json
-COPY --from=builder --chown=pecuser:pecgroup /app/dist ./dist
-COPY --from=builder --chown=pecuser:pecgroup /app/server.ts ./server.ts
-COPY --from=builder --chown=pecuser:pecgroup /app/src ./src
-COPY --from=builder --chown=pecuser:pecgroup /app/metadata.json ./metadata.json
-COPY --from=builder --chown=pecuser:pecgroup /app/extension_build_config.json ./extension_build_config.json
-COPY --from=builder --chown=pecuser:pecgroup /app/deploy ./deploy
+# Runtime dependencies only: the bundle (dist/server.cjs) externalizes packages
+COPY --from=builder --chown=pecuser:pecgroup /app/package.json /app/package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Ensure writable directories for credentials, logs, and extension artifacts
-RUN mkdir -p /app/extension /app/dist/updates /app/data && \
+# Built bundle only - server.ts/src are not needed at runtime
+COPY --from=builder --chown=pecuser:pecgroup /app/dist ./dist
+
+# Writable directories for credentials, runtime state and extension artifacts.
+# Mount /app/data as a volume: every persistent store lives there (see
+# docker-compose.yml environment) and survives rebuilds and redeploys.
+RUN mkdir -p /app/data /app/extension /app/dist/updates && \
     chown -R pecuser:pecgroup /app
 
 USER pecuser
@@ -63,4 +62,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3000/healthz || exit 1
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["npm", "start"]
+CMD ["node", "dist/server.cjs"]

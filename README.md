@@ -95,6 +95,10 @@ cp .env.example .env
 | `XUI_ADMIN_USER` | `admin` | Admin username for 3x-ui panel login |
 | `XUI_ADMIN_PASS` | `change-me` | Admin password for 3x-ui panel login |
 | `XUI_INBOUND_REMARK` | `squid-in` | Remark of the inbound proxy to rotate |
+| `TRUST_PROXY` | `false` | Client IP resolution: `false` (direct exposure, X-Forwarded-For ignored), `1` (one reverse-proxy hop), `true` (trust all - trusted networks only) |
+| `PUBLIC_BASE_URL` | *(empty)* | Public URL baked into updates.xml / GPO artifacts; prevents Host-header poisoning |
+| `ROTATION_CONFIG_PATH` | `./rotation_config.json` | Path to rotation scheduler config |
+| `ROUTING_PROFILES_PATH` | `./routing_profiles.json` | Path to routing profiles store |
 
 > ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` before deploying to a production or public environment!
 
@@ -108,8 +112,8 @@ Prerequisites: Node.js 20+ installed.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/corp/pec-proxy-extension-corp.git
-cd pec-proxy-extension-corp
+git clone https://github.com/vlv-code/PEC.git
+cd PEC
 
 # 2. Install dependencies
 npm install
@@ -177,8 +181,9 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 🔒 Security Hardening
 
-- **Timing-Attack Resistance**: `X-Ext-Token` header is evaluated in constant time using `crypto.timingSafeEqual`.
-- **SSRF Defense**: The 3x-ui testing endpoint and background rotators reject non-HTTP schemes and cloud metadata IP ranges (`169.254.169.254`, `metadata.google.internal`).
+- **Admin API Authentication**: every management endpoint (`/api/builder/*`, `/api/routing/*`, `/api/rotation/*`, `/api/instances/*`, `/api/config`, `/api/status`) requires a valid `X-Ext-Token` header. The dashboard asks for the token once and keeps it in `sessionStorage`; it is never embedded in the HTML.
+- **Timing-Attack Resistance**: `X-Ext-Token` is compared through SHA-256 digests in constant time (no length leak).
+- **SSRF Defense**: The 3x-ui testing endpoint, scheduled rotations and saved panel URLs reject non-HTTP schemes and cloud metadata IP ranges (`169.254.169.254`, `metadata.google.internal`).
 - **PAC Injection Defense**: Dynamic PAC script generator sanitizes proxy hostnames and port numbers, stripping dangerous characters (`"`, `;`, whitespace).
 - **Rate Limiting**: Sliding-window rate limiters protect `/creds` (60/min), `/api/sync` (120/min), and 3x-ui connection tests (15/min).
 - **Fleet Registry Protection**: Maximum instance limit (2000 items) with automatic LRU eviction protects against memory exhaustion attacks.
@@ -192,7 +197,7 @@ sudo nginx -t && sudo systemctl reload nginx
 # TypeScript compilation check
 npm run lint
 
-# Automated test suite (13 comprehensive tests)
+# Automated test suite
 npm test
 
 # Production build bundle

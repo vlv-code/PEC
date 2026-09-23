@@ -12,11 +12,28 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOST=0.0.0.0
-      - EXT_SHARED_TOKEN=${EXT_SHARED_TOKEN:-corp-proxy-secret-token-change-me}
+      - EXT_SHARED_TOKEN=${EXT_SHARED_TOKEN:?Set EXT_SHARED_TOKEN in .env (see .env.example)}
+      # All persistent state lives in /app/data (mounted volume below) so
+      # profiles, rotation config and instance metadata survive redeploys.
       - CREDS_STORE=/app/data/current_creds.json
+      - PROXY_CONFIG_PATH=/app/data/proxy_config.json
+      - ROUTING_PROFILES_PATH=/app/data/routing_profiles.json
+      - INSTANCES_META_PATH=/app/data/instances_meta.json
+      - ROTATION_CONFIG_PATH=/app/data/rotation_config.json
+      - ROTATION_HISTORY_PATH=/app/data/rotation_history.json
       - BUILDER_CONFIG=/app/data/extension_build_config.json
+      # Behind the compose-provided nginx (docker-compose.prod.yml) set to 1;
+      # for this direct-exposure setup keep disabled unless another proxy sits
+      # in front. Enables correct client IPs for rate limiting and audit.
+      - TRUST_PROXY=${TRUST_PROXY:-false}
+      # Public URL used in updates.xml / GPO artifacts (prevents Host-header
+      # poisoning). Set it to the URL your fleet uses to reach this server.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
     volumes:
+      # Runtime state: survives rebuilds (creds, profiles, rotation, meta).
       - pec_data:/app/data
+      # The CRX signing key lives here - a stable key means a stable
+      # extension ID (GPO forcelists break when the ID changes).
       - pec_extension:/app/extension
       - pec_updates:/app/dist/updates
     healthcheck:

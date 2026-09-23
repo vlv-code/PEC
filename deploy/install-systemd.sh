@@ -41,7 +41,14 @@ echo -e "${GREEN}[*] Копирование файлов в $INSTALL_DIR...${NC}
 cp -ru ./* "$INSTALL_DIR/"
 
 cd "$INSTALL_DIR"
-npm ci --omit=dev || npm install --production
+# Полные зависимости (esbuild/typescript нужны для npm run build)
+npm ci || npm install
+
+# Сборка бандла: npm start запускает dist/server.cjs, без сборки сервис
+# уходит в рестарт-луп (Restart=always + отсутствие dist/).
+npm run build
+# После сборки dev-зависимости больше не нужны
+npm prune --omit=dev
 
 # Генерация безопасного токена
 SECURE_TOKEN=$(openssl rand -hex 24)
