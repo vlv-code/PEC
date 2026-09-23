@@ -15,7 +15,7 @@ const BUILD_CONFIG_PATH = path.resolve(process.env.BUILDER_CONFIG || "./extensio
 export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
   name: "PEC - Proxy Extension Corp",
   shortName: "PEC Corp",
-  version: "1.3.1",
+  version: "1.4.0",
   description: "Корпоративное расширение Chrome для автоматической синхронизации HTTP/SOCKS5 прокси и ротируемой аутентификации.",
   uiMode: "popup",
   presetTemplate: "self-service-pro",

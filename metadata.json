@@ -1,6 +1,0 @@
-{
-  "name": "PEC - Proxy Extension Corp",
-  "description": "Система корпоративного управления прокси, сборки и кастомизации браузерных расширений, GPO-политик и ротации учетных данных 3x-ui.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
