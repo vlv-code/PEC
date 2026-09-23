@@ -106,7 +106,9 @@ test("PAC: kill switch and presets generate expected directives", () => {
   const killPac = generatePacScript(splitProfile, { ...PROXY_CFG, killSwitch: true });
   assert.match(killPac, /Kill-Switch Active/);
 
-  // CIDR rules expand to isInNet checks
+  // CIDR rules expand to isInNet checks behind an IP-literal guard: a bare
+  // isInNet(host, ...) on a DNS name would force a synchronous DNS resolve
+  // on every request (UI freezes when corporate DNS is slow).
   const cidrProfile = saveProfile({
     name: "CIDR Test",
     defaultPolicy: "direct",
@@ -114,6 +116,34 @@ test("PAC: kill switch and presets generate expected directives", () => {
   });
   const cidrPac = generatePacScript(cidrProfile, PROXY_CFG);
   assert.match(cidrPac, /isInNet\(host, "10\.0\.0\.0", "255\.0\.0\.0"\)/);
+  // the isInNet call must sit inside the IP-literal guard for the same rule
+  assert.ok(
+    cidrPac.includes('/^\\d{1,3}(\\.\\d{1,3}){3}$/.test(host) && (isInNet(host, "10.0.0.0", "255.0.0.0"))'),
+    "CIDR checks must be wrapped in the IP-literal guard"
+  );
+  assert.doesNotMatch(cidrPac, /if \(\s*isInNet/, "no bare isInNet may be emitted as a top-level condition");
+
+  // Mixed rule: domain checks stay unguarded, CIDR checks get the guard
+  const mixedProfile = saveProfile({
+    name: "Mixed Rule Test",
+    defaultPolicy: "direct",
+    rules: [{
+      id: "m1", name: "Corp mixed", targetType: "domain", enabled: true,
+      pattern: "*.corp.local,10.0.0.0/8",
+      action: "proxy",
+    }],
+  });
+  const mixedPac = generatePacScript(mixedProfile, PROXY_CFG);
+  assert.match(mixedPac, /dnsDomainIs\(host, "corp\.local"\)/);
+  // domain condition first, CIDR checks behind the IP-literal guard after it
+  assert.ok(
+    mixedPac.includes('/^\\d{1,3}(\\.\\d{1,3}){3}$/.test(host) && (isInNet(host, "10.0.0.0", "255.0.0.0"))'),
+    "CIDR checks must be wrapped in the IP-literal guard"
+  );
+  assert.ok(
+    mixedPac.indexOf('dnsDomainIs(host, "corp.local")') < mixedPac.indexOf('.test(host) && (isInNet'),
+    "domain checks must stay unguarded and precede the guarded CIDR checks"
+  );
 });
 
 test("routing: profile resolution honours group scope and instance assignment", () => {
