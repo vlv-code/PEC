@@ -118,6 +118,46 @@ test("rotation history: capped at 50, newest first, both in memory and on disk",
 
   // The persisted file is capped to the same 50 entries
   const onDisk = JSON.parse(fs.readFileSync(HISTORY_PATH, "utf-8")) as Array<{ id: string }>;
-  assert.strictEqual(onDisk.length, 50, "the history store on disk must be capped at 50 entries");
+  assert.strictEqual(onDisk.length, 50, "the history store on disk must be capped to 50 entries");
   assert.ok(!onDisk.some((h) => h.id === "hist_seed_0"), "the oldest seeded entry must have been evicted from disk");
+});
+
+test("runManualRotation: concurrent calls are serialized by the in-flight lock", async () => {
+  // Stub the panel HTTP layer: a slow failing endpoint lets the two callers
+  // overlap deterministically, and the call counter proves how many rotation
+  // attempts actually ran (the history file is capped, so its length cannot
+  // discriminate 1 vs 2 attempts).
+  updateRotationConfig({
+    panelUrl: "http://127.0.0.1:59999/xui",
+    adminUser: "admin",
+    adminPass: "panel-pass",
+    inboundRemark: "squid-in",
+    enabled: false,
+  });
+
+  let panelFetches = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    panelFetches++;
+    await new Promise((r) => setTimeout(r, 50));
+    throw new Error("connection refused (test stub)");
+  }) as typeof fetch;
+
+  try {
+    const [a, b] = await Promise.allSettled([runManualRotation(), runManualRotation()]);
+
+    // Both callers observe the same failure (panel unreachable)
+    assert.strictEqual(a.status, "rejected");
+    assert.strictEqual(b.status, "rejected");
+
+    // Exactly ONE panel attempt: the second caller joined the in-flight
+    // promise instead of starting its own rotation.
+    assert.strictEqual(panelFetches, 1, "concurrent rotations must be collapsed into a single panel attempt");
+
+    // The in-flight slot is freed afterwards: a fresh call starts a new one
+    await runManualRotation().catch(() => {});
+    assert.strictEqual(panelFetches, 2, "the lock must release after completion");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

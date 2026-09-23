@@ -91,7 +91,20 @@ export function getRotationHistory(): RotationHistoryItem[] {
   return [...rotationHistory];
 }
 
-export async function runManualRotation(): Promise<RotationHistoryItem> {
+// In-flight lock: concurrent callers (double "Rotate Now" click, manual call
+// racing the timer) must not run two rotations in parallel - interleaved
+// panel/local writes would desynchronize the fleet's credentials.
+let rotationInFlight: Promise<RotationHistoryItem> | null = null;
+
+export function runManualRotation(): Promise<RotationHistoryItem> {
+  if (rotationInFlight) return rotationInFlight;
+  rotationInFlight = doRunManualRotation().finally(() => {
+    rotationInFlight = null;
+  });
+  return rotationInFlight;
+}
+
+async function doRunManualRotation(): Promise<RotationHistoryItem> {
   currentConfig.lastStatus = "Rotating...";
   try {
     const result = await executeRotation(currentConfig);
