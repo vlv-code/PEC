@@ -1507,7 +1507,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       <div class="grid-2">
         <div class="card">
           <h2 data-i18n="titleCredsTester">Interactive /creds Tester</h2>
-          <label data-i18n="lblTestToken">X-Ext-Token Header Value</label>
+          <label data-i18n="lblTestToken">X-Admin-Token Header Value</label>
           <input type="password" id="testTokenInput" value="" placeholder="paste token to test" autocomplete="off" />
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
             <button onclick="testCredsEndpoint()" data-i18n="btnSendCreds">Send GET /creds</button>
@@ -1554,8 +1554,8 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     <div style="max-width: 420px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px; text-align: center;">
       <div style="font-size: 28px; margin-bottom: 8px;">🔐</div>
       <h2 style="margin: 0 0 8px 0; font-size: 18px;">Authentication Required</h2>
-      <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите административный токен (EXT_SHARED_TOKEN) для доступа к консоли управления PEC.</p>
-      <input type="password" id="loginTokenInput" placeholder="EXT_SHARED_TOKEN" autocomplete="off" style="width: 100%; box-sizing: border-box; margin-bottom: 14px;" />
+      <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите административный токен (ADMIN_TOKEN, заголовок X-Admin-Token) для доступа к консоли управления PEC. Это НЕ токен расширений (EXT_SHARED_TOKEN).</p>
+      <input type="password" id="loginTokenInput" placeholder="ADMIN_TOKEN" autocomplete="off" style="width: 100%; box-sizing: border-box; margin-bottom: 14px;" />
       <button id="loginSubmitBtn" style="width: 100%;">Войти</button>
     </div>
   </div>
@@ -1577,7 +1577,9 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     // ----------------- Admin Authentication -----------------
     // The dashboard ships without any embedded token. The operator enters the
     // shared admin token once; it is kept in sessionStorage and attached to
-    // every management API call via adminFetch().
+    // every management API call via adminFetch(). Admin routes authenticate
+    // with the X-Admin-Token header - the fleet token (X-Ext-Token) is
+    // deliberately NOT accepted there.
     const ADMIN_TOKEN_KEY = 'pec_admin_token';
     function getAdminToken() {
       try { return sessionStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch (e) { return ''; }
@@ -1600,7 +1602,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       opts = opts || {};
       const token = getAdminToken();
       if (token) {
-        opts.headers = Object.assign({}, opts.headers || {}, { 'X-Ext-Token': token });
+        opts.headers = Object.assign({}, opts.headers || {}, { 'X-Admin-Token': token });
       }
       const res = await fetch(url, opts);
       if (res.status === 401) {
@@ -2069,7 +2071,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
         // Tab 7: Audit & Tester
         titleCredsTester: 'Interactive /creds Tester',
-        lblTestToken: 'X-Ext-Token Header Value',
+        lblTestToken: 'X-Admin-Token Header Value',
         btnSendCreds: 'Send GET /creds',
         btnTestInvalidToken: 'Test Invalid Token',
         titleSyncTester: 'Interactive /api/sync Tester',
@@ -2308,7 +2310,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
         // Tab 7: Audit & Tester
         titleCredsTester: 'Интерактивный тестер /creds',
-        lblTestToken: 'Значение заголовка X-Ext-Token',
+        lblTestToken: 'Значение заголовка X-Admin-Token',
         btnSendCreds: 'Отправить GET /creds',
         btnTestInvalidToken: 'Проверить неверный токен',
         titleSyncTester: 'Интерактивный тестер /api/sync',

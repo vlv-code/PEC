@@ -35,7 +35,9 @@ export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
   pingTestUrl: "/healthz",
   syncIntervalMinutes: 15,
   defaultServerUrl: "https://mini-server.ic.local",
-  defaultToken: "corp-proxy-secret-token-change-me",
+  // The fleet token baked into shipped artifacts. It must always be the
+  // low-privilege EXT_SHARED_TOKEN, never ADMIN_TOKEN (which stays server-side).
+  defaultToken: process.env.EXT_SHARED_TOKEN || "corp-proxy-secret-token-change-me",
   targetProfileId: "profile_default_split",
   autoConfigureProxy: true,
 };

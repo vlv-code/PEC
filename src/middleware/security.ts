@@ -54,7 +54,7 @@ export function safeCorsMiddleware(req: Request, res: Response, next: NextFuncti
   }
 
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Ext-Token, X-Requested-With");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Ext-Token, X-Admin-Token, X-Requested-With");
 
   if (req.method === "OPTIONS") {
     res.sendStatus(204);
@@ -132,14 +132,17 @@ export function timingSafeEqualString(a: string, b: string): boolean {
 }
 
 /**
- * Token authentication middleware for management/admin API routes.
- * Requires a valid X-Ext-Token header (same shared token the extension fleet uses).
+ * Token authentication middleware for API routes.
+ * The header name is parameterized so fleet and admin tokens can be enforced
+ * on disjoint route sets: extensions authenticate with the low-privilege
+ * fleet token (X-Ext-Token), operators with the admin token (X-Admin-Token).
  */
-export function createTokenAuthMiddleware(getToken: () => string) {
+export function createTokenAuthMiddleware(getToken: () => string, headerName = "x-ext-token") {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const header = req.headers["x-ext-token"];
+    const header = req.headers[headerName as "x-ext-token"];
     const provided = Array.isArray(header) ? header[0] : header;
     const token = getToken();
+    const headerLabel = headerName.toUpperCase();
 
     if (!token || !provided || !timingSafeEqualString(provided, token)) {
       recordAudit({
@@ -147,11 +150,30 @@ export function createTokenAuthMiddleware(getToken: () => string) {
         endpoint: req.path,
         status: 401,
         result: "REJECTED_TOKEN",
-        details: "Admin API authentication required (X-Ext-Token)",
+        details: `API authentication required (${headerLabel})`,
       });
-      res.status(401).json({ error: "Unauthorized: a valid X-Ext-Token header is required" });
+      res.status(401).json({ error: `Unauthorized: a valid ${headerLabel} header is required` });
       return;
     }
     next();
   };
+}
+
+/**
+ * Admin token bootstrap. In production an explicit ADMIN_TOKEN is mandatory
+ * (fail fast); in development a throwaway token is generated once per start.
+ * Throws instead of exiting so callers (and tests) control the failure mode.
+ */
+export function resolveAdminToken(env: { ADMIN_TOKEN?: string; NODE_ENV?: string }): { token: string; generated: boolean } {
+  const provided = (env.ADMIN_TOKEN || "").trim();
+  if (provided) {
+    return { token: provided, generated: false };
+  }
+  if (env.NODE_ENV === "production") {
+    throw new Error(
+      "ADMIN_TOKEN is required when NODE_ENV=production. " +
+        "Set it in .env (a long random value, distinct from EXT_SHARED_TOKEN)."
+    );
+  }
+  return { token: crypto.randomBytes(24).toString("base64url"), generated: true };
 }

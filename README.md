@@ -86,7 +86,8 @@ cp .env.example .env
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Port for the HTTP server to listen on |
 | `HOST` | `0.0.0.0` | Network interface binding |
-| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Critical:** Secret token required by Chrome extensions in `X-Ext-Token` |
+| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Critical:** Fleet token required by Chrome extensions in `X-Ext-Token` (low privilege - baked into CRX/GPO artifacts) |
+| `ADMIN_TOKEN` | *(none; required in production)* | **Critical:** Admin token for ALL management APIs (`X-Admin-Token`). Must be distinct from `EXT_SHARED_TOKEN`; never baked into artifacts |
 | `CREDS_STORE` | `./current_creds.json` | Path to persistent credentials JSON store |
 | `PROXY_CONFIG_PATH` | `./proxy_config.json` | Path to saved proxy host, port, and bypass config |
 | `PROXY_HOST` | `10.0.0.1` | Default proxy host IP or domain name |
@@ -100,7 +101,7 @@ cp .env.example .env
 | `ROTATION_CONFIG_PATH` | `./rotation_config.json` | Path to rotation scheduler config |
 | `ROUTING_PROFILES_PATH` | `./routing_profiles.json` | Path to routing profiles store |
 
-> ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` before deploying to a production or public environment!
+> ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` and set a distinct `ADMIN_TOKEN` before deploying to a production or public environment! The dashboard and management APIs authenticate with `ADMIN_TOKEN` (header `X-Admin-Token`), not with the fleet token.
 
 ---
 
@@ -120,7 +121,7 @@ npm install
 
 # 3. Configure environment
 cp .env.example .env
-nano .env   # set your EXT_SHARED_TOKEN
+nano .env   # set your EXT_SHARED_TOKEN and ADMIN_TOKEN
 
 # 4. Start in development mode (with hot reload)
 npm run dev

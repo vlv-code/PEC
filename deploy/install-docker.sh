@@ -37,16 +37,19 @@ echo -e "${GREEN}[*] Копирование конфигурации в $INSTALL
 cp -f /app/docker-compose.yml "$INSTALL_DIR/docker-compose.yml" 2>/dev/null || true
 cp -f /app/Dockerfile "$INSTALL_DIR/Dockerfile" 2>/dev/null || true
 
-# Генерация безопасного токена, если он не задан
+# Генерация безопасных токенов, если они не заданы
 if [ ! -f "$INSTALL_DIR/.env" ]; then
     SECURE_TOKEN=$(openssl rand -hex 24)
+    ADMIN_SEC_TOKEN=$(openssl rand -hex 24)
     cat <<EOF > "$INSTALL_DIR/.env"
 NODE_ENV=production
 PORT=3000
 HOST=0.0.0.0
 EXT_SHARED_TOKEN=${SECURE_TOKEN}
+ADMIN_TOKEN=${ADMIN_SEC_TOKEN}
 EOF
     echo -e "${GREEN}[+] Сгенерирован защищенный токен расширения:${NC} ${YELLOW}${SECURE_TOKEN}${NC}"
+    echo -e "${GREEN}[+] Сгенерирован админ-токен:${NC} ${YELLOW}${ADMIN_SEC_TOKEN}${NC}"
 fi
 
 echo -e "${GREEN}[*] Сборка и запуск контейнеров...${NC}"

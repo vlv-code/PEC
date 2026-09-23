@@ -4,7 +4,7 @@ import path from "node:path";
 import { ensureKeyExists, packageExtension } from "./src/packager.js";
 import { startScheduler } from "./src/scheduler.js";
 import { atomicWriteCreds, ensureCredsStore, getCredsStorePath } from "./src/rotate.js";
-import { securityHeadersMiddleware, safeCorsMiddleware, createTokenAuthMiddleware } from "./src/middleware/security.js";
+import { securityHeadersMiddleware, safeCorsMiddleware, createTokenAuthMiddleware, resolveAdminToken } from "./src/middleware/security.js";
 import { createCredsRouter } from "./src/routes/credsRoutes.js";
 import { createRoutingRouter } from "./src/routes/routingRoutes.js";
 import { createInstancesRouter } from "./src/routes/instancesRoutes.js";
@@ -56,6 +56,26 @@ app.set("trust proxy", trustProxySetting);
 const DEFAULT_TOKEN = "corp-proxy-secret-token-change-me";
 const EXT_SHARED_TOKEN = process.env.EXT_SHARED_TOKEN || DEFAULT_TOKEN;
 const isDefaultTokenInUse = EXT_SHARED_TOKEN === DEFAULT_TOKEN;
+
+// Two-token model: the fleet token (EXT_SHARED_TOKEN) is low-privilege - it
+// authenticates extensions and is intentionally baked into CRX/GPO artifacts.
+// The admin token (ADMIN_TOKEN) never leaves the server and unlocks every
+// management API. Keeping them apart stops a leaked artifact or a workstation
+// registry read from granting full admin access.
+let ADMIN_TOKEN: string;
+let adminTokenGenerated = false;
+try {
+  const resolved = resolveAdminToken(process.env);
+  ADMIN_TOKEN = resolved.token;
+  adminTokenGenerated = resolved.generated;
+} catch (err) {
+  console.error("[pec-server] FATAL:", err instanceof Error ? err.message : err);
+  process.exit(1);
+}
+if (ADMIN_TOKEN === EXT_SHARED_TOKEN) {
+  console.error("[SECURITY WARNING] ADMIN_TOKEN must be distinct from EXT_SHARED_TOKEN - the fleet token ships in public artifacts.");
+  process.exit(1);
+}
 const CREDS_STORE = getCredsStorePath();
 
 // Initialize initial credentials if not found (random password, never hardcoded)
@@ -88,7 +108,7 @@ app.use(express.urlencoded({ extended: true }));
 // carries its own token verification and sliding-window rate limiter (the
 // extension fleet authenticates there); /api/ip-echo is a diagnostic echo
 // endpoint used by extension popups.
-const adminAuth = createTokenAuthMiddleware(() => EXT_SHARED_TOKEN);
+const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token");
 const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync"]);
 app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   if (PUBLIC_API_PATHS.has(req.path)) {
@@ -116,13 +136,14 @@ app.use(
 app.use(createCredsRouter(() => EXT_SHARED_TOKEN));
 app.use(createRoutingRouter());
 app.use(createInstancesRouter());
-app.use(createBuilderRouter(() => EXT_SHARED_TOKEN));
+app.use(createBuilderRouter(() => EXT_SHARED_TOKEN, () => ADMIN_TOKEN));
 app.use(createRotationRouter());
 app.use(
   createSystemRouter({
     port: PORT,
-    getSharedToken: () => EXT_SHARED_TOKEN,
-    defaultToken: DEFAULT_TOKEN,
+    getFleetToken: () => EXT_SHARED_TOKEN,
+    defaultFleetToken: DEFAULT_TOKEN,
+    adminTokenConfigured: Boolean(process.env.ADMIN_TOKEN),
     credsStorePath: CREDS_STORE,
   })
 );
@@ -181,6 +202,12 @@ app.listen(PORT, HOST, () => {
   console.log(`[pec-server] PEC Proxy Server running on http://${HOST}:${PORT}`);
   if (isDefaultTokenInUse) {
     console.warn(`[SECURITY WARNING] The default authentication token is in use! Please configure EXT_SHARED_TOKEN in .env for production safety.`);
+  }
+  if (adminTokenGenerated) {
+    console.warn(
+      `[SECURITY WARNING] ADMIN_TOKEN is not configured - generated a development-only admin token for this run: ${ADMIN_TOKEN}\n` +
+        `[SECURITY WARNING] Development only: restarting the server will change this token. Set ADMIN_TOKEN in .env for a stable value.`
+    );
   }
 });
 

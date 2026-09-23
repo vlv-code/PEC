@@ -14,6 +14,7 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - EXT_SHARED_TOKEN=${EXT_SHARED_TOKEN:?Set EXT_SHARED_TOKEN in .env (see .env.example)}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env (a long random value, distinct from EXT_SHARED_TOKEN)}
       # All persistent state lives in /app/data (mounted volume below) so
       # profiles, rotation config and instance metadata survive redeploys.
       - CREDS_STORE=/app/data/current_creds.json

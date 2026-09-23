@@ -22,6 +22,8 @@ process.env.BUILDER_CONFIG = path.join(tmp, "extension_build_config.json");
 process.env.PEC_EXTENSION_DIR = path.join(tmp, "extension");
 process.env.PEC_UPDATES_DIR = path.join(tmp, "updates");
 process.env.EXT_SHARED_TOKEN = "test-admin-token";
+process.env.ADMIN_TOKEN = "test-root-admin-token";
 
 export const TEST_TMP_DIR = tmp;
 export const TEST_TOKEN = process.env.EXT_SHARED_TOKEN;
+export const TEST_ADMIN_TOKEN = process.env.ADMIN_TOKEN;

@@ -54,6 +54,14 @@ test("dashboard render: login gate is present (token is entered, not embedded)",
   assert.match(html, /autocomplete="off"/);
 });
 
+test("dashboard render: adminFetch authenticates with X-Admin-Token, fleet header stays for endpoint testers", () => {
+  const html = render(false);
+  assert.match(html, /'X-Admin-Token': token/, "the management-API client must send the admin token header");
+  assert.ok(!html.includes("opts.headers = Object.assign({}, opts.headers || {}, { 'X-Ext-Token': token })"), "adminFetch must not send the fleet header");
+  // the /creds and /api/sync testers deliberately keep the fleet header
+  assert.match(html, /'X-Ext-Token': token \}/, "fleet endpoint testers must keep X-Ext-Token");
+});
+
 test("dashboard render: shipped esc() neutralizes every HTML-breaking character", () => {
   const html = render(false);
   const m = html.match(/function esc\(value\) \{[\s\S]*?\n    \}/);
