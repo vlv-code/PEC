@@ -917,7 +917,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         </button>
       </div>
     </header>
-    \${isDefaultTokenInUse ? \`
+    ${isDefaultTokenInUse ? `
     <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid #ef4444; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
       <div style="display: flex; align-items: center; gap: 10px;">
         <span style="font-size: 16px;">⚠️</span>
@@ -927,7 +927,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       </div>
       <span class="badge badge-action-block" style="font-size: 10px;">DEFAULT TOKEN IN USE</span>
     </div>
-    \` : ""}
+    ` : ""}
 
     <!-- Top quick overview banner -->
     <div class="banner">
@@ -1829,10 +1829,10 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         html += data.releases.slice(0, 5).map(r => \`
           <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 11.5px;">
             <div>
-              <a href="\${r.htmlUrl}" target="_blank" style="color: var(--primary); font-weight: 600; text-decoration: none;">\${r.name || r.tag}</a>
+              <a href="\${esc(r.htmlUrl)}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-weight: 600; text-decoration: none;">\${esc(r.name || r.tag)}</a>
               <span style="color: var(--text-muted); font-size: 10px; margin-left: 6px;">\${r.publishedAt ? new Date(r.publishedAt).toLocaleDateString() : ''}</span>
             </div>
-            <a href="\${r.htmlUrl}" target="_blank" class="btn-secondary" style="font-size: 10px; padding: 2px 6px;">GitHub</a>
+            <a href="\${esc(r.htmlUrl)}" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="font-size: 10px; padding: 2px 6px;">GitHub</a>
           </div>
         \`).join('');
         html += \`</div>\`;
