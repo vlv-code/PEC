@@ -23,9 +23,7 @@ export function createSystemRouter(options: {
   router.get("/api/ip-echo", (req: Request, res: Response) => {
     res.json({
       ip: getClientIp(req),
-      country: "Fleet Intranet / Cloud NAT",
-      city: "Primary Gateway",
-      protocol: "HTTPS",
+      note: "Egress IP as observed by the PEC server",
       timestamp: new Date().toISOString(),
     });
   });

@@ -1,4 +1,18 @@
-// background.js - Enterprise Chrome MV3 Service Worker (PEC template)
+/**
+ * Source templates for extension files that are generated at build time.
+ *
+ * BACKGROUND_TEMPLATE is the source of truth for the extension service
+ * worker. It contains __PEC_*__ placeholders that the packager substitutes
+ * from the build config when assembling the ZIP - so "Server URL",
+ * "Sync Interval", "Bypass Timeout", "Default Token" and "Target Group"
+ * configured in the Studio actually end up in the shipped extension.
+ * (Previously background.js was a static file with a hardcoded server URL
+ * and most build-config fields were silently ignored.)
+ *
+ * Managed storage (GPO) values always take precedence at runtime.
+ */
+
+export const BACKGROUND_TEMPLATE = `// background.js - Enterprise Chrome MV3 Service Worker (PEC template)
 //
 // 1. Centralized proxy synchronization (SOCKS5/HTTP/HTTPS/PAC) pushed by server.
 // 2. Intercepts Basic-Auth proxy challenges (details.isProxy === true).
@@ -394,3 +408,57 @@ chrome.alarms.get(ALARM_BYPASS_EXPIRE, (alarm) => {
 // Initialize on service worker start
 applyWebRtcProtection();
 syncWithServer(false).catch((e) => console.warn("[corp-proxy] Initial boot sync warning:", e));
+`;
+
+/**
+ * Managed storage schema. Declares every key background.js actually reads -
+ * previously `targetGroup` was read at runtime but never declared, so
+ * group-based routing silently failed on GPO deployments.
+ */
+export const MANAGED_SCHEMA_TEMPLATE = `{
+  "type": "object",
+  "properties": {
+    "extToken": {
+      "type": "string",
+      "description": "Shared corporate token for authentication on the mini-server (via X-Ext-Token header)."
+    },
+    "credsUrl": {
+      "type": "string",
+      "description": "Direct URL for /creds endpoint. Defaults to the build-configured server URL + /creds."
+    },
+    "syncUrl": {
+      "type": "string",
+      "description": "URL for /api/sync endpoint to receive dynamic proxy configuration and send heartbeat."
+    },
+    "autoConfigureProxy": {
+      "type": "boolean",
+      "description": "If true, extension manages chrome.proxy.settings dynamically according to the mini-server config."
+    },
+    "targetGroup": {
+      "type": "string",
+      "description": "Fleet group this device belongs to (used for group-scoped routing profiles)."
+    }
+  }
+}
+`;
+
+/**
+ * Substitute __PEC_*__ placeholders in the background.js template.
+ */
+export function renderBackgroundJs(cfg: {
+  defaultServerUrl?: string;
+  defaultToken?: string;
+  syncIntervalMinutes?: number;
+  bypassAutoTimeoutMinutes?: number;
+  badgeIndicator?: boolean;
+  targetGroup?: string;
+}): string {
+  const serverBase = String(cfg.defaultServerUrl || "https://mini-server.ic.local").replace(/\/+$/, "");
+  return BACKGROUND_TEMPLATE
+    .replace(/__PEC_SERVER_BASE__/g, serverBase)
+    .replace(/__PEC_DEFAULT_TOKEN__/g, String(cfg.defaultToken || ""))
+    .replace(/__PEC_SYNC_INTERVAL_MIN__/g, String(Math.max(1, Math.round(Number(cfg.syncIntervalMinutes) || 5))))
+    .replace(/__PEC_BYPASS_TIMEOUT_MIN__/g, String(Math.max(1, Math.round(Number(cfg.bypassAutoTimeoutMinutes) || 15))))
+    .replace(/__PEC_BADGE_ENABLED__/g, cfg.badgeIndicator === false ? "false" : "true")
+    .replace(/__PEC_TARGET_GROUP__/g, String(cfg.targetGroup || "Default Fleet"));
+}

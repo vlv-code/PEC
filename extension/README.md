@@ -16,6 +16,25 @@
 
 ---
 
+## Шаблонизация background.js
+
+`background.js` в этом каталоге — **исходный шаблон**. При сборке пакета (кнопка Build в Studio или `packageExtension`) упаковщик подставляет вместо плейсхолдеров значения из конфигурации сборки:
+
+| Плейсхолдер | Поле конфигурации | Значение по умолчанию |
+| :--- | :--- | :--- |
+| `__PEC_SERVER_BASE__` | `defaultServerUrl` | `https://mini-server.ic.local` |
+| `__PEC_DEFAULT_TOKEN__` | `defaultToken` | `corp-proxy-secret-token-change-me` |
+| `__PEC_SYNC_INTERVAL_MIN__` | `syncIntervalMinutes` | `15` |
+| `__PEC_BYPASS_TIMEOUT_MIN__` | `bypassAutoTimeoutMinutes` | `15` |
+| `__PEC_BADGE_ENABLED__` | `badgeIndicator` | `true` |
+| `__PEC_TARGET_GROUP__` | — | `Default Fleet` |
+
+Файл на диске всегда сохраняет плейсхолдеры — подстановка происходит только внутри собираемого ZIP. Значения, доставленные через GPO managed storage (`extToken`, `credsUrl`, `syncUrl`, `targetGroup`), имеют приоритет над зашитыми при сборке.
+
+Ручные правки файлов в Studio (кнопка Save в редакторе кода) защищены: повторная генерация не перезаписывает их, пока не нажата кнопка «Regenerate templates».
+
+---
+
 ## Структура каталога
 
 ```text

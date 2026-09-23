@@ -7,7 +7,7 @@
     },
     "credsUrl": {
       "type": "string",
-      "description": "Direct URL for /creds endpoint. Defaults to https://mini-server.ic.local/creds."
+      "description": "Direct URL for /creds endpoint. Defaults to the build-configured server URL + /creds."
     },
     "syncUrl": {
       "type": "string",
@@ -16,6 +16,10 @@
     "autoConfigureProxy": {
       "type": "boolean",
       "description": "If true, extension manages chrome.proxy.settings dynamically according to the mini-server config."
+    },
+    "targetGroup": {
+      "type": "string",
+      "description": "Fleet group this device belongs to (used for group-scoped routing profiles)."
     }
   }
 }
