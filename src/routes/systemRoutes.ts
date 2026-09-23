@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { readCurrentCreds } from "../rotate.js";
+import { readCurrentCredsAsync } from "../rotate.js";
 import { getRotationConfig } from "../scheduler.js";
 import { getActiveInstances, getProxyConfig } from "../instances.js";
 import { getAllProfiles } from "../routing.js";
@@ -29,33 +29,38 @@ export function createSystemRouter(options: {
     });
   });
 
-  router.get("/api/status", (_req: Request, res: Response) => {
-    const currentCreds = readCurrentCreds();
-    const rotConfig = getRotationConfig();
-    const instances = getActiveInstances();
-    const profilesList = getAllProfiles();
-    const fleetToken = options.getFleetToken();
+  router.get("/api/status", async (_req: Request, res: Response) => {
+    try {
+      const currentCreds = await readCurrentCredsAsync();
+      const rotConfig = getRotationConfig();
+      const instances = getActiveInstances();
+      const profilesList = getAllProfiles();
+      const fleetToken = options.getFleetToken();
 
-    res.json({
-      app: "Corp Proxy Auth Mini-Server & Extension Studio",
-      version: currentVersion,
-      status: "online",
-      port: options.port,
-      tokenConfigured: Boolean(fleetToken),
-      fleetDefaultTokenInUse: fleetToken === options.defaultFleetToken,
-      adminTokenConfigured: options.adminTokenConfigured,
-      credsStorePath: options.credsStorePath,
-      currentUser: currentCreds?.user || "none",
-      credsUpdatedAt: currentCreds?.updatedAt || null,
-      activeInstancesCount: instances.filter((i) => i.status === "ONLINE").length,
-      totalInstancesCount: instances.length,
-      profilesCount: profilesList.length,
-      killSwitch: getProxyConfig().killSwitch || false,
-      nextRotationAt: rotConfig.nextRotationAt || null,
-      rotationIntervalMinutes: rotConfig.intervalMinutes,
-      rotationEnabled: rotConfig.enabled,
-      auditLogs: getAuditLogs().slice(0, 20),
-    });
+      res.json({
+        app: "Corp Proxy Auth Mini-Server & Extension Studio",
+        version: currentVersion,
+        status: "online",
+        port: options.port,
+        tokenConfigured: Boolean(fleetToken),
+        fleetDefaultTokenInUse: fleetToken === options.defaultFleetToken,
+        adminTokenConfigured: options.adminTokenConfigured,
+        credsStorePath: options.credsStorePath,
+        currentUser: currentCreds?.user || "none",
+        credsUpdatedAt: currentCreds?.updatedAt || null,
+        activeInstancesCount: instances.filter((i) => i.status === "ONLINE").length,
+        totalInstancesCount: instances.length,
+        profilesCount: profilesList.length,
+        killSwitch: getProxyConfig().killSwitch || false,
+        nextRotationAt: rotConfig.nextRotationAt || null,
+        rotationIntervalMinutes: rotConfig.intervalMinutes,
+        rotationEnabled: rotConfig.enabled,
+        auditLogs: getAuditLogs().slice(0, 20),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
   });
 
   router.get("/api/github/releases", async (req: Request, res: Response) => {

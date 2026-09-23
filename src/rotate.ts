@@ -45,6 +45,31 @@ export function readCurrentCreds(): { user: string; pass: string; updatedAt?: st
   return null;
 }
 
+/**
+ * Async variant for request hot paths (/creds, /api/sync, /api/status):
+ * fs.promises keeps the event loop free while the store is read from disk.
+ * The sync version above stays for startup and cold-path callers.
+ */
+export async function readCurrentCredsAsync(): Promise<{ user: string; pass: string; updatedAt?: string } | null> {
+  const storePath = getCredsStorePath();
+  try {
+    const raw = await fs.promises.readFile(storePath, "utf-8");
+    const data = JSON.parse(raw);
+    if (data && typeof data.user === "string" && typeof data.pass === "string") {
+      return data;
+    }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+      // Auto-heal missing creds store (rare; the sync write is fine here)
+      const defaultCreds = ensureCredsStore(storePath);
+      console.log(`[rotate] Auto-healed missing creds store at ${storePath}`);
+      return defaultCreds;
+    }
+    console.error("[rotate] Error reading creds store:", err);
+  }
+  return null;
+}
+
 export function atomicWriteCreds(filePath: string, creds: { user: string; pass: string; updatedAt?: string }) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
