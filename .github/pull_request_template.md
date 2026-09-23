@@ -10,7 +10,7 @@
 - [ ] Обновление документации (Documentation update)
 
 ## Чеклист перед отправкой
-- [ ] Код протестирован локально (`python server/tests/test_server.py`).
+- [ ] Код протестирован локально (`npm run lint && npm test`).
 - [ ] Проверен синтаксис JavaScript (`node -c extension/background.js`).
 - [ ] Все JSON-файлы манифестов валидны.
 - [ ] Документация в `README.md`, `extension/` или `server/` обновлена при необходимости.

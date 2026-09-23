@@ -1,5 +1,7 @@
 # Архитектура и план внедрения: избирательный прокси-доступ через AD-группу
 
+> **Примечание (актуализация).** Документ изначально описывал Python-версию мини-сервера (`server/app.py`, FastAPI). Сервер переписан на TypeScript: точка входа `server.ts`, модули в `src/` (Express), деплой — `Dockerfile`, `docker-compose*.yml` и скрипты `deploy/`. Команды Python/venv ниже заменены на актуальные.
+
 Данный документ описывает архитектуру, порядок развертывания и эксплуатационные требования для системы избирательного доступа к корпоративному VPN-прокси через связку Active Directory (GPO), Google Chrome Extension (Manifest V3) и Xray/3x-ui.
 
 ---
@@ -25,12 +27,12 @@ Remnawave outbound (ключи подписки, routing по inboundTag)
   — Раз в TTL (5 мин) или при первом 407 обращается к мини-серверу за актуальными credentials.
   — Защищено от шторма запросов (дедупликация промисов) и зацикливания авторизации (лимит попыток).
 
-Мини-сервер (server/) [colocated с 3x-ui]
-  — /creds: отдаёт текущий логин/пароль; проверка токена расширения (app.py) с защитой от timing attacks.
+Мини-сервер PEC (server.ts + src/, Node.js/Express) [colocated с 3x-ui]
+  — /creds и /api/sync: отдают текущий логин/пароль и PAC-конфиг; проверка fleet-токена (X-Ext-Token) с защитой от timing attacks. Management-API защищены отдельным админ-токеном (X-Admin-Token).
   — /updates/: раздача собранного пакета расширения (.crx) и update-манифеста (updates.xml).
   — Защищён Nginx (TLS-терминация + allow/deny по корпоративным подсетям).
-  — systemd timer: ежедневно генерирует новый пароль, обновляет 3x-ui через API,
-    сверяет результат и атомарно записывает кэш (rotate.py).
+  — Встроенный планировщик (src/scheduler.ts): по расписанию генерирует новый пароль, обновляет 3x-ui через API,
+    сверяет результат и атомарно записывает хранилище (src/rotate.ts).
 ```
 
 Squid в архитектуру не входит: фильтрацию доменов осуществляет PAC-файл, разграничение доступа по AD — GPO-scoped расширение.
@@ -50,46 +52,18 @@ Squid в архитектуру не входит: фильтрацию доме
    - Для предотвращения сниффинга пароля в корпоративном сегменте переведите HTTP-инбаунд на TLS и в PAC-файле используйте схему `HTTPS xray-host:10809; DIRECT`. Chrome поддерживает Secure Web Proxy и предварительно поднимает шифрованный TLS-туннель до прокси.
 
 ### Этап 2. Развертывание мини-сервера и ротации
-1. Скопировать содержимое каталога `server/` в `/opt/mini-server` на хосте с 3x-ui.
-2. Создать пользователя и виртуальное окружение:
-   ```bash
-   sudo useradd -r -s /bin/false -d /opt/mini-server mini-server
-   sudo chown -R mini-server:mini-server /opt/mini-server
-   sudo -u mini-server python3 -m venv /opt/mini-server/venv
-   sudo -u mini-server /opt/mini-server/venv/bin/pip install -r /opt/mini-server/requirements.txt
-   ```
-3. Создать и настроить файл конфигурации:
-   ```bash
-   sudo cp /opt/mini-server/env.example /opt/mini-server/env
-   sudo chmod 600 /opt/mini-server/env
-   sudo chown mini-server:mini-server /opt/mini-server/env
-   # Отредактировать /opt/mini-server/env: задать EXT_SHARED_TOKEN, доступы к 3x-ui API
-   ```
-4. Настроить Nginx по шаблону `server/nginx.conf.example`:
-   - Настроить TLS-сертификат (выпущенный корпоративным CA или самоподписанный + доверенный в домене через GPO).
-   - Задать актуальные корпоративные подсети в `allow`.
-   - Настроить блок `location /updates/` для хостинга `.crx` и `updates.xml`.
-5. Установить и запустить systemd-юниты:
-   ```bash
-   sudo cp /opt/mini-server/systemd/* /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now mini-server.service
-   sudo systemctl enable --now rotate-xray-pass.timer
-   ```
-6. Прогнать ротацию вручную для первоначальной генерации пароля:
-   ```bash
-   sudo -u mini-server /opt/mini-server/venv/bin/python /opt/mini-server/rotate.py
-   ```
-   Убедиться, что файл `/opt/mini-server/current_creds.json` создан с правами 0600, а пароль инбаунда в панели 3x-ui обновился.
+1. Развернуть сервер одним из способов:
+   - Docker: `deploy/install-docker.sh` (или вручную `docker compose up -d --build`);
+   - systemd: `sudo bash deploy/install-systemd.sh` — скрипт ставит Node.js 20, собирает `dist/server.cjs`, регистрирует службу и генерирует `EXT_SHARED_TOKEN` + `ADMIN_TOKEN`.
+2. Конфигурация берется из `.env` (шаблон — `.env.example`): задайте `EXT_SHARED_TOKEN`, `ADMIN_TOKEN`, `PUBLIC_BASE_URL`, доступы к 3x-ui API.
+3. Nginx настраивается по шаблону `deploy/nginx-proxy.conf` (TLS-терминация, allow/deny, rate limiting).
+4. Прогнать ротацию вручную через дашборд (`POST /api/rotation/rotate-now`) и убедиться, что `current_creds.json` создан с правами 0600, а пароль инбаунда в панели 3x-ui обновился.
 
 ### Этап 3. Упаковка расширения и доставка через GPO
 1. **Упаковка расширения в .crx:**
-   - На рабочей станции администратора запустить сборочный скрипт:
-     ```bash
-     python extension/scripts/pack.py --base-url https://mini-server.ic.local/updates
-     ```
-   - Скрипт создаст постоянный закрытый ключ `extension/key.pem` (сохраните его для сборки последующих версий!), сформирует `.crx` пакет, рассчитает постоянный **Extension ID** и сгенерирует `dist/updates.xml`.
-   - Скопировать артефакты из `dist/` на сервер в `/opt/mini-server/updates/`.
+   - Запустить сервер (`npm run build && npm start` или Docker) — при старте он сам соберет и подпишет пакет:
+   - Сервер создаст постоянный закрытый ключ `extension/key.pem` (сохраните том для сборки последующих версий!), сформирует CRX3-пакет, рассчитает постоянный **Extension ID** и сгенерирует `dist/updates/updates.xml`.
+   - Артефакты раздаются прямо сервером (`/updates/*`); в Docker держите том `pec_updates`.
 2. **Настройка Active Directory Group Policy (GPO):**
    - Создать новую GPO: `Policy-Chrome-CorpProxyAuth`.
    - **Security Filtering:**
@@ -156,22 +130,18 @@ proxy_extention_corp/
 │   ├── managed_schema.json        # Описание политик GPO для chrome.storage.managed
 │   ├── manifest.json              # Манифест расширения
 │   ├── updates.xml.example        # Пример update manifest
-│   ├── scripts/
-│   │   └── pack.py                # Утилита упаковки .crx и расчета Extension ID
 │   └── README.md                  # Инструкция по сборке и установке расширения
-├── server/                        # Модуль мини-сервера и ротации
-│   ├── app.py                     # FastAPI эндпоинт /creds
-│   ├── rotate.py                  # Скрипт ротации пароля в 3x-ui
-│   ├── requirements.txt           # Зависимости Python
-│   ├── env.example                # Шаблон конфигурации
-│   ├── nginx.conf.example         # Конфигурация Nginx (TLS, allow/deny, хостинг /updates/)
-│   ├── systemd/                   # Юниты systemd
-│   │   ├── mini-server.service
-│   │   ├── rotate-xray-pass.service
-│   │   └── rotate-xray-pass.timer
-│   ├── tests/
-│   │   └── test_server.py         # Юнит-тесты серверной части
-│   └── README.md                  # Руководство по развертыванию сервера
+├── server.ts                      # Точка входа Express-сервера
+├── src/                           # Серверные модули (TypeScript)
+│   ├── routes/                    # Роуты: creds, builder, rotation, instances, system
+│   ├── middleware/security.ts     # CORS, security headers, токен-аутентификация, rate limiting
+│   ├── packager.ts                # CRX3-упаковщик, подпись RSA, генератор GPO
+│   ├── rotate.ts                  # Атомарное хранилище кредов, интеграция 3x-ui, SSRF-валидатор
+│   ├── routing.ts                 # Генератор PAC, пресеты, расширение доменов
+│   ├── scheduler.ts               # Планировщик ротации
+│   └── views/dashboardView.ts     # HTML дашборда управления
+├── deploy/                        # Скрипты установки: Docker, systemd, standalone; nginx-шаблон
+├── test/                          # node:test интеграционные и модульные тесты
 ├── .editorconfig                  # Настройки форматирования кода
 ├── .gitignore                     # Правила игнорирования Git
 ├── CONTRIBUTING.md                # Правила участия в разработке
