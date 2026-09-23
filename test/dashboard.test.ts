@@ -181,3 +181,29 @@ function isInertInterpolation(source: string, expr: string): boolean {
   // new Date(...).toLocaleDateString() - neither can emit HTML metacharacters
   return /\?\s*'/.test(context) || /new Date\(/.test(context);
 }
+
+test("dashboard assets: preview iframe sizes correctly and auto-resizes to content", () => {
+  const html = render(false);
+
+  // Regression: the iframe had inline height:100% inside an auto-height box,
+  // which overrode the CSS height and collapsed the preview to the browser
+  // default 150px. The template must carry a concrete height.
+  assert.doesNotMatch(html, /previewFrame[^>]*height:\s*100%/, "preview iframe must not use inline height:100%");
+  assert.match(html, /previewFrame[^>]*height:\s*470px/);
+  assert.match(html, /<iframe id="previewFrame" sandbox="allow-scripts"/);
+
+  // The sandbox (opaque origin) blocks the parent from measuring the frame,
+  // so the shipped mock script must report its content height via
+  // PREVIEW_RESIZE postMessage, and the parent must handle it.
+  assert.ok(dashboardJs.includes('PREVIEW_RESIZE'), "dashboard.js must handle PREVIEW_RESIZE messages");
+  assert.ok(dashboardJs.includes("__postPreviewHeight"), "the preview mock must report its content height");
+
+  // Regression: the popup.js script-tag regex was assembled from string
+  // literals, turning '\s' into 's' - it never matched, the mock silently
+  // disappeared from the preview and popup.js never executed.
+  assert.ok(
+    /new RegExp\('<script\[\^>\]\*src="popup/.test(dashboardJs),
+    "popup.js substitution regex must be a real regex, not a string-literal mangled one"
+  );
+  assert.doesNotMatch(dashboardJs, /'<script\s\+src="popup/, "the broken string-regex form must stay gone");
+});

@@ -474,7 +474,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
             <div class="preview-canvas">
               <!-- Popup Window Box -->
               <div class="popup-frame-box" id="popupFrameBox">
-                <iframe id="previewFrame" sandbox="allow-scripts" style="width: 100%; height: 100%; border: none;"></iframe>
+                <iframe id="previewFrame" sandbox="allow-scripts" style="width: 100%; height: 470px; border: none;" title="Extension Popup Preview"></iframe>
               </div>
 
               <!-- Stealth Mode Fallback Card -->
