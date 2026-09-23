@@ -8,7 +8,7 @@ import { createCredsRouter } from "../src/routes/credsRoutes.js";
 import { createInstancesRouter } from "../src/routes/instancesRoutes.js";
 import { saveProfile } from "../src/routing.js";
 import { atomicWriteCreds, getCredsStorePath } from "../src/rotate.js";
-import { TEST_TOKEN } from "./helpers/setup.js";
+import { TEST_TOKEN, TEST_ADMIN_TOKEN } from "./helpers/setup.js";
 
 /**
  * Full-stack HTTP tests over real sockets, mirroring the production wiring
@@ -21,7 +21,7 @@ import { TEST_TOKEN } from "./helpers/setup.js";
 function buildApp() {
   const app = express();
   app.use(express.json({ limit: "1kb" }));
-  const adminAuth = createTokenAuthMiddleware(() => TEST_TOKEN);
+  const adminAuth = createTokenAuthMiddleware(() => TEST_ADMIN_TOKEN, "x-admin-token");
   const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync"]);
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
@@ -139,7 +139,7 @@ test("HTTP: e2e - sync as a group worker, then receive that group's PAC", async 
     assert.match(await pacUnknown.text(), /FindProxyForURL/);
 
     // 6. The worker's heartbeat registered it with the applied profile
-    const fleetRes = await fetch(`${base}/api/instances`, { headers: { "X-Ext-Token": TEST_TOKEN } });
+    const fleetRes = await fetch(`${base}/api/instances`, { headers: { "X-Admin-Token": TEST_ADMIN_TOKEN } });
     assert.strictEqual(fleetRes.status, 200);
     const fleet = await fleetRes.json() as { instances: Array<{ instanceId: string; group?: string; appliedProfileName?: string }> };
     const inst = fleet.instances.find((i) => i.instanceId === "inst_e2e_qa");

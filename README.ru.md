@@ -87,7 +87,8 @@ cp .env.example .env
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Порт, на котором запускается веб-сервер |
 | `HOST` | `0.0.0.0` | Сетевой интерфейс прослушивания |
-| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Важно:** Секретный токен расширения (заголовок `X-Ext-Token`) |
+| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Важно:** Fleet-токен расширений (заголовок `X-Ext-Token`), низкие привилегии — зашивается в CRX/GPO-артефакты |
+| `ADMIN_TOKEN` | *(нет; обязателен в prod)* | **Важно:** Админ-токен для ВСЕХ management-API (`X-Admin-Token`). Должен отличаться от `EXT_SHARED_TOKEN`; никогда не попадает в артефакты |
 | `CREDS_STORE` | `./current_creds.json` | Путь к файлу актуальных учетных данных |
 | `PROXY_CONFIG_PATH` | `./proxy_config.json` | Путь к сохраненным параметрам прокси |
 | `PROXY_HOST` | `10.0.0.1` | Хост/IP корпоративного прокси |
@@ -97,7 +98,7 @@ cp .env.example .env
 | `XUI_ADMIN_PASS` | `change-me` | Пароль администратора 3x-ui |
 | `XUI_INBOUND_REMARK` | `squid-in` | Примечание (Remark) целевого инбаунда |
 
-> ⚠️ **Предупреждение по безопасности:** Обязательно замените `EXT_SHARED_TOKEN` перед запуском в рабочей среде!
+> ⚠️ **Предупреждение по безопасности:** Обязательно замените `EXT_SHARED_TOKEN` и задайте отдельный `ADMIN_TOKEN` перед запуском в рабочей среде! Дашборд и management-API авторизуются через `ADMIN_TOKEN` (заголовок `X-Admin-Token`), а не через fleet-токен.
 
 ---
 
@@ -117,7 +118,7 @@ npm install
 
 # 3. Настройка файла .env
 cp .env.example .env
-nano .env   # укажите уникальный EXT_SHARED_TOKEN
+nano .env   # укажите уникальные EXT_SHARED_TOKEN и ADMIN_TOKEN
 
 # 4. Запуск в режиме разработки
 npm run dev

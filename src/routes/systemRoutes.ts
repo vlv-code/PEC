@@ -7,8 +7,9 @@ import { recordAudit, getClientIp, getAuditLogs } from "../audit.js";
 
 export function createSystemRouter(options: {
   port: number;
-  getSharedToken: () => string;
-  defaultToken: string;
+  getFleetToken: () => string;
+  defaultFleetToken: string;
+  adminTokenConfigured: boolean;
   credsStorePath: string;
 }): Router {
   const router = Router();
@@ -33,15 +34,16 @@ export function createSystemRouter(options: {
     const rotConfig = getRotationConfig();
     const instances = getActiveInstances();
     const profilesList = getAllProfiles();
-    const token = options.getSharedToken();
+    const fleetToken = options.getFleetToken();
 
     res.json({
       app: "Corp Proxy Auth Mini-Server & Extension Studio",
       version: currentVersion,
       status: "online",
       port: options.port,
-      tokenConfigured: Boolean(token),
-      defaultTokenInUse: token === options.defaultToken,
+      tokenConfigured: Boolean(fleetToken),
+      fleetDefaultTokenInUse: fleetToken === options.defaultFleetToken,
+      adminTokenConfigured: options.adminTokenConfigured,
       credsStorePath: options.credsStorePath,
       currentUser: currentCreds?.user || "none",
       credsUpdatedAt: currentCreds?.updatedAt || null,

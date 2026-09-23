@@ -5,8 +5,9 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import AdmZip from "adm-zip";
-import { TEST_TMP_DIR } from "./helpers/setup.js";
-import { ensureKeyExists, packageExtension, packCrxBuffer, saveBuildConfig } from "../src/packager.js";
+import { TEST_TMP_DIR, TEST_TOKEN, TEST_ADMIN_TOKEN } from "./helpers/setup.js";
+import { ensureKeyExists, packageExtension, packCrxBuffer, saveBuildConfig, generateGpoConfig } from "../src/packager.js";
+import { renderBackgroundJs } from "../src/extensionTemplates.js";
 
 // --- minimal protobuf reader (wire type 2 only) ---
 function* readFields(buf: Buffer): Generator<{ fieldNo: number; bytes: Buffer }> {
@@ -126,4 +127,18 @@ test("CRX3: packCrxBuffer is deterministic for the same key and archive", () => 
   // RSA PKCS#1 v1.5 is deterministic -> identical output proves stability
   assert.ok(a.equals(b));
   assert.strictEqual(a.readUInt32LE(4), 3);
+});
+
+test("artifacts ship the fleet token and never the admin token", () => {
+  // background.js rendering with the fleet token baked in (defaultToken comes
+  // from the build config, which the server seeds from EXT_SHARED_TOKEN)
+  const bg = renderBackgroundJs({ defaultToken: TEST_TOKEN } as never);
+  assert.ok(bg.includes(TEST_TOKEN), "rendered background.js must carry the fleet token");
+  assert.ok(!bg.includes(TEST_ADMIN_TOKEN), "rendered background.js must never contain the admin token");
+
+  // GPO registry export: extension workstations receive the fleet token only
+  const gpo = generateGpoConfig("a".repeat(32), "https://pec.example.corp", TEST_TOKEN);
+  const regBlob = `${gpo.regContent}${JSON.stringify(gpo.extensionSettingsJson)}${gpo.forcelistEntry}`;
+  assert.ok(regBlob.includes(TEST_TOKEN), "GPO config must carry the fleet token");
+  assert.ok(!regBlob.includes(TEST_ADMIN_TOKEN), "GPO config must never contain the admin token");
 });

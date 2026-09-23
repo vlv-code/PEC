@@ -50,8 +50,9 @@ npm run build
 # После сборки dev-зависимости больше не нужны
 npm prune --omit=dev
 
-# Генерация безопасного токена
+# Генерация безопасных токенов (fleet и admin - разные!)
 SECURE_TOKEN=$(openssl rand -hex 24)
+ADMIN_SEC_TOKEN=$(openssl rand -hex 24)
 
 # Установка прав доступа
 chown -R pecuser:pecuser "$INSTALL_DIR"
@@ -72,6 +73,7 @@ Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=HOST=0.0.0.0
 Environment=EXT_SHARED_TOKEN=$SECURE_TOKEN
+Environment=ADMIN_TOKEN=$ADMIN_SEC_TOKEN
 Environment=CREDS_STORE=$INSTALL_DIR/data/current_creds.json
 ExecStart=$(which npm) start
 Restart=always
@@ -90,6 +92,7 @@ systemctl enable --now pec-server.service
 echo -e "${BLUE}================================================================${NC}"
 echo -e "${GREEN}✔ Служба pec-server успешно запущена и добавлена в автозагрузку!${NC}"
 echo -e "Токен расширения: ${YELLOW}${SECURE_TOKEN}${NC}"
+echo -e "Админ-токен:      ${YELLOW}${ADMIN_SEC_TOKEN}${NC}"
 echo -e "Статус службы:   systemctl status pec-server"
 echo -e "Просмотр логов:   journalctl -u pec-server -f"
 echo -e "Веб-интерфейс:    http://127.0.0.1:3000"

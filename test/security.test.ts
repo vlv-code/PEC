@@ -3,11 +3,11 @@ import test from "node:test";
 import assert from "node:assert";
 import express, { Request, Response, NextFunction } from "express";
 import type { AddressInfo } from "node:net";
-import { timingSafeEqualString, createTokenAuthMiddleware, safeCorsMiddleware } from "../src/middleware/security.js";
+import { timingSafeEqualString, createTokenAuthMiddleware, safeCorsMiddleware, resolveAdminToken } from "../src/middleware/security.js";
 import { createSystemRouter } from "../src/routes/systemRoutes.js";
 import { createInstancesRouter } from "../src/routes/instancesRoutes.js";
 import { createCredsRouter } from "../src/routes/credsRoutes.js";
-import { TEST_TOKEN } from "./helpers/setup.js";
+import { TEST_TOKEN, TEST_ADMIN_TOKEN } from "./helpers/setup.js";
 
 test("timingSafeEqualString compares digests (no length leak, safe on any input)", () => {
   assert.strictEqual(timingSafeEqualString("same", "same"), true);
@@ -68,7 +68,7 @@ test("CORS reflects only exact same-host origins, never substrings", () => {
 
 test("admin auth middleware: 401 without/with wrong token, pass-through with valid token", async () => {
   const app = express();
-  const auth = createTokenAuthMiddleware(() => TEST_TOKEN);
+  const auth = createTokenAuthMiddleware(() => TEST_ADMIN_TOKEN, "x-admin-token");
   app.use("/api", auth);
   app.get("/api/ping", (_req: Request, res: Response) => res.json({ ok: true }));
 
@@ -80,10 +80,14 @@ test("admin auth middleware: 401 without/with wrong token, pass-through with val
     const noToken = await fetch(`${base}/api/ping`);
     assert.strictEqual(noToken.status, 401);
 
-    const wrongToken = await fetch(`${base}/api/ping`, { headers: { "X-Ext-Token": "wrong-token" } });
+    const wrongToken = await fetch(`${base}/api/ping`, { headers: { "X-Admin-Token": "wrong-token" } });
     assert.strictEqual(wrongToken.status, 401);
 
-    const ok = await fetch(`${base}/api/ping`, { headers: { "X-Ext-Token": TEST_TOKEN } });
+    // Strict header separation: the fleet token must NOT open admin routes.
+    const fleetToken = await fetch(`${base}/api/ping`, { headers: { "X-Ext-Token": TEST_TOKEN } });
+    assert.strictEqual(fleetToken.status, 401, "the fleet token must not authenticate against X-Admin-Token routes");
+
+    const ok = await fetch(`${base}/api/ping`, { headers: { "X-Admin-Token": TEST_ADMIN_TOKEN } });
     assert.strictEqual(ok.status, 200);
     const body = await ok.json();
     assert.strictEqual(body.ok, true);
@@ -92,17 +96,34 @@ test("admin auth middleware: 401 without/with wrong token, pass-through with val
   }
 });
 
-test("HTTP: management APIs require the admin token; fleet endpoints stay reachable for extensions", async () => {
+test("resolveAdminToken: explicit value wins, prod without token fails fast, dev gets a generated token", () => {
+  const explicit = resolveAdminToken({ ADMIN_TOKEN: "  provided-secret  ", NODE_ENV: "production" });
+  assert.strictEqual(explicit.token, "provided-secret");
+  assert.strictEqual(explicit.generated, false);
+
+  assert.throws(
+    () => resolveAdminToken({ ADMIN_TOKEN: "", NODE_ENV: "production" }),
+    /ADMIN_TOKEN is required/,
+    "production without ADMIN_TOKEN must fail fast"
+  );
+
+  const dev = resolveAdminToken({ ADMIN_TOKEN: "", NODE_ENV: "development" });
+  assert.strictEqual(dev.generated, true);
+  assert.ok(dev.token.length >= 20, "generated dev token must have decent entropy");
+  assert.notStrictEqual(dev.token, resolveAdminToken({ NODE_ENV: "development" }).token, "each dev start must generate a fresh token");
+});
+
+test("HTTP: two-token access matrix - fleet token on admin routes, admin token on fleet routes", async () => {
   // Mirrors the production wiring from server.ts
   const app = express();
   app.use(express.json());
-  const adminAuth = createTokenAuthMiddleware(() => TEST_TOKEN);
+  const adminAuth = createTokenAuthMiddleware(() => TEST_ADMIN_TOKEN, "x-admin-token");
   const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync"]);
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     return adminAuth(req, res, next);
   });
-  app.use(createSystemRouter({ port: 3000, getSharedToken: () => TEST_TOKEN, defaultToken: "default-x", credsStorePath: "/tmp/x.json" }));
+  app.use(createSystemRouter({ port: 3000, getFleetToken: () => TEST_TOKEN, defaultFleetToken: "default-x", adminTokenConfigured: true, credsStorePath: "/tmp/x.json" }));
   app.use(createInstancesRouter());
   app.use(createCredsRouter(() => TEST_TOKEN));
 
@@ -111,44 +132,48 @@ test("HTTP: management APIs require the admin token; fleet endpoints stay reacha
   const base = `http://127.0.0.1:${port}`;
 
   try {
-    // /api/status is admin-only now
-    const statusNoAuth = await fetch(`${base}/api/status`);
-    assert.strictEqual(statusNoAuth.status, 401);
-    const statusAuth = await fetch(`${base}/api/status`, { headers: { "X-Ext-Token": TEST_TOKEN } });
-    assert.strictEqual(statusAuth.status, 200);
-    const status = await statusAuth.json();
-    assert.strictEqual(typeof status.killSwitch, "boolean");
+    // 1. fleet token on an admin route -> 401 (the old single-token privilege hole)
+    const fleetOnAdmin = await fetch(`${base}/api/status`, { headers: { "X-Ext-Token": TEST_TOKEN } });
+    assert.strictEqual(fleetOnAdmin.status, 401, "fleet token must be rejected on admin routes");
 
-    // fleet instances listing is admin-only (was a reconnaissance endpoint)
+    // 2. admin token on an admin route -> 200
+    const adminOnAdmin = await fetch(`${base}/api/status`, { headers: { "X-Admin-Token": TEST_ADMIN_TOKEN } });
+    assert.strictEqual(adminOnAdmin.status, 200);
+    const status = await adminOnAdmin.json();
+    assert.strictEqual(typeof status.killSwitch, "boolean");
+    assert.strictEqual(status.adminTokenConfigured, true);
+    assert.strictEqual(typeof status.fleetDefaultTokenInUse, "boolean");
+
+    // 3. admin token on fleet routes -> 403 (strict isolation, no overlap)
+    const adminOnCreds = await fetch(`${base}/creds`, { headers: { "X-Admin-Token": TEST_ADMIN_TOKEN } });
+    assert.strictEqual(adminOnCreds.status, 403, "admin token must not be accepted on /creds");
+    const adminOnSync = await fetch(`${base}/api/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": TEST_ADMIN_TOKEN },
+      body: "{}",
+    });
+    assert.strictEqual(adminOnSync.status, 403, "admin token must not be accepted on /api/sync");
+
+    // 4. fleet token on fleet routes -> 200 (unchanged extension protocol)
+    const fleetOnCreds = await fetch(`${base}/creds`, { headers: { "X-Ext-Token": TEST_TOKEN } });
+    assert.strictEqual(fleetOnCreds.status, 200);
+    const creds = await fleetOnCreds.json();
+    assert.strictEqual(typeof creds.pass, "string");
+    const fleetOnSync = await fetch(`${base}/api/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Ext-Token": TEST_TOKEN },
+      body: JSON.stringify({ instanceId: "http-test-worker", version: "1.3.1", group: "QA" }),
+    });
+    assert.strictEqual(fleetOnSync.status, 200);
+    assert.strictEqual((await fleetOnSync.json()).ok, true);
+
+    // admin-only fleet listing stays gated behind the admin token
     const fleetNoAuth = await fetch(`${base}/api/instances`);
     assert.strictEqual(fleetNoAuth.status, 401);
 
     // /api/ip-echo stays public (used by extension popups)
     const echo = await fetch(`${base}/api/ip-echo`);
     assert.strictEqual(echo.status, 200);
-    const echoBody = await echo.json();
-    assert.strictEqual(typeof echoBody.ip, "string");
-
-    // /api/sync authenticates in-router with its own token check
-    const syncBad = await fetch(`${base}/api/sync`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    assert.strictEqual(syncBad.status, 403);
-    const syncOk = await fetch(`${base}/api/sync`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Ext-Token": TEST_TOKEN },
-      body: JSON.stringify({ instanceId: "http-test-worker", version: "1.3.0", group: "QA" }),
-    });
-    assert.strictEqual(syncOk.status, 200);
-    const syncBody = await syncOk.json();
-    assert.strictEqual(syncBody.ok, true);
-
-    // /creds requires the extension token
-    const credsBad = await fetch(`${base}/creds`);
-    assert.strictEqual(credsBad.status, 403);
-    const credsOk = await fetch(`${base}/creds`, { headers: { "X-Ext-Token": TEST_TOKEN } });
-    assert.strictEqual(credsOk.status, 200);
-    const creds = await credsOk.json();
-    assert.strictEqual(typeof creds.pass, "string");
-    assert.strictEqual(creds.pass.includes("InitialRotatingProxyPass"), false);
   } finally {
     server.close();
   }

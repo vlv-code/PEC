@@ -13,8 +13,15 @@ import {
 } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 
-export function createBuilderRouter(getSharedToken: () => string): Router {
+export function createBuilderRouter(getFleetToken: () => string, getAdminToken?: () => string): Router {
   const router = Router();
+
+  const warnIfAdminTokenInArtifact = (token: string): void => {
+    const adminToken = getAdminToken?.();
+    if (adminToken && token && token === adminToken) {
+      console.error("[SECURITY WARNING] defaultToken must never equal ADMIN_TOKEN - artifacts (CRX/GPO) ship the fleet token publicly.");
+    }
+  };
 
   router.get("/api/builder/config", (_req: Request, res: Response) => {
     res.json(getBuildConfig());
@@ -22,6 +29,7 @@ export function createBuilderRouter(getSharedToken: () => string): Router {
 
   router.post("/api/builder/config", (req: Request, res: Response) => {
     const updated = saveBuildConfig(req.body);
+    warnIfAdminTokenInArtifact(updated.defaultToken);
     generateExtensionFiles(updated);
     res.json(updated);
   });
@@ -53,7 +61,8 @@ export function createBuilderRouter(getSharedToken: () => string): Router {
   router.post("/api/builder/build", (req: Request, res: Response) => {
     try {
       if (req.body && Object.keys(req.body).length > 0) {
-        saveBuildConfig(req.body);
+        const saved = saveBuildConfig(req.body);
+        warnIfAdminTokenInArtifact(saved.defaultToken);
       }
       const baseUrl = getBaseUrl(req);
       const result = packageExtension(baseUrl);
@@ -76,7 +85,7 @@ export function createBuilderRouter(getSharedToken: () => string): Router {
   router.get("/api/extension/info", (req: Request, res: Response) => {
     const baseUrl = getBaseUrl(req);
     const info = getBuildInfo(baseUrl);
-    const token = getSharedToken();
+    const token = getFleetToken();
     const gpo = generateGpoConfig(info.extensionId, baseUrl, token);
     res.json({ ...info, baseUrl, gpo });
   });
