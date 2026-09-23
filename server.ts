@@ -40,6 +40,19 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 
+// Trust proxy configuration: controls how Express resolves client IPs from
+// X-Forwarded-For. Leave disabled (default) unless the server runs behind a
+// reverse proxy such as nginx - otherwise clients can spoof their IP and
+// bypass rate limits. Valid values: false | true | <number of trusted hops>.
+const TRUST_PROXY_RAW = (process.env.TRUST_PROXY || "false").trim();
+let trustProxySetting: boolean | number = false;
+if (TRUST_PROXY_RAW === "true") {
+  trustProxySetting = true;
+} else if (/^\d+$/.test(TRUST_PROXY_RAW) && TRUST_PROXY_RAW !== "0") {
+  trustProxySetting = parseInt(TRUST_PROXY_RAW, 10);
+}
+app.set("trust proxy", trustProxySetting);
+
 const DEFAULT_TOKEN = "corp-proxy-secret-token-change-me";
 const EXT_SHARED_TOKEN = process.env.EXT_SHARED_TOKEN || DEFAULT_TOKEN;
 const isDefaultTokenInUse = EXT_SHARED_TOKEN === DEFAULT_TOKEN;
@@ -136,11 +149,20 @@ app.get("/", (req: Request, res: Response) => {
   }
 
   const html = renderDashboardHtml({
-    currentToken: EXT_SHARED_TOKEN,
     isDefaultTokenInUse,
     port: PORT,
   });
-  res.send(html);
+  // Content-Security-Policy: blocks loading of external scripts/styles and
+  // neutralizes whole classes of injected-content attacks. 'unsafe-inline' is
+  // required because the dashboard ships a single inline <script> block; all
+  // dynamic values are additionally HTML-escaped at render time.
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; " +
+      "base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+  );
+  res.type("html").send(html);
 });
 
 app.listen(PORT, HOST, () => {

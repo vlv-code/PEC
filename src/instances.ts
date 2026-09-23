@@ -4,7 +4,7 @@ import { ProxyConfiguration, ExtensionInstance } from "./types.js";
 import { resolveProfileForInstance, getProfileById } from "./routing.js";
 
 const CONFIG_PATH = path.resolve(process.env.PROXY_CONFIG_PATH || "./proxy_config.json");
-const INSTANCES_META_PATH = path.resolve("./instances_meta.json");
+const INSTANCES_META_PATH = path.resolve(process.env.INSTANCES_META_PATH || "./instances_meta.json");
 
 const DEFAULT_CONFIG: ProxyConfiguration = {
   enabled: true,
