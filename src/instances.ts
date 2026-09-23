@@ -67,9 +67,33 @@ export function updateProxyConfig(updates: Partial<ProxyConfiguration>): ProxyCo
   return { ...currentConfig };
 }
 
-// In-memory instances registry (key: instanceId) with max capacity limit
+// In-memory instances registry (key: instanceId) with max capacity limit.
+// A JS Map iterates in insertion order, so re-inserting on every heartbeat
+// gives true O(1) LRU eviction (previously an O(n) scan over 2000 records
+// ran on every registration once the cap was hit).
 const MAX_INSTANCES = 2000;
+const MAX_PERSISTENT_META = 5000;
 const instancesMap = new Map<string, ExtensionInstance>();
+
+/**
+ * Validate an instance ID before it is used as an object key or Map key.
+ * Blocks prototype-pollution vectors (__proto__/constructor/prototype) and
+ * caps the length; anything invalid is rejected loudly.
+ */
+function assertSafeInstanceId(instanceId: string): string {
+  const clean = String(instanceId || "").trim().slice(0, 128);
+  if (!clean) {
+    throw new Error("Invalid instanceId");
+  }
+  if (clean === "__proto__" || clean === "constructor" || clean === "prototype") {
+    throw new Error("Forbidden instanceId");
+  }
+  return clean;
+}
+
+function isUnsafeObjectId(id: string): boolean {
+  return id === "__proto__" || id === "constructor" || id === "prototype";
+}
 
 // Load persistent instance assignments (group & assigned profile)
 const persistentMeta: Record<string, { group?: string; assignedProfileId?: string }> = {};
@@ -97,23 +121,13 @@ export function registerHeartbeat(data: {
   activeProxyMode?: string;
   group?: string;
 }): ExtensionInstance {
-  const cleanId = String(data.instanceId || "").slice(0, 128);
-  if (!cleanId) {
-    throw new Error("Invalid instanceId");
-  }
+  const cleanId = assertSafeInstanceId(data.instanceId);
 
-  // Memory exhaustion protection: evict oldest instance if limit is reached
+  // Memory exhaustion protection: evict the least-recently-active instance.
+  // Insertion order == recency order because we re-insert on every heartbeat.
   if (instancesMap.size >= MAX_INSTANCES && !instancesMap.has(cleanId)) {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-    for (const [k, v] of instancesMap.entries()) {
-      const t = new Date(v.lastSync).getTime();
-      if (t < oldestTime) {
-        oldestTime = t;
-        oldestKey = k;
-      }
-    }
-    if (oldestKey) {
+    const oldestKey = instancesMap.keys().next().value;
+    if (oldestKey !== undefined) {
       instancesMap.delete(oldestKey);
     }
   }
@@ -143,31 +157,57 @@ export function registerHeartbeat(data: {
     appliedProfileName: resolvedProfile?.name || "Default Profile",
   };
 
+  instancesMap.delete(cleanId); // refresh insertion order (LRU recency)
   instancesMap.set(cleanId, record);
   return record;
 }
 
 export function assignInstanceProfile(instanceId: string, profileId?: string, group?: string) {
-  if (!persistentMeta[instanceId]) {
-    persistentMeta[instanceId] = {};
+  const cleanId = assertSafeInstanceId(instanceId);
+  if (!persistentMeta[cleanId]) {
+    persistentMeta[cleanId] = {};
   }
   if (profileId !== undefined) {
-    persistentMeta[instanceId].assignedProfileId = profileId || undefined;
+    persistentMeta[cleanId].assignedProfileId = profileId || undefined;
   }
   if (group !== undefined) {
-    persistentMeta[instanceId].group = group;
+    persistentMeta[cleanId].group = group;
+  }
+
+  // Cap the persistent meta: an unbounded stream of unique instance IDs
+  // previously grew this object (and its on-disk JSON) without limit.
+  const metaKeys = Object.keys(persistentMeta);
+  if (metaKeys.length > MAX_PERSISTENT_META) {
+    for (const k of metaKeys.slice(0, metaKeys.length - MAX_PERSISTENT_META)) {
+      delete persistentMeta[k];
+    }
   }
   saveInstancesMeta();
 
-  const existing = instancesMap.get(instanceId);
+  const existing = instancesMap.get(cleanId);
   if (existing) {
-    existing.group = persistentMeta[instanceId].group || existing.group;
-    existing.assignedProfileId = persistentMeta[instanceId].assignedProfileId;
+    existing.group = persistentMeta[cleanId].group || existing.group;
+    existing.assignedProfileId = persistentMeta[cleanId].assignedProfileId;
     const resolved = existing.assignedProfileId
       ? getProfileById(existing.assignedProfileId)
-      : resolveProfileForInstance(instanceId, existing.group);
+      : resolveProfileForInstance(cleanId, existing.group);
     existing.appliedProfileName = resolved?.name || "Default Profile";
   }
+}
+
+/**
+ * Remove an instance from the active registry and the persistent meta store
+ * (used for diagnostics cleanup after synthetic /api/sync tests).
+ */
+export function deleteInstance(instanceId: string): boolean {
+  if (isUnsafeObjectId(instanceId)) return false;
+  const existedInMap = instancesMap.delete(instanceId);
+  const existedInMeta = instanceId in persistentMeta;
+  if (existedInMeta) {
+    delete persistentMeta[instanceId];
+    saveInstancesMeta();
+  }
+  return existedInMap || existedInMeta;
 }
 
 export function getActiveInstances(): ExtensionInstance[] {

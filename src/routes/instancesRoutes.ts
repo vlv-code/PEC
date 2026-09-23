@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getActiveInstances, assignInstanceProfile, getProxyConfig, updateProxyConfig } from "../instances.js";
+import { getActiveInstances, assignInstanceProfile, deleteInstance, getProxyConfig, updateProxyConfig } from "../instances.js";
 import { recordAudit, getClientIp } from "../audit.js";
 
 export function createInstancesRouter(): Router {
@@ -19,12 +19,29 @@ export function createInstancesRouter(): Router {
     if (!instanceId) {
       return res.status(400).json({ error: "instanceId is required" });
     }
-    assignInstanceProfile(
-      String(instanceId),
-      profileId ? String(profileId) : undefined,
-      group ? String(group) : undefined
-    );
+    try {
+      assignInstanceProfile(
+        String(instanceId),
+        profileId ? String(profileId) : undefined,
+        group ? String(group) : undefined
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(400).json({ error: msg });
+    }
     res.json({ ok: true });
+  });
+
+  router.delete("/api/instances/:id", (req: Request, res: Response) => {
+    const removed = deleteInstance(req.params.id);
+    recordAudit({
+      ip: getClientIp(req),
+      endpoint: "/api/instances/:id",
+      status: 200,
+      result: "CONFIG_UPDATED",
+      details: `Instance ${req.params.id} ${removed ? "removed" : "not found (no-op)"}`,
+    });
+    res.json({ ok: true, removed });
   });
 
   router.get("/api/config", (_req: Request, res: Response) => {
