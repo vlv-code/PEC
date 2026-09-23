@@ -50,6 +50,29 @@ export function atomicWriteCreds(filePath: string, creds: { user: string; pass: 
   fs.renameSync(tempFile, filePath);
 }
 
+export function validateSafeEndpointUrl(urlStr: string): { valid: boolean; error?: string } {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { valid: false, error: "Only http:// or https:// protocol is permitted" };
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    // Block cloud metadata services and link-local addresses (SSRF guard)
+    if (
+      hostname === "169.254.169.254" ||
+      hostname.startsWith("169.254.") ||
+      hostname === "metadata.google.internal" ||
+      hostname === "metadata.goog" ||
+      hostname === "instance-data"
+    ) {
+      return { valid: false, error: "Access to cloud metadata endpoints is prohibited (SSRF prevention)" };
+    }
+    return { valid: true };
+  } catch {
+    return { valid: false, error: "Invalid URL format" };
+  }
+}
+
 export async function test3xuiConnection(config: {
   panelUrl: string;
   adminUser: string;
@@ -57,6 +80,11 @@ export async function test3xuiConnection(config: {
   inboundRemark: string;
   timeoutSec?: number;
 }): Promise<{ ok: boolean; message: string; inboundFound?: boolean; inboundId?: number }> {
+  const urlCheck = validateSafeEndpointUrl(config.panelUrl);
+  if (!urlCheck.valid) {
+    return { ok: false, message: `SSRF Security Check Failed: ${urlCheck.error}` };
+  }
+
   const panel = config.panelUrl.replace(/\/+$/, "");
   const timeoutMs = (config.timeoutSec || 8) * 1000;
 
