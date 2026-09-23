@@ -3,19 +3,15 @@ import test from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import { TEST_TMP_DIR } from "./helpers/setup.js";
-import { atomicWriteCreds, ensureCredsStore, readCurrentCreds, validateSafeEndpointUrl } from "../src/rotate.js";
+import { atomicWriteCreds, ensureCredsStore, getCredsStorePath, readCurrentCreds, validateSafeEndpointUrl } from "../src/rotate.js";
 import { registerHeartbeat, getActiveInstances, updateProxyConfig, getProxyConfig } from "../src/instances.js";
 import { ensureKeyExists, getPublicKeySpkiDer, calculateExtensionId, buildUpdatesXml, saveBuildConfig, getBuildConfig } from "../src/packager.js";
 
-test("timing safe comparison works for equal and different-length inputs", () => {
-  const bufA = Buffer.from("test-secret-token");
-  const bufB = Buffer.from("test-secret-token");
-  assert.strictEqual(crypto.timingSafeEqual(bufA, bufB), true);
-  const bufC = Buffer.from("wrong-token-with-other-length");
-  assert.strictEqual(bufA.length === bufC.length && crypto.timingSafeEqual(bufA, bufC), false);
-});
+// Note: the timing-safe comparison behaviour of OUR wrapper
+// (timingSafeEqualString) is covered in security.test.ts against the real
+// middleware; testing Node's crypto.timingSafeEqual directly here tested the
+// standard library, not this codebase.
 
 test("atomic write creates valid file, replaces cleanly and enforces 0600 mode", () => {
   const testFile = path.join(TEST_TMP_DIR, "test_creds.json");
@@ -46,9 +42,17 @@ test("ensureCredsStore generates a random high-entropy password (no hardcoded de
   assert.notStrictEqual(a.pass, b.pass);
   assert.strictEqual(a.pass.length >= 20, true);
   assert.strictEqual(a.pass.includes("InitialRotatingProxyPass"), false);
-  // readCurrentCreds picks up the healed store
+
+  // The active store (the one /creds and /api/sync read) must heal exactly
+  // like the explicit-path ones, and readCurrentCreds must return the very
+  // credentials that were persisted - not merely "something or null".
+  const active = ensureCredsStore(getCredsStorePath());
   const read = readCurrentCreds();
-  assert.ok(read === null || typeof read.user === "string");
+  assert.ok(read, "the active creds store must be readable after healing");
+  assert.strictEqual(read.user, active.user);
+  assert.strictEqual(read.pass, active.pass);
+  const persisted = JSON.parse(fs.readFileSync(getCredsStorePath(), "utf-8"));
+  assert.strictEqual(persisted.pass, active.pass, "what readCurrentCreds returns must match the store on disk");
 });
 
 test("SSRF validation blocks metadata endpoints, link-local and non-http schemes", () => {

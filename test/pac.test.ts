@@ -135,3 +135,59 @@ test("routing: profile resolution honours group scope and instance assignment", 
   // default profile cannot be deleted
   assert.throws(() => deleteProfile(fallback.id), /default/i);
 });
+
+test("PAC: fuzzed rule and profile names never reach executable PAC lines", () => {
+  // Deterministic PRNG so a failure is always reproducible
+  let seed = 0x5eed1234;
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const ALPHABET = "\n\r\"'`\\;{}<>&/()=";
+  const marker = (i: number) => `XQZ${i}_`;
+
+  for (let i = 0; i < 40; i++) {
+    let payload = marker(i);
+    while (payload.length < 24) {
+      payload += rand() < 0.55
+        ? ALPHABET[Math.floor(rand() * ALPHABET.length)]
+        : String.fromCharCode(97 + Math.floor(rand() * 26));
+    }
+
+    const profile = makeProfile({
+      name: `prof-${payload}`,
+      rules: [
+        {
+          id: `fz${i}`,
+          name: payload,
+          targetType: "domain",
+          pattern: `fuzz-domain-${i}.example`,
+          action: "proxy",
+          enabled: true,
+        },
+      ],
+    });
+
+    const pac = generatePacScript(profile, PROXY_CFG);
+
+    // The script itself must stay intact
+    assert.match(pac, /function FindProxyForURL/, `payload #${i} destroyed the PAC script`);
+
+    // Every line carrying the payload marker must be a comment - the payload
+    // may only survive as inert comment text, never on an executable line.
+    const lines = pac.split("\n");
+    for (const line of lines) {
+      if (line.includes(marker(i))) {
+        assert.ok(
+          line.trim().startsWith("//"),
+          `payload #${i} leaked outside a comment: ${JSON.stringify(payload)}`
+        );
+      }
+    }
+
+    // Executable (non-comment) lines must be completely marker-free
+    const executable = lines.filter((l) => !l.trim().startsWith("//")).join("\n");
+    assert.ok(!executable.includes(marker(i)), `payload #${i} reached executable PAC code`);
+    assert.ok(!executable.includes('return "PROXY evil'), `payload #${i} injected a proxy directive`);
+  }
+});
