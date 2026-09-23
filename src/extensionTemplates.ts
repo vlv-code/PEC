@@ -230,6 +230,17 @@ async function syncWithServer(forceRefresh = false) {
     return syncPromise;
   }
 
+  if (forceRefresh && syncPromise) {
+    // 407 storm dedup: N parallel auth retries must not spawn N forced
+    // syncs (self-inflicted 429 from the sync rate limiter). Join the
+    // in-flight request; only force a new one if it finished stale.
+    await syncPromise.catch(() => {});
+    const fresh = memoryCredsCache && Date.now() - memoryCredsCache.fetchedAt < 2000;
+    if (fresh) {
+      return memoryCredsCache;
+    }
+  }
+
   if (forceRefresh) {
     memoryCredsCache = null;
   }
