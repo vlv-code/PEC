@@ -23,6 +23,7 @@ build/
 .env.local
 .env.*.local
 current_creds.json
+dashboard_auth.json
 instances_meta.json
 *.tmp
 

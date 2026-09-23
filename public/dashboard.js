@@ -20,7 +20,7 @@
     function showLoginModal() {
       const m = document.getElementById('loginModal');
       if (m) m.style.display = 'flex';
-      const i = document.getElementById('loginTokenInput');
+      const i = document.getElementById('loginUsernameInput');
       if (i) i.focus();
     }
     function hideLoginModal() {
@@ -47,8 +47,11 @@
       return res;
     }
     async function handleLoginSubmit() {
+      const userInput = document.getElementById('loginUsernameInput');
       const input = document.getElementById('loginTokenInput');
+      const u = ((userInput && userInput.value) || '').trim();
       const v = ((input && input.value) || '').trim();
+      if (!u) { if (userInput) userInput.focus(); return; }
       if (!v) { if (input) input.focus(); return; }
       const btn = document.getElementById('loginSubmitBtn');
       if (btn) btn.disabled = true;
@@ -58,9 +61,10 @@
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'pec-dashboard' },
-          body: JSON.stringify({ password: v })
+          body: JSON.stringify({ username: u, password: v })
         });
         if (res.ok) {
+          if (userInput) userInput.value = '';
           if (input) input.value = '';
           hideLoginModal();
           if (loginPendingRetry) {
@@ -89,6 +93,66 @@
         });
       } catch (e) {}
       showLoginModal();
+    }
+    // ----------------- Account settings: change login / password -----------------
+    function setCredError(msg) {
+      const el = document.getElementById('credError');
+      if (el) {
+        el.textContent = msg || '';
+        el.style.display = msg ? 'block' : 'none';
+      }
+    }
+    async function openCredsModal() {
+      setCredError('');
+      const cur = document.getElementById('credCurrentPassword');
+      const un = document.getElementById('credUsernameInput');
+      const np = document.getElementById('credNewPassword');
+      if (cur) cur.value = '';
+      if (np) np.value = '';
+      // Prefill the current username from the server session
+      try {
+        const res = await adminFetch('/api/auth/session');
+        const data = await res.json();
+        if (un && data.username) un.value = data.username;
+      } catch (e) {}
+      const m = document.getElementById('credsModal');
+      if (m) m.style.display = 'flex';
+      if (cur) cur.focus();
+    }
+    function closeCredsModal() {
+      const m = document.getElementById('credsModal');
+      if (m) m.style.display = 'none';
+    }
+    async function submitCredsChange() {
+      const cur = document.getElementById('credCurrentPassword');
+      const un = document.getElementById('credUsernameInput');
+      const np = document.getElementById('credNewPassword');
+      const currentPassword = (cur && cur.value) || '';
+      const newUsername = ((un && un.value) || '').trim();
+      const newPassword = (np && np.value) || '';
+      if (!currentPassword) { setCredError('Введите текущий пароль'); if (cur) cur.focus(); return; }
+      if (!newUsername && !newPassword) { setCredError('Укажите новый логин и/или новый пароль'); return; }
+      const btn = document.getElementById('credSubmitBtn');
+      if (btn) btn.disabled = true;
+      setCredError('');
+      try {
+        const res = await adminFetch('/api/auth/credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword, newUsername: newUsername || undefined, newPassword: newPassword || undefined })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          closeCredsModal();
+          toast('Учётные данные обновлены. Другие сессии завершены.', 'success');
+        } else {
+          setCredError(data.error || 'Не удалось сохранить (HTTP ' + res.status + ')');
+        }
+      } catch (e) {
+        setCredError('Сетевая ошибка: ' + e);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
     function bootDashboard() {
       refreshAll();
@@ -2013,10 +2077,22 @@ ${JSON.stringify(json, null, 2)}`;
     (async function initAuth() {
       const loginBtn = document.getElementById('loginSubmitBtn');
       const loginInput = document.getElementById('loginTokenInput');
+      const loginUser = document.getElementById('loginUsernameInput');
       if (loginBtn) loginBtn.addEventListener('click', handleLoginSubmit);
       if (loginInput) loginInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleLoginSubmit(); });
+      if (loginUser) loginUser.addEventListener('keydown', function (e) { if (e.key === 'Enter') document.getElementById('loginTokenInput').focus(); });
       const logoutBtn = document.getElementById('btnLogout');
       if (logoutBtn) logoutBtn.addEventListener('click', logoutDashboard);
+
+      // Account settings (change login/password)
+      const openCreds = document.getElementById('btnOpenCredsModal');
+      const credSubmit = document.getElementById('credSubmitBtn');
+      const credCancel = document.getElementById('credCancelBtn');
+      const credPass = document.getElementById('credCurrentPassword');
+      if (openCreds) openCreds.addEventListener('click', openCredsModal);
+      if (credSubmit) credSubmit.addEventListener('click', submitCredsChange);
+      if (credCancel) credCancel.addEventListener('click', closeCredsModal);
+      if (credPass) credPass.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitCredsChange(); });
 
       // First entry: ask the server whether a valid session already exists.
       try {

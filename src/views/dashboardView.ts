@@ -78,6 +78,13 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
                 </button>
               </div>
             </div>
+
+            <!-- 3. Account (dashboard login credentials) -->
+            <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);">
+              <button type="button" id="btnOpenCredsModal" class="popover-layout-btn" style="width: 100%;">
+                🔑 <span style="font-size: 11px; font-weight: 600;">Сменить логин / пароль</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -747,10 +754,29 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     <div style="max-width: 420px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px; text-align: center;">
       <div style="font-size: 28px; margin-bottom: 8px;">🔐</div>
       <h2 style="margin: 0 0 8px 0; font-size: 18px;">Authentication Required</h2>
-      <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите пароль администратора (ADMIN_TOKEN) для входа в консоль управления PEC. Пароль проверяется на сервере и заменяется HttpOnly-сессией. Это НЕ токен расширений (EXT_SHARED_TOKEN).</p>
-      <input type="password" id="loginTokenInput" placeholder="Пароль администратора" autocomplete="current-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+      <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите логин и пароль администратора для входа в консоль управления PEC. Учётные данные проверяются на сервере и заменяются HttpOnly-сессией. Это НЕ токен расширений (EXT_SHARED_TOKEN).</p>
+      <input type="text" id="loginUsernameInput" placeholder="Логин" autocomplete="username" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+      <input type="password" id="loginTokenInput" placeholder="Пароль" autocomplete="current-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
       <div id="loginError" style="display: none; color: #ef4444; font-size: 12px; margin-bottom: 10px;"></div>
       <button id="loginSubmitBtn" style="width: 100%;">Войти</button>
+    </div>
+  </div>
+
+  <div id="credsModal" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
+    <div style="max-width: 440px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px;">
+      <h2 style="margin: 0 0 8px 0; font-size: 17px; text-align: center;">🔑 Учётная запись администратора</h2>
+      <p style="color: #94a3b8; font-size: 12px; margin: 0 0 16px 0; text-align: center;">Смена логина и/или пароля панели. Требуется текущий пароль; после сохранения все прочие сессии будут завершены.</p>
+      <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Текущий пароль</label>
+      <input type="password" id="credCurrentPassword" autocomplete="current-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+      <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Новый логин</label>
+      <input type="text" id="credUsernameInput" autocomplete="username" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+      <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Новый пароль (мин. 8 символов, пусто = не менять)</label>
+      <input type="password" id="credNewPassword" autocomplete="new-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+      <div id="credError" style="display: none; color: #ef4444; font-size: 12px; margin-bottom: 10px;"></div>
+      <div style="display: flex; gap: 8px;">
+        <button id="credSubmitBtn" style="flex: 1;">Сохранить</button>
+        <button id="credCancelBtn" class="btn-secondary" style="flex: 1;">Отмена</button>
+      </div>
     </div>
   </div>
 

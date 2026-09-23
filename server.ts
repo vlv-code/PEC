@@ -12,6 +12,7 @@ import { createBuilderRouter } from "./src/routes/builderRoutes.js";
 import { createRotationRouter } from "./src/routes/rotationRoutes.js";
 import { createSystemRouter } from "./src/routes/systemRoutes.js";
 import { createAuthRouter, createCookieAuthenticator } from "./src/routes/authRoutes.js";
+import { initDashboardCredentials } from "./src/auth.js";
 import { renderDashboardHtml } from "./src/views/dashboardView.js";
 
 // Load environment variables from .env if present
@@ -101,6 +102,20 @@ if (PUBLIC_BASE_URL_RAW) {
   );
 }
 const CREDS_STORE = getCredsStorePath();
+
+// Dashboard login credentials (username + password, scrypt-hashed on disk).
+// Bootstrapped once from ADMIN_USERNAME / ADMIN_PASSWORD; without
+// ADMIN_PASSWORD the admin token serves as the initial password so a fresh
+// deployment still needs no extra configuration - the operator is expected
+// to change it in the dashboard settings (Settings -> Account).
+const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase() || "admin";
+const credBootstrap = initDashboardCredentials({ username: ADMIN_USERNAME, fallbackPassword: ADMIN_TOKEN });
+if (credBootstrap.usingFallbackPassword) {
+  console.warn(
+    "[SECURITY WARNING] Dashboard password defaults to ADMIN_TOKEN (username: " + ADMIN_USERNAME + "). " +
+      "Set ADMIN_PASSWORD in .env or change the password in the dashboard settings."
+  );
+}
 
 // Initialize initial credentials if not found (random password, never hardcoded)
 if (!fs.existsSync(CREDS_STORE)) {

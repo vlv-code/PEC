@@ -82,10 +82,12 @@ test("dashboard render: default-token warning is driven by the render option", (
 
 test("dashboard render: login gate is present (password is entered, session is server-side)", () => {
   const html = render(false);
+  assert.match(html, /id="loginUsernameInput"/, "the login screen asks for a username");
   assert.match(html, /id="loginTokenInput"/);
   assert.match(html, /autocomplete="current-password"/, "the login field is a password field");
   assert.match(html, /id="loginError"/, "failed logins must surface an error line");
   assert.match(html, /id="btnLogout"/, "the header must carry a logout button");
+  assert.match(html, /id="credsModal"/, "the settings must expose a credential-change dialog");
 });
 
 test("dashboard assets: no external font dependencies (CSP would block them anyway)", () => {

@@ -18,6 +18,7 @@ services:
       # All persistent state lives in /app/data (mounted volume below) so
       # profiles, rotation config and instance metadata survive redeploys.
       - CREDS_STORE=/app/data/current_creds.json
+      - DASHBOARD_AUTH_PATH=/app/data/dashboard_auth.json
       - PROXY_CONFIG_PATH=/app/data/proxy_config.json
       - ROUTING_PROFILES_PATH=/app/data/routing_profiles.json
       - INSTANCES_META_PATH=/app/data/instances_meta.json
