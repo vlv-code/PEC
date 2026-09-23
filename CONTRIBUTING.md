@@ -11,8 +11,8 @@
    git checkout -b feature/my-improvement
    ```
 2. Вносите изменения согласно стандартам кодирования:
-   - **Python**: PEP 8, типизация, безопасная работа с файлами и переменными окружения.
-   - **JavaScript**: спецификация Manifest V3, строгий синтаксис, асинхронные паттерны (`async/await`), отсутствие утечек памяти в событиях Chrome WebRequest.
+   - **TypeScript** (сервер): строгая типизация, безопасная работа с файлами и переменными окружения.
+   - **JavaScript** (расширение): спецификация Manifest V3, строгий синтаксис, асинхронные паттерны (`async/await`), отсутствие утечек памяти в событиях Chrome WebRequest.
 3. Обязательно добавьте или обновите тесты при изменении логики компонентов.
 
 ---
@@ -22,17 +22,9 @@
 Перед созданием Pull Request убедитесь, что все проверки проходят успешно:
 
 ```bash
-# Проверка синтаксиса расширения
-node -c extension/background.js
-
-# Валидация JSON файлов
-node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json', 'utf8')); JSON.parse(require('fs').readFileSync('extension/managed_schema.json', 'utf8'));"
-
-# Проверка компиляции Python
-python -m py_compile server/app.py server/rotate.py extension/scripts/pack.py
-
-# Запуск юнит-тестов сервера
-python server/tests/test_server.py
+npm run lint   # tsc --noEmit - проверка типов
+npm test       # node:test - все серверные тесты
+npm run build  # сборка dist/server.cjs
 ```
 
 ---
