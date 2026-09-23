@@ -332,7 +332,10 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
 
     codeLines.push(`\n  // Rule: ${safeRuleName} -> ${rule.action.toUpperCase()}`);
 
-    const checks: string[] = [];
+    // Domain checks run directly; CIDR checks are collected separately and
+    // emitted behind an IP-literal guard (see below).
+    const domainChecks: string[] = [];
+    const cidrChecks: string[] = [];
     for (const rawDomain of domains) {
       // Security: Strip dangerous characters to prevent script injection in PAC
       const d = rawDomain.replace(/["'\\\r\n;]/g, "").trim().toLowerCase();
@@ -343,20 +346,35 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
         const [ip, maskStr] = d.split("/");
         const maskNum = parseInt(maskStr, 10);
         if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip) && !isNaN(maskNum) && maskNum >= 0 && maskNum <= 32) {
-          checks.push(`isInNet(host, "${ip}", "${maskToSubnet(maskNum)}")`);
+          cidrChecks.push(`isInNet(host, "${ip}", "${maskToSubnet(maskNum)}")`);
         }
       } else if (d.startsWith("*.")) {
         const root = d.substring(2);
-        checks.push(`(dnsDomainIs(host, "${root}") || host === "${root}")`);
+        domainChecks.push(`(dnsDomainIs(host, "${root}") || host === "${root}")`);
       } else if (d.startsWith(".")) {
-        checks.push(`dnsDomainIs(host, "${d.substring(1)}")`);
+        domainChecks.push(`dnsDomainIs(host, "${d.substring(1)}")`);
       } else {
-        checks.push(`(host === "${d}" || dnsDomainIs(host, ".${d}"))`);
+        domainChecks.push(`(host === "${d}" || dnsDomainIs(host, ".${d}"))`);
       }
     }
 
-    // Chunk checks for readability
-    codeLines.push(`  if (\n    ${checks.join(" ||\n    ")}\n  ) {\n    return "${actionDirective}";\n  }`);
+    // Semantics change (deliberate): isInNet(host, ...) with a DNS name forces
+    // the browser to do a SYNCHRONOUS DNS resolve on every request - the
+    // default corporate CIDR rules (10/8 etc.) used to freeze the UI whenever
+    // the corporate DNS was slow or unreachable. CIDR checks now match only
+    // hosts that are already IP literals; intranet hostnames resolving into
+    // RFC1918 ranges must be covered by domain rules (e.g. *.corp.local).
+    const IP_LITERAL_GUARD = `/^\\d{1,3}(\\.\\d{1,3}){3}$/.test(host)`;
+    let condition: string;
+    if (cidrChecks.length && domainChecks.length) {
+      condition = `${domainChecks.join(" ||\n    ")} ||\n    (${IP_LITERAL_GUARD} && (${cidrChecks.join(" || ")}))`;
+    } else if (cidrChecks.length) {
+      condition = `${IP_LITERAL_GUARD} && (${cidrChecks.join(" || ")})`;
+    } else {
+      condition = domainChecks.join(" ||\n    ");
+    }
+
+    codeLines.push(`  if (\n    ${condition}\n  ) {\n    return "${actionDirective}";\n  }`);
   }
 
   codeLines.push(`\n  // Default fallback policy`);
