@@ -1634,6 +1634,17 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       setInterval(fetchStatus, 10000);
     }
 
+    // ----------------- HTML Escaping -----------------
+    // Every value rendered through innerHTML must pass through esc().
+    // Fleet data (instanceId, ip, version, group), audit details, rule names
+    // and patterns are all attacker-influencable via /api/sync payloads and
+    // X-Forwarded-For; unescaped rendering gave stored XSS in the console.
+    function esc(value) {
+      return String(value == null ? '' : value).replace(/[&<>"'\`]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '\`': '&#96;' }[c];
+      });
+    }
+
     // ----------------- Layout & Theme Switchers -----------------
     function setServerLayout(layout) {
       if (layout !== 'terminal' && layout !== 'console') {
@@ -2391,13 +2402,13 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         container.innerHTML = presets.map(p => \`
           <div class="preset-card">
             <div>
-              <h4>\${p.name}</h4>
-              <p>\${p.description} (\${p.domains.length} patterns)</p>
+              <h4>\${esc(p.name)}</h4>
+              <p>\${esc(p.description)} (\${p.domains.length} patterns)</p>
             </div>
             <div style="display: flex; gap: 6px; margin-top: 6px;">
-              <button onclick="addPresetRule('\${p.id}', '\${p.name}', 'proxy')" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;">+ \${isRu ? 'Прокси' : 'Proxy'}</button>
-              <button onclick="addPresetRule('\${p.id}', '\${p.name}', 'direct')" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;">+ \${isRu ? 'Напрямую' : 'Direct'}</button>
-              <button onclick="addPresetRule('\${p.id}', '\${p.name}', 'block')" class="btn-danger" style="font-size: 11px; padding: 4px 8px;">+ \${isRu ? 'Блок' : 'Block'}</button>
+              <button onclick="addPresetRule('\${esc(p.id)}', '\${esc(p.name)}', 'proxy')" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;">+ \${isRu ? 'Прокси' : 'Proxy'}</button>
+              <button onclick="addPresetRule('\${esc(p.id)}', '\${esc(p.name)}', 'direct')" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;">+ \${isRu ? 'Напрямую' : 'Direct'}</button>
+              <button onclick="addPresetRule('\${esc(p.id)}', '\${esc(p.name)}', 'block')" class="btn-danger" style="font-size: 11px; padding: 4px 8px;">+ \${isRu ? 'Блок' : 'Block'}</button>
             </div>
           </div>
         \`).join('');
@@ -2413,7 +2424,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         const sel = document.getElementById('profileSelect');
         
         sel.innerHTML = allProfiles.map(p => 
-          \`<option value="\${p.id}">\${p.name} (\${p.defaultPolicy.toUpperCase()} default)\${p.isDefault ? ' [DEFAULT]' : ''}</option>\`
+          \`<option value="\${esc(p.id)}">\${esc(p.name)} (\${esc(p.defaultPolicy.toUpperCase())} default)\${p.isDefault ? ' [DEFAULT]' : ''}</option>\`
         ).join('');
 
         if (allProfiles.length > 0) {
@@ -2471,8 +2482,8 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           <td>
             <input type="checkbox" \${r.enabled ? 'checked' : ''} onchange="toggleRuleEnabled(\${idx})" style="margin: 0;" />
           </td>
-          <td><strong>\${r.name}</strong></td>
-          <td><code>\${r.pattern}</code></td>
+          <td><strong>\${esc(r.name)}</strong></td>
+          <td><code>\${esc(r.pattern)}</code></td>
           <td><span class="badge \${badge}">\${actionLabel}</span></td>
           <td>
             <button onclick="removeRule(\${idx})" class="btn-danger" style="font-size: 11px; padding: 3px 8px;">\${isRu ? 'Удалить' : 'Delete'}</button>
@@ -3114,7 +3125,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           return;
         }
 
-        const profileOptions = allProfiles.map(p => \`<option value="\${p.id}">\${p.name}</option>\`).join('');
+        const profileOptions = allProfiles.map(p => \`<option value="\${esc(p.id)}">\${esc(p.name)}</option>\`).join('');
 
         tbody.innerHTML = data.instances.map(inst => {
           let badge = 'badge-online';
@@ -3122,15 +3133,15 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           else if (inst.status === 'OFFLINE') badge = 'badge-offline';
 
           return \`<tr>
-            <td><code>\${inst.instanceId}</code></td>
-            <td style="font-family: var(--mono);">\${inst.ip}</td>
-            <td>v\${inst.version}</td>
-            <td><code>\${inst.group || (isRu ? 'Основной флот' : 'Default Fleet')}</code></td>
-            <td><span class="badge badge-action-proxy">\${inst.appliedProfileName || (isRu ? 'По умолчанию' : 'Default')}</span></td>
-            <td>\${inst.syncCount}</td>
-            <td><span class="badge \${badge}">\${inst.status}</span></td>
+            <td><code>\${esc(inst.instanceId)}</code></td>
+            <td style="font-family: var(--mono);">\${esc(inst.ip)}</td>
+            <td>v\${esc(inst.version)}</td>
+            <td><code>\${esc(inst.group || (isRu ? 'Основной флот' : 'Default Fleet'))}</code></td>
+            <td><span class="badge badge-action-proxy">\${esc(inst.appliedProfileName || (isRu ? 'По умолчанию' : 'Default'))}</span></td>
+            <td>\${esc(inst.syncCount)}</td>
+            <td><span class="badge \${badge}">\${esc(inst.status)}</span></td>
             <td>
-              <select onchange="assignProfileToInstance('\${inst.instanceId}', this.value)" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
+              <select onchange="assignProfileToInstance('\${esc(inst.instanceId)}', this.value)" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
                 <option value="">\${isRu ? 'По умолчанию (Авто)' : 'Default (Auto)'}</option>
                 \${profileOptions}
               </select>
@@ -3330,8 +3341,8 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       }
       tbody.innerHTML = history.map(item => \`<tr>
         <td style="font-family: var(--mono); font-size: 12px;">\${new Date(item.timestamp).toLocaleTimeString()}</td>
-        <td><code>\${item.source}</code></td>
-        <td>\${item.user}</td>
+        <td><code>\${esc(item.source)}</code></td>
+        <td>\${esc(item.user)}</td>
         <td><span class="badge \${item.success ? 'badge-online' : 'badge-offline'}">\${item.success ? 'SUCCESS' : 'FAILED'}</span></td>
       </tr>\`).join('');
     }
@@ -3349,11 +3360,11 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         
         return \`<tr>
           <td style="font-family: var(--mono); font-size: 12px;">\${new Date(l.timestamp).toLocaleTimeString()}</td>
-          <td style="font-family: var(--mono);">\${l.ip}</td>
-          <td><code>\${l.endpoint}</code></td>
-          <td style="font-family: var(--mono);">\${l.status}</td>
-          <td><span class="badge \${badge}">\${l.result}</span></td>
-          <td style="color: var(--text-muted); font-size: 12px;">\${l.details || '-'}</td>
+          <td style="font-family: var(--mono);">\${esc(l.ip)}</td>
+          <td><code>\${esc(l.endpoint)}</code></td>
+          <td style="font-family: var(--mono);">\${esc(l.status)}</td>
+          <td><span class="badge \${badge}">\${esc(l.result)}</span></td>
+          <td style="color: var(--text-muted); font-size: 12px;">\${esc(l.details || '-')}</td>
         </tr>\`;
       }).join('');
     }
