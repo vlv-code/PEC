@@ -47,7 +47,25 @@ let currentProxyState = {
   lastSync: 0,
 };
 
-let ephemeralInstanceId = "inst_" + Math.random().toString(36).substring(2, 10);
+// Persistent instance identity: the MV3 service worker is killed after ~30s
+// of idle time and re-executes this script on wake, so a module-level random
+// ID would change on every wake and flood the server's instance registry.
+// Generate once and persist in chrome.storage.local instead.
+let cachedInstanceId = null;
+async function getInstanceId() {
+  if (cachedInstanceId) return cachedInstanceId;
+  try {
+    const stored = await chrome.storage.local.get(["pecInstanceId"]);
+    if (stored && stored.pecInstanceId) {
+      cachedInstanceId = stored.pecInstanceId;
+      return cachedInstanceId;
+    }
+  } catch (e) {}
+  const newId = "inst_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 10);
+  cachedInstanceId = newId;
+  try { await chrome.storage.local.set({ pecInstanceId: newId }); } catch (e) {}
+  return newId;
+}
 
 function isValidUrl(url) {
   if (typeof url !== "string") return false;
@@ -221,7 +239,7 @@ async function syncWithServer(forceRefresh = false) {
           method: "POST",
           headers: headers,
           body: JSON.stringify({
-            instanceId: ephemeralInstanceId,
+            instanceId: await getInstanceId(),
             version: manifest.version,
             extensionId: chrome.runtime.id,
             activeProxyMode: currentProxyState.protocol,

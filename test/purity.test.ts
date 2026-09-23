@@ -95,4 +95,10 @@ test("purity: the rendered background.js (placeholders substituted) parses as Ja
   const tmpFile = path.join(TEST_TMP_DIR, "rendered-background-check.js");
   fs.writeFileSync(tmpFile, bg, "utf-8");
   execFileSync(process.execPath, ["--check", tmpFile], { stdio: "pipe" });
+
+  // The instanceId must survive MV3 service-worker restarts: it has to be
+  // persisted through chrome.storage.local, not held in module memory.
+  assert.ok(bg.includes("pecInstanceId"), "instanceId must be persisted under a stable storage key");
+  assert.ok(bg.includes("chrome.storage.local"), "instanceId persistence must use chrome.storage.local");
+  assert.ok(!bg.includes("ephemeralInstanceId"), "the old ephemeral module-level instanceId must be gone");
 });
