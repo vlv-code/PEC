@@ -303,7 +303,10 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
     proxyDirective = "HTTPS " + safeHost + ":" + safePort + "; DIRECT";
   }
 
-  const blockDirective = "PROXY 127.0.0.1:0; DIRECT"; // Sinkhole for blocked domains
+  // Sinkhole for blocked domains: a dead proxy WITHOUT a DIRECT fallback.
+  // With "...; DIRECT" Chrome silently falls back to a direct connection
+  // whenever the proxy is unreachable, which defeats blocking entirely.
+  const blockDirective = "PROXY 127.0.0.1:0";
   const defaultDirective = profile.defaultPolicy === "proxy" ? proxyDirective : "DIRECT";
 
   const safeProfileName = String(profile.name || "Default").replace(/[\r\n]/g, " ");
@@ -320,10 +323,13 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
     const domains = expandRuleDomains(rule);
     if (!domains.length) continue;
 
+    // Security: rule names are emitted as PAC comments and must never be able
+    // to break out of the comment (newline) or inject PAC directives.
+    const safeRuleName = String(rule.name || "Rule").replace(/[\r\n"'\\;]/g, " ").slice(0, 100);
     const actionDirective =
       rule.action === "proxy" ? proxyDirective : rule.action === "block" ? blockDirective : "DIRECT";
 
-    codeLines.push(`\n  // Rule: ${rule.name} -> ${rule.action.toUpperCase()}`);
+    codeLines.push(`\n  // Rule: ${safeRuleName} -> ${rule.action.toUpperCase()}`);
 
     const checks: string[] = [];
     for (const rawDomain of domains) {
