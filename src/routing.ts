@@ -293,18 +293,22 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
     return `// Corp Proxy: Kill-Switch Active\nfunction FindProxyForURL(url, host) { return "DIRECT"; }\n`;
   }
 
-  let proxyDirective = "PROXY " + proxyConfig.host + ":" + proxyConfig.port + "; DIRECT";
+  const safeHost = String(proxyConfig.host || "10.0.0.1").replace(/[^a-zA-Z0-9.-]/g, "");
+  const safePort = Math.min(65535, Math.max(1, parseInt(String(proxyConfig.port || "10809"), 10) || 10809));
+
+  let proxyDirective = "PROXY " + safeHost + ":" + safePort + "; DIRECT";
   if (proxyConfig.protocol === "socks5") {
-    proxyDirective = "SOCKS5 " + proxyConfig.host + ":" + proxyConfig.port + "; DIRECT";
+    proxyDirective = "SOCKS5 " + safeHost + ":" + safePort + "; DIRECT";
   } else if (proxyConfig.protocol === "https") {
-    proxyDirective = "HTTPS " + proxyConfig.host + ":" + proxyConfig.port + "; DIRECT";
+    proxyDirective = "HTTPS " + safeHost + ":" + safePort + "; DIRECT";
   }
 
   const blockDirective = "PROXY 127.0.0.1:0; DIRECT"; // Sinkhole for blocked domains
   const defaultDirective = profile.defaultPolicy === "proxy" ? proxyDirective : "DIRECT";
 
+  const safeProfileName = String(profile.name || "Default").replace(/[\r\n]/g, " ");
   const codeLines: string[] = [];
-  codeLines.push(`// Profile: ${profile.name} (Policy: Default ${profile.defaultPolicy.toUpperCase()})`);
+  codeLines.push(`// Profile: ${safeProfileName} (Policy: Default ${profile.defaultPolicy.toUpperCase()})`);
   codeLines.push(`// Generated: ${new Date().toISOString()}`);
   codeLines.push(`function FindProxyForURL(url, host) {`);
   codeLines.push(`  host = ("" + host).toLowerCase();`);

@@ -36,6 +36,22 @@ export function getProxyConfig(): ProxyConfiguration {
 }
 
 export function updateProxyConfig(updates: Partial<ProxyConfiguration>): ProxyConfiguration {
+  if (updates.host !== undefined) {
+    const cleanHost = String(updates.host).trim();
+    if (!/^[a-zA-Z0-9.-]+$/.test(cleanHost)) {
+      throw new Error("Invalid host format: only hostname or IP address without special characters allowed");
+    }
+    updates.host = cleanHost;
+  }
+
+  if (updates.port !== undefined) {
+    const portNum = parseInt(String(updates.port), 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+      throw new Error("Invalid port number: must be an integer between 1 and 65535");
+    }
+    updates.port = portNum;
+  }
+
   currentConfig = {
     ...currentConfig,
     ...updates,
@@ -51,7 +67,8 @@ export function updateProxyConfig(updates: Partial<ProxyConfiguration>): ProxyCo
   return { ...currentConfig };
 }
 
-// In-memory instances registry (key: instanceId)
+// In-memory instances registry (key: instanceId) with max capacity limit
+const MAX_INSTANCES = 2000;
 const instancesMap = new Map<string, ExtensionInstance>();
 
 // Load persistent instance assignments (group & assigned profile)
@@ -80,22 +97,43 @@ export function registerHeartbeat(data: {
   activeProxyMode?: string;
   group?: string;
 }): ExtensionInstance {
-  const existing = instancesMap.get(data.instanceId);
+  const cleanId = String(data.instanceId || "").slice(0, 128);
+  if (!cleanId) {
+    throw new Error("Invalid instanceId");
+  }
+
+  // Memory exhaustion protection: evict oldest instance if limit is reached
+  if (instancesMap.size >= MAX_INSTANCES && !instancesMap.has(cleanId)) {
+    let oldestKey: string | null = null;
+    let oldestTime = Infinity;
+    for (const [k, v] of instancesMap.entries()) {
+      const t = new Date(v.lastSync).getTime();
+      if (t < oldestTime) {
+        oldestTime = t;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) {
+      instancesMap.delete(oldestKey);
+    }
+  }
+
+  const existing = instancesMap.get(cleanId);
   const now = new Date().toISOString();
-  const meta = persistentMeta[data.instanceId] || {};
+  const meta = persistentMeta[cleanId] || {};
 
   const effectiveGroup = data.group || meta.group || existing?.group || "Default Fleet";
   const effectiveProfileId = meta.assignedProfileId || existing?.assignedProfileId;
   const resolvedProfile = effectiveProfileId
     ? getProfileById(effectiveProfileId)
-    : resolveProfileForInstance(data.instanceId, effectiveGroup);
+    : resolveProfileForInstance(cleanId, effectiveGroup);
 
   const record: ExtensionInstance = {
-    instanceId: data.instanceId,
-    ip: data.ip,
-    version: data.version,
-    extensionId: data.extensionId || existing?.extensionId,
-    userAgent: data.userAgent || existing?.userAgent,
+    instanceId: cleanId,
+    ip: String(data.ip || "").slice(0, 64),
+    version: String(data.version || "").slice(0, 32),
+    extensionId: (data.extensionId || existing?.extensionId || "").slice(0, 64),
+    userAgent: (data.userAgent || existing?.userAgent || "").slice(0, 256),
     lastSync: now,
     syncCount: (existing?.syncCount || 0) + 1,
     status: "ONLINE",
@@ -105,7 +143,7 @@ export function registerHeartbeat(data: {
     appliedProfileName: resolvedProfile?.name || "Default Profile",
   };
 
-  instancesMap.set(data.instanceId, record);
+  instancesMap.set(cleanId, record);
   return record;
 }
 

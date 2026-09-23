@@ -1,113 +1,172 @@
 # PEC - Proxy Extension Corp
 
-[![Release](https://img.shields.io/badge/release-v1.3.0-blue.svg)](https://github.com/corp/pec-proxy-extension-corp/releases)
+🌐 **Documentation Language:** **English** | [Русский](README.ru.md)
+
 [![Node.js](https://img.shields.io/badge/node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
 [![Chrome Extension](https://img.shields.io/badge/chrome%20extension-MV3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**PEC - Proxy Extension Corp** — корпоративная система безопасного управления прокси, сборки и кастомизации браузерных расширений (Chrome Manifest V3), распространения через Active Directory GPO и автоматической ротации учетных данных в панелях Xray / 3x-ui.
+**PEC - Proxy Extension Corp** is an enterprise solution for central proxy fleet management, browser extension construction & packaging (Chrome Manifest V3), Windows Active Directory GPO distribution, and automated credential rotation with Xray / 3x-ui panels.
 
 ---
 
-## 🌟 Ключевые возможности
+## 🌟 Key Features
 
-1. **Конструктор и сборщик расширений (Extension Studio)**:
-   - Автоматическая компиляция и подпись `.CRX` пакета 2048-битным RSA ключом.
-   - Генерация файла автоматического обновления `updates.xml` для корпоративного развертывания.
-   - Три пресета интерфейса: **Self-Service Pro** (полный UI с диагностикой и кнопкой временного обхода), **Kiosk / Restricted** (read-only попап для киосков и учебных классов), **Stealth Agent** (невидимая фоновая служба).
-   - Выбор цветовых стилей (Cyber Blue, Obsidian, Emerald, Sunset, Minimal Light) и векторных иконок.
-   - Интерактивный интерактивный предпросмотр (**Live Extension Interactive Preview**) с переключением вкладок и реактивным симулятором состояний (**Simulated Extension State**).
+1. **Extension Constructor Studio & Live Preview**:
+   - Compiles and signs `.CRX` extension packages on-the-fly using 2048-bit RSA keys.
+   - Generates enterprise `updates.xml` manifests for silent Google Chrome auto-updates.
+   - Three operational UI modes: **Self-Service Pro** (full diagnostic & temporary bypass controls), **Kiosk / Restricted** (read-only popup), and **Stealth Agent** (invisible background worker).
+   - Real-time interactive preview sandbox with instant state simulation (Online, Bypassed, Offline, Re-auth).
 
-2. **Маршрутизация и Гео-базы (Smart PAC Generator)**:
-   - Профили маршрутизации: выборочный прокси (DIRECT по умолчанию) или полный туннель (PROXY по умолчанию).
-   - Встроенные гео-базы и категории: Корпоративный интранет, AI-сервисы (ChatGPT, Claude, Gemini), Социальные сети, Стриминговые платформы, Блокировка рекламы/телеметрии.
-   - Поддержка масок доменов (`*.corp.internal`), регулярных выражений и IP/CIDR правил (`10.0.0.0/8`, `192.168.0.0/16`).
-   - Защита от PAC script injection с валидацией входных паттернов.
+2. **Selective Routing & GeoBases (Smart PAC Engine)**:
+   - Dynamic Proxy Auto-Configuration (PAC) generation with support for Direct-default or Proxy-default tunneling.
+   - Built-in geo & service presets: Corporate Intranet, AI Tools (ChatGPT, Claude, Gemini), Social Media, Video Streaming, and Ad/Telemetry Sinkholing.
+   - Strict PAC script injection sanitization for domain masks, proxy hostnames, and ports.
 
-3. **Автоматическая ротация учетных данных 3x-ui / Xray**:
-   - Автоматическая смена паролей в инбаунде 3x-ui по расписанию (15 мин, 1 час, 6 часов, 24 часа).
-   - Атомарная запись учетных данных на диск с защитой от повреждения хранилища.
-   - Защита от перебора: Rate-limiting и криптостойкое сравнение токенов (`crypto.timingSafeEqual`).
+3. **Automated 3x-ui / Xray Credential Rotation**:
+   - Automated inbound password rotation on configurable schedules (15m, 1h, 6h, 24h).
+   - Atomic disk writes for credential storage with corruption auto-recovery.
+   - SSRF protection prohibiting loopback and cloud metadata endpoint access (`169.254.169.254`).
 
-4. **Централизованный флот устройств (Fleet Management)**:
-   - Регистрация подключенных инстансов расширения через heartbeat (`POST /api/sync`).
-   - Мониторинг версий, IP-адресов, времени отклика и назначение профилей маршрутизации группам устройств.
-   - Аварийный рубильник (**Global Kill-Switch**), моментально переводящий весь парк устройств в прямой режим.
+4. **Fleet Telemetry & Global Controls**:
+   - Central heartbeat sync (`POST /api/sync`) tracking extension instances, client IP, egress geo, and versioning.
+   - In-memory LRU protection preventing DoS and memory exhaustion.
+   - Emergency **Global Kill-Switch** allowing administrators to immediately revert the entire fleet to direct internet routing.
 
-5. **Готовые сценарии установки**:
-   - 🐳 **Docker & Docker Compose**: изолированный production multi-stage образ с постоянными томами.
-   - 🐧 **Linux systemd служба**: автоматический скрипт установки для Ubuntu / Debian / RHEL с запуском от непривилегированного пользователя `pecuser`.
-   - 🛡️ **Nginx Reverse Proxy & SSL**: конфигурация с поддержкой WebSocket, защитой заголовков и кешированием PAC/CRX.
-   - 🏢 **Active Directory GPO**: генерация готовых файлов реестра Windows (`.reg`) и JSON-схемы политик `ExtensionInstallForcelist`.
+5. **Hardened Architecture & Security**:
+   - Segmented CORS restricting administrative API access to Chrome extension origins and same-host.
+   - In-memory sliding-window rate limiting for `/creds`, `/api/sync`, and 3x-ui connection tests.
+   - Security response headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, etc.).
+   - Visual and console security warnings when running with the default shared token.
 
 ---
 
-## 🏗 Архитектура решения
+## 🏗 Architecture & Code Structure
+
+The backend has a modular, maintainable structure:
 
 ```text
-  Клиентские компьютеры (Windows / macOS / Linux)
-  ├── Браузер Google Chrome с расширением PEC (MV3)
-  │    ├── Автоподстановка логина и пароля через onAuthRequired
-  │    ├── Периодический опрос /api/sync для получения актуальных настроек
-  │    └── Применение PAC-скрипта (локальная избирательная маршрутизация)
-  │
-  ▼
-  PEC Server (:3000 / :443 HTTPS через Nginx)
-  ├── GET /proxy.pac          ── Динамический PAC-скрипт с правилами профиля
-  ├── GET /creds              ── Безопасная выдача логина/пароля (защита токеном)
-  ├── POST /api/sync          ── Heartbeat флота и телеметрия инстансов
-  ├── GET /updates/extension.crx ── Раздача подписанного пакета расширения
-  └── Планировщик ротации     ── Обращается к API 3x-ui и обновляет пароль
-        │
-        ▼
-  Шлюз Xray / 3x-ui (:10808/:10809) ──> Внешний интернет / Корпоративные ресурсы
+├── server.ts                  # Server entry point, app configuration, static files & routes
+├── .env                       # Active environment configuration
+├── .env.example               # Template documenting all environment variables
+├── src/
+│   ├── middleware/
+│   │   └── security.ts        # Security headers, segmented CORS, sliding-window rate limiters
+│   ├── routes/
+│   │   ├── credsRoutes.ts     # /creds, /api/sync, /proxy.pac (rate-limited & token-verified)
+│   │   ├── routingRoutes.ts   # /api/routing/* (profiles and presets)
+│   │   ├── instancesRoutes.ts # /api/instances/*, /api/config
+│   │   ├── builderRoutes.ts   # /api/builder/*, /api/extension/*
+│   │   ├── rotationRoutes.ts  # /api/rotation/*, /api/3xui/test (SSRF-protected)
+│   │   └── systemRoutes.ts    # /healthz, /api/status, /api/github/releases
+│   ├── views/
+│   │   └── dashboardView.ts   # Management console HTML template & styling
+│   ├── audit.ts               # In-memory access logging and IP detection
+│   ├── instances.ts           # Active fleet instance registry with LRU capacity protection
+│   ├── packager.ts            # Chrome CRX packager, RSA signer, and GPO generator
+│   ├── rotate.ts              # Atomic credential storage, 3x-ui integration, SSRF validator
+│   ├── routing.ts             # Smart PAC generator, presets, domain expansion
+│   ├── scheduler.ts           # Cron rotation scheduler
+│   └── types.ts               # Shared TypeScript data models
+└── extension/                 # Chrome Manifest V3 extension source template
 ```
 
 ---
 
-## 🚀 Сценарии развертывания
+## ⚙️ Configuration (.env)
 
-### Вариант 1: Docker Compose (Рекомендуемый)
+Copy `.env.example` to `.env` and customize your settings:
 
 ```bash
-# Клонирование репозитория
+cp .env.example .env
+```
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `PORT` | `3000` | Port for the HTTP server to listen on |
+| `HOST` | `0.0.0.0` | Network interface binding |
+| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Critical:** Secret token required by Chrome extensions in `X-Ext-Token` |
+| `CREDS_STORE` | `./current_creds.json` | Path to persistent credentials JSON store |
+| `PROXY_CONFIG_PATH` | `./proxy_config.json` | Path to saved proxy host, port, and bypass config |
+| `PROXY_HOST` | `10.0.0.1` | Default proxy host IP or domain name |
+| `PROXY_PORT` | `10809` | Default proxy port |
+| `XUI_PANEL_URL` | `https://3xui-host:2053/basepath` | Base URL of the 3x-ui management panel |
+| `XUI_ADMIN_USER` | `admin` | Admin username for 3x-ui panel login |
+| `XUI_ADMIN_PASS` | `change-me` | Admin password for 3x-ui panel login |
+| `XUI_INBOUND_REMARK` | `squid-in` | Remark of the inbound proxy to rotate |
+
+> ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` before deploying to a production or public environment!
+
+---
+
+## 🚀 Installation & Deployment
+
+### Option 1: Standalone Node.js (Quick Local Run)
+
+Prerequisites: Node.js 20+ installed.
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/corp/pec-proxy-extension-corp.git
 cd pec-proxy-extension-corp
 
-# Запуск в фоновом режиме
+# 2. Install dependencies
+npm install
+
+# 3. Configure environment
+cp .env.example .env
+nano .env   # set your EXT_SHARED_TOKEN
+
+# 4. Start in development mode (with hot reload)
+npm run dev
+
+# Or build and run production bundle
+npm run build
+npm start
+```
+
+Access the dashboard at `http://localhost:3000`.
+
+---
+
+### Option 2: Docker Compose (Recommended for Production)
+
+```bash
+# 1. Configure your environment
+cp .env.example .env
+nano .env
+
+# 2. Build and launch container in background
 docker compose up -d --build
 
-# Проверка статуса
-docker compose ps
+# 3. Monitor container logs
 docker compose logs -f pec-server
 ```
 
-Панель управления будет доступна по адресу `http://<IP_СЕРВЕРА>:3000`.
+---
 
-### Вариант 2: Linux systemd служба (Ubuntu / Debian / CentOS)
+### Option 3: Linux systemd Service (Ubuntu / Debian / CentOS)
+
+Run the included automated setup script:
 
 ```bash
 sudo bash deploy/install-systemd.sh
 ```
 
-Скрипт автоматически:
-- Установит зависимости Node.js 20 LTS;
-- Создаст системного пользователя `pecuser`;
-- Разместит сервис в `/opt/pec-proxy-server`;
-- Создаст безопасный токен и зарегистрирует systemd unit `pec-server.service`;
-- Запустит службу в автозагрузке.
-
-Управление службой:
+Service controls:
 ```bash
 sudo systemctl status pec-server
 sudo journalctl -u pec-server -f
 sudo systemctl restart pec-server
 ```
 
-### Вариант 3: Реверс-прокси Nginx + SSL
+---
 
-Скопируйте конфигурацию из `deploy/nginx-proxy.conf` в `/etc/nginx/sites-available/pec-proxy.conf`, укажите домен и сертификаты Let's Encrypt:
+### Option 4: Nginx Reverse Proxy with SSL
+
+Deploy the hardened configuration template:
+
 ```bash
 sudo cp deploy/nginx-proxy.conf /etc/nginx/sites-available/pec-proxy.conf
 sudo ln -s /etc/nginx/sites-available/pec-proxy.conf /etc/nginx/sites-enabled/
@@ -116,30 +175,32 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
-## 🔒 Безопасность
+## 🔒 Security Hardening
 
-- **Защита от перебора токена**: Сравнение корпоративного токена `X-Ext-Token` выполняется в постоянном времени с помощью `crypto.timingSafeEqual`, предотвращая тайминг-атаки.
-- **Санитайзинг PAC-скрипта**: Все домены, маски и IP-диапазоны очищаются от управляющих символов и кавычек перед конструированием функции `FindProxyForURL`.
-- **Изоляция окружения**: Dockerfile использует non-root пользователя `pecuser` (UID 1001), а systemd служба защищена параметрами `NoNewPrivileges=true`, `ProtectSystem=full`, `PrivateTmp=true`.
-- **Защита данных**: Приватные ключи подписи (`key.pem`) и файлы сессий пользователей исключены из системы контроля версий через `.gitignore`.
+- **Timing-Attack Resistance**: `X-Ext-Token` header is evaluated in constant time using `crypto.timingSafeEqual`.
+- **SSRF Defense**: The 3x-ui testing endpoint and background rotators reject non-HTTP schemes and cloud metadata IP ranges (`169.254.169.254`, `metadata.google.internal`).
+- **PAC Injection Defense**: Dynamic PAC script generator sanitizes proxy hostnames and port numbers, stripping dangerous characters (`"`, `;`, whitespace).
+- **Rate Limiting**: Sliding-window rate limiters protect `/creds` (60/min), `/api/sync` (120/min), and 3x-ui connection tests (15/min).
+- **Fleet Registry Protection**: Maximum instance limit (2000 items) with automatic LRU eviction protects against memory exhaustion attacks.
+- **Least Privilege**: Docker containers and systemd services run under an isolated unprivileged user `pecuser`.
 
 ---
 
-## 🧪 Тестирование и Сборка
+## 🧪 Testing & Verification
 
 ```bash
-# Проверка типов TypeScript
+# TypeScript compilation check
 npm run lint
 
-# Запуск набора модульных тестов
+# Automated test suite (13 comprehensive tests)
 npm test
 
-# Сборка production бандла
+# Production build bundle
 npm run build
 ```
 
 ---
 
-## 📄 Лицензия
+## 📄 License
 
-Проект распространяется под лицензией MIT. Подробнее см. в файле [LICENSE](LICENSE).
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.

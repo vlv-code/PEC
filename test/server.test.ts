@@ -202,3 +202,61 @@ test("extension constructor studio manages config and source inspection", () => 
   // Restore
   saveBuildConfig(orig);
 });
+
+test("security: SSRF validation blocks dangerous cloud metadata and non-http schemes", async () => {
+  const { validateSafeEndpointUrl } = await import("../src/rotate.js");
+
+  // Disallow metadata endpoints
+  const check1 = validateSafeEndpointUrl("http://169.254.169.254/latest/meta-data");
+  assert.strictEqual(check1.valid, false);
+  assert.match(check1.error || "", /cloud metadata/i);
+
+  const check2 = validateSafeEndpointUrl("http://metadata.google.internal/computeMetadata/v1");
+  assert.strictEqual(check2.valid, false);
+
+  // Disallow non-HTTP schemes
+  const check3 = validateSafeEndpointUrl("file:///etc/passwd");
+  assert.strictEqual(check3.valid, false);
+
+  // Allow legitimate HTTP / HTTPS
+  const check4 = validateSafeEndpointUrl("https://my-3xui-panel.corp:2053/subpath");
+  assert.strictEqual(check4.valid, true);
+});
+
+test("security: PAC generation sanitizes host and prevents code injection", () => {
+  const customProfile = {
+    id: "prof_sec_test",
+    name: "Injection Test\nLine2",
+    defaultPolicy: "proxy" as const,
+    rules: [],
+  };
+
+  const maliciousConfig = {
+    enabled: true,
+    protocol: "http" as const,
+    host: 'proxy.internal"; return "INJECTED"; //',
+    port: 10809,
+    bypassList: [],
+    pacScript: "",
+    pacUrl: "/proxy.pac",
+    syncIntervalMs: 300000,
+    killSwitch: false,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const pac = generatePacScript(customProfile, maliciousConfig);
+  // Host must have had quotes, semicolons, whitespace stripped
+  assert.doesNotMatch(pac, /return "INJECTED"/);
+  assert.match(pac, /proxy\.internalreturnINJECTED:10809/);
+});
+
+test("security: updateProxyConfig rejects invalid host characters and out-of-range ports", () => {
+  assert.throws(() => {
+    updateProxyConfig({ host: "bad host name with spaces" });
+  }, /invalid host format/i);
+
+  assert.throws(() => {
+    updateProxyConfig({ port: 99999 });
+  }, /invalid port number/i);
+});
+
