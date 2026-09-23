@@ -47,6 +47,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Built bundle only - server.ts/src are not needed at runtime
 COPY --from=builder --chown=pecuser:pecgroup /app/dist ./dist
 
+# Dashboard static assets served by express.static (see server.ts)
+COPY --from=builder --chown=pecuser:pecgroup /app/public ./public
+
 # Writable directories for credentials, runtime state and extension artifacts.
 # Mount /app/data as a volume: every persistent store lives there (see
 # docker-compose.yml environment) and survives rebuilds and redeploys.

@@ -140,6 +140,17 @@ app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   return adminAuth(req, res, next);
 });
 
+// Dashboard static assets (dashboard.css / dashboard.js) - the client script
+// ships as a real .js file so CI can syntax-check it (a TS-only cast once
+// leaked into the inline script and killed every dashboard handler).
+app.use(
+  express.static(path.resolve("./public"), {
+    setHeaders: (res) => {
+      res.setHeader("Cache-Control", "no-cache");
+    },
+  })
+);
+
 // Chrome Extension distribution updates
 app.use(
   "/updates",
@@ -209,9 +220,10 @@ app.get("/", (req: Request, res: Response) => {
     port: PORT,
   });
   // Content-Security-Policy: blocks loading of external scripts/styles and
-  // neutralizes whole classes of injected-content attacks. 'unsafe-inline' is
-  // required because the dashboard ships a single inline <script> block; all
-  // dynamic values are additionally HTML-escaped at render time.
+  // neutralizes whole classes of injected-content attacks. 'unsafe-inline' in
+  // script-src is still required by the dashboard's inline onclick handlers
+  // (the script body itself ships as /dashboard.js); all dynamic values are
+  // additionally HTML-escaped at render time.
   res.setHeader(
     "Content-Security-Policy",
     "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
