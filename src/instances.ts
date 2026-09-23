@@ -1,3 +1,4 @@
+import "./loadEnv.js";
 import fs from "node:fs";
 import path from "node:path";
 import { ProxyConfiguration, ExtensionInstance } from "./types.js";
