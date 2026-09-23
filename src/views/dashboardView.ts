@@ -3406,6 +3406,9 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         });
         const json = await res.json();
         out.textContent = JSON.stringify(json, null, 2);
+        // Cleanup: a diagnostics probe must not pollute the production fleet
+        // registry (online counters, instances_meta.json) with phantom workers.
+        try { await adminFetch('/api/instances/test-simulated-worker', { method: 'DELETE' }); } catch (e) {}
         fetchFleet();
         fetchStatus();
       } catch (e) {
