@@ -99,6 +99,15 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
         </button>
+
+        <!-- Log out (Icon Only) - revokes the server session -->
+        <button id="btnLogout" class="btn-icon" data-i18n-title="btnLogoutTitle" title="Выйти">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
       </div>
     </header>
     ${isDefaultTokenInUse ? `
@@ -738,8 +747,9 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     <div style="max-width: 420px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px; text-align: center;">
       <div style="font-size: 28px; margin-bottom: 8px;">🔐</div>
       <h2 style="margin: 0 0 8px 0; font-size: 18px;">Authentication Required</h2>
-      <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите административный токен (ADMIN_TOKEN, заголовок X-Admin-Token) для доступа к консоли управления PEC. Это НЕ токен расширений (EXT_SHARED_TOKEN).</p>
-      <input type="password" id="loginTokenInput" placeholder="ADMIN_TOKEN" autocomplete="off" style="width: 100%; box-sizing: border-box; margin-bottom: 14px;" />
+      <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите пароль администратора (ADMIN_TOKEN) для входа в консоль управления PEC. Пароль проверяется на сервере и заменяется HttpOnly-сессией. Это НЕ токен расширений (EXT_SHARED_TOKEN).</p>
+      <input type="password" id="loginTokenInput" placeholder="Пароль администратора" autocomplete="current-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+      <div id="loginError" style="display: none; color: #ef4444; font-size: 12px; margin-bottom: 10px;"></div>
       <button id="loginSubmitBtn" style="width: 100%;">Войти</button>
     </div>
   </div>

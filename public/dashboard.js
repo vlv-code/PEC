@@ -12,18 +12,11 @@
     let extensionFiles = {};
 
     // ----------------- Admin Authentication -----------------
-    // The dashboard ships without any embedded token. The operator enters the
-    // shared admin token once; it is kept in sessionStorage and attached to
-    // every management API call via adminFetch(). Admin routes authenticate
-    // with the X-Admin-Token header - the fleet token (X-Ext-Token) is
-    // deliberately NOT accepted there.
-    const ADMIN_TOKEN_KEY = 'pec_admin_token';
-    function getAdminToken() {
-      try { return sessionStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch (e) { return ''; }
-    }
-    function setAdminToken(t) {
-      try { if (t) { sessionStorage.setItem(ADMIN_TOKEN_KEY, t); } else { sessionStorage.removeItem(ADMIN_TOKEN_KEY); } } catch (e) {}
-    }
+    // Server-side sessions: the browser never holds the admin token. The
+    // operator logs in once (POST /api/auth/login) and receives an HttpOnly
+    // session cookie; every management API call carries only the CSRF marker
+    // header. Admin routes authenticate via that cookie - the fleet token
+    // (X-Ext-Token) is deliberately NOT accepted there.
     function showLoginModal() {
       const m = document.getElementById('loginModal');
       if (m) m.style.display = 'flex';
@@ -34,43 +27,75 @@
       const m = document.getElementById('loginModal');
       if (m) m.style.display = 'none';
     }
+    function setLoginError(msg) {
+      const el = document.getElementById('loginError');
+      if (el) {
+        el.textContent = msg || '';
+        el.style.display = msg ? 'block' : 'none';
+      }
+    }
     let loginPendingRetry = null;
     async function adminFetch(url, opts) {
       opts = opts || {};
-      const token = getAdminToken();
-      if (token) {
-        opts.headers = Object.assign({}, opts.headers || {}, { 'X-Admin-Token': token });
-      }
+      opts.credentials = 'same-origin';
+      opts.headers = Object.assign({}, opts.headers || {}, { 'X-Requested-With': 'pec-dashboard' });
       const res = await fetch(url, opts);
       if (res.status === 401) {
-        setAdminToken('');
         loginPendingRetry = { url: url, opts: opts };
         showLoginModal();
       }
       return res;
     }
-    function handleLoginSubmit() {
+    async function handleLoginSubmit() {
       const input = document.getElementById('loginTokenInput');
       const v = ((input && input.value) || '').trim();
       if (!v) { if (input) input.focus(); return; }
-      setAdminToken(v);
-      const ti = document.getElementById('testTokenInput');
-      if (ti && !ti.value) ti.value = v;
-      hideLoginModal();
-      if (loginPendingRetry) {
-        const r = loginPendingRetry;
-        loginPendingRetry = null;
-        adminFetch(r.url, r.opts).catch(function (e) { console.warn('Retry after login failed:', e); });
-      } else {
-        bootDashboard();
+      const btn = document.getElementById('loginSubmitBtn');
+      if (btn) btn.disabled = true;
+      setLoginError('');
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'pec-dashboard' },
+          body: JSON.stringify({ password: v })
+        });
+        if (res.ok) {
+          if (input) input.value = '';
+          hideLoginModal();
+          if (loginPendingRetry) {
+            const r = loginPendingRetry;
+            loginPendingRetry = null;
+            adminFetch(r.url, r.opts).catch(function (e) { console.warn('Retry after login failed:', e); });
+          } else {
+            bootDashboard();
+          }
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setLoginError(data.error || 'Ошибка входа (HTTP ' + res.status + ')');
+        }
+      } catch (e) {
+        setLoginError('Сетевая ошибка: ' + e);
+      } finally {
+        if (btn) btn.disabled = false;
       }
     }
+    async function logoutDashboard() {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'pec-dashboard' }
+        });
+      } catch (e) {}
+      showLoginModal();
+    }
     function bootDashboard() {
-      if (window.__pecBooted) return;
-      window.__pecBooted = true;
       refreshAll();
-      setInterval(fetchFleet, 5000);
-      setInterval(fetchStatus, 10000);
+      if (!window.__pecTimers) {
+        window.__pecTimers = setInterval(fetchFleet, 5000);
+        setInterval(fetchStatus, 10000);
+      }
     }
 
     // ----------------- HTML Escaping -----------------
@@ -290,6 +315,7 @@
         statusGatewayActive: 'Gateway Active',
         lblGatewayStatus: 'Gateway Active',
         btnRefreshAllTitle: 'Refresh All',
+        btnLogoutTitle: 'Log out',
         btnCustomizationTitle: 'Appearance & Themes',
         popoverTitle: 'Appearance',
         lblHdrFleet: 'Connected Fleet:',
@@ -508,7 +534,7 @@
 
         // Tab 7: Audit & Tester
         titleCredsTester: 'Interactive /creds Tester',
-        lblTestToken: 'X-Admin-Token Header Value',
+        lblTestToken: 'X-Ext-Token Header Value',
         btnSendCreds: 'Send GET /creds',
         btnTestInvalidToken: 'Test Invalid Token',
         titleSyncTester: 'Interactive /api/sync Tester',
@@ -529,6 +555,7 @@
         statusGatewayActive: 'Шлюз активен',
         lblGatewayStatus: 'Шлюз активен',
         btnRefreshAllTitle: 'Обновить всё',
+        btnLogoutTitle: 'Выйти',
         btnCustomizationTitle: 'Внешний вид и темы',
         popoverTitle: 'Внешний вид',
         lblHdrFleet: 'Подключенный флот:',
@@ -747,7 +774,7 @@
 
         // Tab 7: Audit & Tester
         titleCredsTester: 'Интерактивный тестер /creds',
-        lblTestToken: 'Значение заголовка X-Admin-Token',
+        lblTestToken: 'Значение заголовка X-Ext-Token',
         btnSendCreds: 'Отправить GET /creds',
         btnTestInvalidToken: 'Проверить неверный токен',
         titleSyncTester: 'Интерактивный тестер /api/sync',
@@ -1983,18 +2010,22 @@ ${JSON.stringify(json, null, 2)}`;
       fetchRotationConfig();
     }
 
-    (function () {
+    (async function initAuth() {
       const loginBtn = document.getElementById('loginSubmitBtn');
       const loginInput = document.getElementById('loginTokenInput');
       if (loginBtn) loginBtn.addEventListener('click', handleLoginSubmit);
       if (loginInput) loginInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleLoginSubmit(); });
+      const logoutBtn = document.getElementById('btnLogout');
+      if (logoutBtn) logoutBtn.addEventListener('click', logoutDashboard);
 
-      const tok = getAdminToken();
-      if (tok) {
-        const ti = document.getElementById('testTokenInput');
-        if (ti) ti.value = tok;
-        bootDashboard();
-      } else {
-        showLoginModal();
-      }
+      // First entry: ask the server whether a valid session already exists.
+      try {
+        const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (data && data.authenticated) {
+          bootDashboard();
+          return;
+        }
+      } catch (e) {}
+      showLoginModal();
     })();

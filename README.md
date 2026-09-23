@@ -101,7 +101,7 @@ cp .env.example .env
 | `ROTATION_CONFIG_PATH` | `./rotation_config.json` | Path to rotation scheduler config |
 | `ROUTING_PROFILES_PATH` | `./routing_profiles.json` | Path to routing profiles store |
 
-> ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` and set a distinct `ADMIN_TOKEN` before deploying to a production or public environment! The dashboard and management APIs authenticate with `ADMIN_TOKEN` (header `X-Admin-Token`), not with the fleet token.
+> ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` and set a distinct `ADMIN_TOKEN` before deploying to a production or public environment! The dashboard login password and the management APIs authenticate with `ADMIN_TOKEN`, not with the fleet token.
 >
 > **Deployment note - single process only.** PEC keeps all runtime state in one process
 > (in-memory instance registry, routing profiles, rotation timer) mirrored to local JSON stores.
@@ -191,8 +191,10 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 🔒 Security Hardening
 
-- **Admin API Authentication**: every management endpoint (`/api/builder/*`, `/api/routing/*`, `/api/rotation/*`, `/api/instances/*`, `/api/config`, `/api/status`) requires a valid `X-Ext-Token` header. The dashboard asks for the token once and keeps it in `sessionStorage`; it is never embedded in the HTML.
-- **Timing-Attack Resistance**: `X-Ext-Token` is compared through SHA-256 digests in constant time (no length leak).
+- **Dashboard Login & Sessions**: on first entry the dashboard shows a login screen; the admin password (`ADMIN_TOKEN`) is verified server-side and exchanged for an **HttpOnly, SameSite=Strict session cookie** (8-hour sliding TTL) — the browser never stores the admin token itself. Logout revokes the session immediately; login attempts are rate limited (10/min).
+- **Admin API Authentication**: every management endpoint (`/api/builder/*`, `/api/routing/*`, `/api/rotation/*`, `/api/instances/*`, `/api/config`, `/api/status`) accepts either the `X-Admin-Token` bearer header (scripts/automation) or a valid dashboard session cookie. The token is never embedded in the HTML.
+- **CSRF Defense**: cookie-authenticated API calls must carry the `X-Requested-With: pec-dashboard` marker header; cross-site requests can silently attach cookies but cannot set custom headers without a CORS preflight, which the server never grants.
+- **Timing-Attack Resistance**: both tokens and the login password are compared through SHA-256 digests in constant time (no length leak).
 - **SSRF Defense**: The 3x-ui testing endpoint, scheduled rotations and saved panel URLs reject non-HTTP schemes and cloud metadata IP ranges (`169.254.169.254`, `metadata.google.internal`).
 - **PAC Injection Defense**: Dynamic PAC script generator sanitizes proxy hostnames and port numbers, stripping dangerous characters (`"`, `;`, whitespace).
 - **Rate Limiting**: Sliding-window rate limiters protect `/creds` (60/min), `/api/sync` (120/min), and 3x-ui connection tests (15/min).

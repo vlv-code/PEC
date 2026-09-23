@@ -16,7 +16,10 @@ export interface AuditLogEntry {
     | "ROTATED"
     | "CONFIG_UPDATED"
     | "BUILD_SUCCESS"
-    | "RATE_LIMITED";
+    | "RATE_LIMITED"
+    | "LOGIN_OK"
+    | "LOGIN_FAILED"
+    | "LOGOUT";
   details?: string;
 }
 
