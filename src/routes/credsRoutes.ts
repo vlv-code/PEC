@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { getProxyConfig, registerHeartbeat } from "../instances.js";
 import { resolveProfileForInstance, getProfileById, generatePacScript } from "../routing.js";
-import { readCurrentCreds } from "../rotate.js";
+import { readCurrentCredsAsync } from "../rotate.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter, timingSafeEqualString } from "../middleware/security.js";
 
@@ -21,7 +21,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
   });
 
   // GET /creds
-  router.get("/creds", credsLimiter, (req: Request, res: Response) => {
+  router.get("/creds", credsLimiter, async (req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -42,7 +42,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       return res.status(403).json({ detail: "Forbidden" });
     }
 
-    const creds = readCurrentCreds();
+    const creds = await readCurrentCredsAsync();
     if (!creds) {
       recordAudit({
         ip: clientHost,
@@ -66,7 +66,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
   });
 
   // POST /api/sync
-  router.post("/api/sync", syncLimiter, (req: Request, res: Response) => {
+  router.post("/api/sync", syncLimiter, async (req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     const clientHost = getClientIp(req);
     const xExtTokenHeader = req.headers["x-ext-token"];
@@ -85,7 +85,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     }
 
     const { instanceId, version, extensionId, activeProxyMode, group } = req.body || {};
-    const currentCreds = readCurrentCreds();
+    const currentCreds = await readCurrentCredsAsync();
     const proxyConfig = getProxyConfig();
 
     let assignedProfile = resolveProfileForInstance(instanceId, group);
