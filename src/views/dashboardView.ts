@@ -1645,6 +1645,33 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       });
     }
 
+    // ----------------- Toast notifications -----------------
+    // Non-blocking feedback replacing window.alert() (which froze the whole
+    // tab and made bulk operations painful).
+    function toast(message, type) {
+      let host = document.getElementById('toastHost');
+      if (!host) {
+        host = document.createElement('div');
+        host.id = 'toastHost';
+        host.style.cssText = 'position: fixed; bottom: 18px; right: 18px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 380px;';
+        document.body.appendChild(host);
+      }
+      const el = document.createElement('div');
+      const colors = type === 'error'
+        ? 'background: #7f1d1d; border: 1px solid #ef4444;'
+        : type === 'success'
+          ? 'background: #064e3b; border: 1px solid #10b981;'
+          : 'background: #1e293b; border: 1px solid #475569;';
+      el.style.cssText = colors + ' color: #f8fafc; padding: 10px 14px; border-radius: 8px; font-size: 12.5px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); word-break: break-word;';
+      el.textContent = message; // textContent: no HTML injection surface
+      host.appendChild(el);
+      setTimeout(function () {
+        el.style.transition = 'opacity 0.4s';
+        el.style.opacity = '0';
+        setTimeout(function () { el.remove(); }, 420);
+      }, 4200);
+    }
+
     // ----------------- Layout & Theme Switchers -----------------
     function setServerLayout(layout) {
       if (layout !== 'terminal' && layout !== 'console') {
@@ -2526,7 +2553,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       const action = document.getElementById('newRuleAction').value;
 
       if (!name || !pattern) {
-        alert('Please specify rule name and pattern');
+        toast('Please specify rule name and pattern', 'error');
         return;
       }
 
@@ -2558,15 +2585,18 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           body: JSON.stringify(currentProfile)
         });
         if (res.ok) {
-          alert('Routing profile saved! Deployed to matching fleet instances.');
+          toast('Routing profile saved! Deployed to matching fleet instances.', 'success');
           loadProfiles();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast('Failed to save profile: ' + (data.error || ('HTTP ' + res.status)), 'error');
         }
       } catch (e) {
-        alert('Error saving profile: ' + e);
+        toast('Error saving profile: ' + e, 'error');
       }
     }
 
-    function createNewProfile() {
+    async function createNewProfile() {
       const name = prompt('Enter name for the new Routing Profile:', 'New Department Profile');
       if (!name) return;
       const newP = {
@@ -2577,17 +2607,35 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         targetScope: 'all',
         rules: []
       };
-      allProfiles.push(newP);
-      currentProfile = newP;
-      
-      const sel = document.getElementById('profileSelect');
-      const opt = document.createElement('option');
-      opt.value = newP.id;
-      opt.textContent = newP.name;
-      opt.selected = true;
-      sel.appendChild(opt);
+      // Persist immediately: a profile that only lives in the tab's memory
+      // silently disappeared on reload (while Delete hit the server at once).
+      try {
+        const res = await adminFetch('/api/routing/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newP)
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast('Failed to create profile: ' + (data.error || ('HTTP ' + res.status)), 'error');
+          return;
+        }
+        const saved = await res.json();
+        allProfiles.push(saved);
+        currentProfile = saved;
 
-      renderProfile(newP);
+        const sel = document.getElementById('profileSelect');
+        const opt = document.createElement('option');
+        opt.value = saved.id;
+        opt.textContent = saved.name;
+        opt.selected = true;
+        sel.appendChild(opt);
+
+        renderProfile(saved);
+        toast('Profile created on the server. Remember to add rules and press Save after editing.', 'success');
+      } catch (e) {
+        toast('Error creating profile: ' + e, 'error');
+      }
     }
 
     async function deleteCurrentProfile() {
@@ -2597,13 +2645,13 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         const res = await adminFetch('/api/routing/profiles/' + currentProfile.id, { method: 'DELETE' });
         const data = await res.json();
         if (data.ok) {
-          alert('Profile deleted');
+          toast('Profile deleted', 'success');
           loadProfiles();
         } else {
-          alert('Delete error: ' + (data.error || 'Failed'));
+          toast('Delete error: ' + (data.error || 'Failed'), 'error');
         }
       } catch (e) {
-        alert('Error: ' + e);
+        toast('Error: ' + e, 'error');
       }
     }
 
@@ -3051,9 +3099,12 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           extensionFiles[fileName] = content;
           document.getElementById('codeStatus').textContent = 'Saved ' + fileName + ' at ' + new Date().toLocaleTimeString();
           updateLivePreview();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast('Failed to save ' + fileName + ': ' + (data.error || ('HTTP ' + res.status)), 'error');
         }
       } catch (e) {
-        alert('Error saving file: ' + e);
+        toast('Error saving file: ' + e, 'error');
       }
     }
 
@@ -3087,27 +3138,37 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           body: JSON.stringify(payload)
         });
         if (res.ok) {
-          if (showAlert) alert('Constructor configuration saved and extension files re-rendered!');
+          if (showAlert) toast('Constructor configuration saved and extension files re-rendered!', 'success');
+          return true;
+        } else {
+          const data = await res.json().catch(() => ({}));
+          if (showAlert) toast('Failed to save config: ' + (data.error || ('HTTP ' + res.status)), 'error');
+          return false;
         }
       } catch (e) {
-        if (showAlert) alert('Error saving config: ' + e);
+        if (showAlert) toast('Error saving config: ' + e, 'error');
+        return false;
       }
     }
 
     async function buildAndPackExtension() {
-      await saveBuilderConfigOnly(false);
+      const savedOk = await saveBuilderConfigOnly(false);
+      if (savedOk === false) {
+        toast('Build aborted: could not save the builder configuration.', 'error');
+        return;
+      }
       try {
         const res = await adminFetch('/api/builder/build', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
-          alert('Extension package built successfully! .CRX signed, .ZIP created, and updates.xml regenerated.');
+          toast('Extension package built successfully! .CRX signed, .ZIP created, and updates.xml regenerated.', 'success');
           fetchExtensionInfo();
           await loadExtensionFiles();
         } else {
-          alert('Build error: ' + (data.error || 'Failed'));
+          toast('Build error: ' + (data.error || 'Failed'), 'error');
         }
       } catch (e) {
-        alert('Error building extension: ' + e);
+        toast('Error building extension: ' + e, 'error');
       }
     }
 
@@ -3162,7 +3223,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         });
         fetchFleet();
       } catch (e) {
-        alert('Assignment error: ' + e);
+        toast('Assignment error: ' + e, 'error');
       }
     }
 
@@ -3186,8 +3247,21 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       }
     }
 
-    function downloadRegFile() {
-      if (!globalGpo || !globalGpo.regContent) return;
+    async function downloadRegFile() {
+      // Fetch GPO data on demand instead of failing silently when the page
+      // state has not been populated yet.
+      if (!globalGpo || !globalGpo.regContent) {
+        try {
+          await fetchExtensionInfo();
+        } catch (e) {
+          toast('Could not load GPO configuration: ' + e, 'error');
+          return;
+        }
+      }
+      if (!globalGpo || !globalGpo.regContent) {
+        toast('GPO configuration is not available yet.', 'error');
+        return;
+      }
       const blob = new Blob([globalGpo.regContent], { type: 'text/plain' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -3212,33 +3286,53 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           document.getElementById('hdrNextRot').textContent = isRu ? 'Отключено' : 'Disabled';
         }
 
+        // Kill-switch state is the SERVER's truth, never a local guess:
+        // a stale local flag previously let a second tab (or a reopened
+        // dashboard) accidentally flip the emergency state.
+        if (typeof data.killSwitch === 'boolean' && data.killSwitch !== globalKillSwitch) {
+          globalKillSwitch = data.killSwitch;
+          updateKillSwitchButton();
+        }
+
         renderAuditLogs(data.auditLogs || []);
       } catch (err) {
         console.error(err);
       }
     }
 
+    function updateKillSwitchButton() {
+      const ksBtn = document.getElementById('btnKillSwitch');
+      if (!ksBtn) return;
+      const dict = I18N[currentLang] || I18N.ru;
+      if (globalKillSwitch) {
+        ksBtn.textContent = dict.btnKillSwitchOn;
+        ksBtn.classList.remove('btn-secondary');
+        ksBtn.classList.add('btn-danger');
+      } else {
+        ksBtn.textContent = dict.btnKillSwitchOff;
+        ksBtn.classList.remove('btn-danger');
+        ksBtn.classList.add('btn-secondary');
+      }
+    }
+
     async function toggleKillSwitch() {
-      globalKillSwitch = !globalKillSwitch;
+      const desired = !globalKillSwitch;
       try {
-        await adminFetch('/api/config', {
+        const res = await adminFetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ killSwitch: globalKillSwitch })
+          body: JSON.stringify({ killSwitch: desired })
         });
-        const ksBtn = document.getElementById('btnKillSwitch');
-        const dict = I18N[currentLang] || I18N.ru;
-        if (globalKillSwitch) {
-          ksBtn.textContent = dict.btnKillSwitchOn;
-          ksBtn.classList.remove('btn-secondary');
-          ksBtn.classList.add('btn-danger');
-        } else {
-          ksBtn.textContent = dict.btnKillSwitchOff;
-          ksBtn.classList.remove('btn-danger');
-          ksBtn.classList.add('btn-secondary');
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || ('HTTP ' + res.status));
         }
+        const updated = await res.json();
+        globalKillSwitch = Boolean(updated.killSwitch);
+        updateKillSwitchButton();
       } catch (e) {
-        alert('Kill-switch error: ' + e);
+        toast('Kill-switch error: ' + e, 'error');
+        fetchStatus(); // resync with the server's actual state
       }
     }
 
@@ -3266,11 +3360,17 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     }
 
     async function saveRotationConfig() {
+      const intervalRaw = document.getElementById('rotInterval').value.trim();
+      const intervalNum = parseInt(intervalRaw, 10);
+      if (!intervalRaw || !Number.isFinite(intervalNum) || intervalNum < 1 || String(intervalNum) !== intervalRaw) {
+        toast('Rotation interval must be a whole number of minutes (>= 1).', 'error');
+        return;
+      }
       const payload = {
         panelUrl: document.getElementById('rotPanelUrl').value.trim(),
         adminUser: document.getElementById('rotAdminUser').value.trim(),
         inboundRemark: document.getElementById('rotRemark').value.trim(),
-        intervalMinutes: parseInt(document.getElementById('rotInterval').value, 10),
+        intervalMinutes: intervalNum,
         enabled: document.getElementById('rotEnabled').value === 'true',
       };
       const pass = document.getElementById('rotAdminPass').value;
@@ -3283,12 +3383,15 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           body: JSON.stringify(payload)
         });
         if (res.ok) {
-          alert('Rotation schedule updated!');
+          toast('Rotation schedule updated!', 'success');
           fetchRotationConfig();
           fetchStatus();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast('Failed to save rotation settings: ' + (data.error || ('HTTP ' + res.status)), 'error');
         }
       } catch (e) {
-        alert('Error saving rotation settings: ' + e);
+        toast('Error saving rotation settings: ' + e, 'error');
       }
     }
 
@@ -3323,13 +3426,13 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         const res = await adminFetch('/api/rotation/rotate-now', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
-          alert('Rotated! New user: ' + data.result.user + ' (source: ' + data.result.source + ')');
+          toast('Rotated! New user: ' + data.result.user + ' (source: ' + data.result.source + ')', 'success');
           refreshAll();
         } else {
-          alert('Rotation error: ' + data.error);
+          toast('Rotation error: ' + data.error, 'error');
         }
       } catch (e) {
-        alert('Failed: ' + e);
+        toast('Failed: ' + e, 'error');
       }
     }
 
