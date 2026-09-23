@@ -69,6 +69,10 @@ export function ensureKeyExists(): crypto.KeyObject {
     return crypto.createPrivateKey(pem);
   }
 
+  // The extension dir may not exist yet (fresh clone, empty Docker volume,
+  // isolated test run) - create it before writing the key.
+  fs.mkdirSync(EXTENSION_DIR, { recursive: true });
+
   const { privateKey } = crypto.generateKeyPairSync("rsa", {
     modulusLength: 2048,
     publicKeyEncoding: { type: "spki", format: "pem" },

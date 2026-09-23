@@ -140,6 +140,9 @@ export function updateRotationConfig(updates: Partial<RotationConfig>): Rotation
     intervalMinutes?: unknown;
   };
   if (typeof adminPass === "string" && adminPass.trim()) {
+    if (adminPass.trim() === "********") {
+      throw new Error("Refusing to store the masked password placeholder");
+    }
     currentConfig.adminPass = adminPass.trim();
   }
 
@@ -155,10 +158,6 @@ export function updateRotationConfig(updates: Partial<RotationConfig>): Rotation
     ...currentConfig,
     ...restUpdates,
   } as RotationConfig;
-  // never persist the masked placeholder that the GET endpoint returns
-  if (currentConfig.adminPass === "********") {
-    throw new Error("Refusing to store the masked password placeholder");
-  }
 
   if (currentConfig.enabled) {
     currentConfig.nextRotationAt = new Date(Date.now() + currentConfig.intervalMinutes * 60 * 1000).toISOString();
@@ -208,6 +207,9 @@ export function startScheduler() {
       console.error("[scheduler] Scheduled rotation error:", err);
     }
   }, intervalMs);
+  // Background job: must not keep the process alive on its own (the HTTP
+  // listener governs server lifetime; this also keeps test runs clean).
+  timerHandle.unref?.();
 }
 
 export function restartScheduler() {
