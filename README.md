@@ -102,6 +102,15 @@ cp .env.example .env
 | `ROUTING_PROFILES_PATH` | `./routing_profiles.json` | Path to routing profiles store |
 
 > ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` and set a distinct `ADMIN_TOKEN` before deploying to a production or public environment! The dashboard and management APIs authenticate with `ADMIN_TOKEN` (header `X-Admin-Token`), not with the fleet token.
+>
+> **Deployment note - single process only.** PEC keeps all runtime state in one process
+> (in-memory instance registry, routing profiles, rotation timer) mirrored to local JSON stores.
+> Run **one** server process against a state directory: multiple replicas or PM2 cluster mode
+> will corrupt shared stores and split in-memory state. Horizontal scaling would require an
+> external shared store first. Persistent writes are atomic (tmp + rename), and PAC CIDR
+> rules match only literal-IP hosts (hostnames resolving into private ranges must be covered
+> by domain rules like `*.corp.local`) - see SECURITY.md.
+>
 
 ---
 
