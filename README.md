@@ -88,6 +88,9 @@ cp .env.example .env
 | `HOST` | `0.0.0.0` | Network interface binding |
 | `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Critical:** Fleet token required by Chrome extensions in `X-Ext-Token` (low privilege - baked into CRX/GPO artifacts) |
 | `ADMIN_TOKEN` | *(none; required in production)* | **Critical:** Admin token for ALL management APIs (`X-Admin-Token`). Must be distinct from `EXT_SHARED_TOKEN`; never baked into artifacts |
+| `ADMIN_USERNAME` | `admin` | Dashboard login username (bootstrap) |
+| `ADMIN_PASSWORD` | *(falls back to `ADMIN_TOKEN`)* | Initial dashboard login password; change it in the dashboard settings — credentials persist as a scrypt hash in `DASHBOARD_AUTH_PATH` |
+| `DASHBOARD_AUTH_PATH` | `./dashboard_auth.json` | Path to the dashboard credential store (scrypt-hashed, never plaintext) |
 | `CREDS_STORE` | `./current_creds.json` | Path to persistent credentials JSON store |
 | `PROXY_CONFIG_PATH` | `./proxy_config.json` | Path to saved proxy host, port, and bypass config |
 | `PROXY_HOST` | `10.0.0.1` | Default proxy host IP or domain name |
@@ -191,7 +194,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 🔒 Security Hardening
 
-- **Dashboard Login & Sessions**: on first entry the dashboard shows a login screen; the admin password (`ADMIN_TOKEN`) is verified server-side and exchanged for an **HttpOnly, SameSite=Strict session cookie** (8-hour sliding TTL) — the browser never stores the admin token itself. Logout revokes the session immediately; login attempts are rate limited (10/min).
+- **Dashboard Login & Sessions**: on first entry the dashboard shows a login screen (username + password). Credentials are verified server-side against a scrypt-hashed store and exchanged for an **HttpOnly, SameSite=Strict session cookie** (8-hour sliding TTL) — the browser never stores any admin secret. The login and password can be changed in the dashboard settings (popover → «Сменить логин / пароль», current password required, other sessions revoked on save). Logout revokes the session immediately; login attempts are rate limited (10/min).
 - **Admin API Authentication**: every management endpoint (`/api/builder/*`, `/api/routing/*`, `/api/rotation/*`, `/api/instances/*`, `/api/config`, `/api/status`) accepts either the `X-Admin-Token` bearer header (scripts/automation) or a valid dashboard session cookie. The token is never embedded in the HTML.
 - **CSRF Defense**: cookie-authenticated API calls must carry the `X-Requested-With: pec-dashboard` marker header; cross-site requests can silently attach cookies but cannot set custom headers without a CORS preflight, which the server never grants.
 - **Timing-Attack Resistance**: both tokens and the login password are compared through SHA-256 digests in constant time (no length leak).
