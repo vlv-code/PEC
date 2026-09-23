@@ -1,3 +1,4 @@
+import "./loadEnv.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -69,8 +70,8 @@ try {
 
 function saveState() {
   try {
-    fs.writeFileSync(ROTATION_CONFIG_FILE, JSON.stringify(currentConfig, null, 2), "utf-8");
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(rotationHistory.slice(0, MAX_HISTORY_ENTRIES), null, 2), "utf-8");
+    writeJsonAtomic(ROTATION_CONFIG_FILE, currentConfig);
+    writeJsonAtomic(HISTORY_FILE, rotationHistory.slice(0, MAX_HISTORY_ENTRIES));
   } catch (err) {
     console.error("[scheduler] Error persisting state:", err);
   }

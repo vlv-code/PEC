@@ -1,3 +1,4 @@
+import "./src/loadEnv.js";
 import express, { Request, Response, NextFunction } from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -15,28 +16,8 @@ import { createAuthRouter, createCookieAuthenticator } from "./src/routes/authRo
 import { initDashboardCredentials } from "./src/auth.js";
 import { renderDashboardHtml } from "./src/views/dashboardView.js";
 
-// Load environment variables from .env if present
-if (fs.existsSync(".env")) {
-  try {
-    if (typeof process.loadEnvFile === "function") {
-      process.loadEnvFile(".env");
-    } else {
-      const envLines = fs.readFileSync(".env", "utf-8").split("\n");
-      for (const line of envLines) {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
-          const [key, ...rest] = trimmed.split("=");
-          const val = rest.join("=").trim().replace(/^['"](.*)['"]$/, "$1");
-          if (!process.env[key.trim()]) {
-            process.env[key.trim()] = val;
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("[env] Notice: Could not parse .env file:", err);
-  }
-}
+// .env is loaded by the "./src/loadEnv.js" side-effect import above - before
+// any module body (scheduler, auth, packager...) reads env at load time.
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);

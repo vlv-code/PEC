@@ -31,6 +31,13 @@ services:
       # Public URL used in updates.xml / GPO artifacts (prevents Host-header
       # poisoning). Set it to the URL your fleet uses to reach this server.
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      # 3x-ui panel integration (credential rotation) - without these the
+      # container cannot reach the panel and .env values are ignored.
+      - XUI_PANEL_URL=${XUI_PANEL_URL:-}
+      - XUI_ADMIN_USER=${XUI_ADMIN_USER:-}
+      - XUI_ADMIN_PASS=${XUI_ADMIN_PASS:-}
+      - XUI_INBOUND_REMARK=${XUI_INBOUND_REMARK:-squid-in}
+      - ROTATION_INTERVAL_MIN=${ROTATION_INTERVAL_MIN:-1440}
     volumes:
       # Runtime state: survives rebuilds (creds, profiles, rotation, meta).
       - pec_data:/app/data

@@ -30,6 +30,13 @@ services:
       - TRUST_PROXY=1
       # Public URL used in updates.xml / GPO artifacts.
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL in .env (bare origin like https://pec.example.corp) - required for artifact integrity}
+      # 3x-ui panel integration (credential rotation) - without these the
+      # container cannot reach the panel and .env values are ignored.
+      - XUI_PANEL_URL=${XUI_PANEL_URL:-}
+      - XUI_ADMIN_USER=${XUI_ADMIN_USER:-}
+      - XUI_ADMIN_PASS=${XUI_ADMIN_PASS:-}
+      - XUI_INBOUND_REMARK=${XUI_INBOUND_REMARK:-squid-in}
+      - ROTATION_INTERVAL_MIN=${ROTATION_INTERVAL_MIN:-1440}
     volumes:
       - pec_data:/app/data
       # The CRX signing key lives here - a stable key means a stable
