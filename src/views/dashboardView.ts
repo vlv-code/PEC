@@ -3066,7 +3066,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     window.addEventListener('message', (e) => {
       // Only accept simulator messages from our own sandboxed preview frame
       const pf = document.getElementById('previewFrame');
-      if (!pf || e.source !== (pf as HTMLIFrameElement).contentWindow) return;
+      if (!pf || e.source !== pf.contentWindow) return;
       if (e.data && e.data.type === 'SIM_TOGGLE_BYPASS') {
         toggleSimBypass();
       }
