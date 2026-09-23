@@ -12,9 +12,6 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Corp Proxy Fleet & Extension Studio</title>
   <meta name="description" content="Central manager for selective proxy routing, GeoBases, extension constructor studio, and 3x-ui rotating authentication." />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root, body[data-theme="cyber"] {
       --bg: #090e1a;
@@ -29,8 +26,8 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       --warning: #f59e0b;
       --danger: #ef4444;
       --purple: #c084fc;
-      --mono: 'JetBrains Mono', monospace;
-      --sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     body[data-theme="obsidian"] {
       --bg: #0d1117;
