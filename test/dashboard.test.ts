@@ -1,25 +1,53 @@
 import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 import { renderDashboardHtml } from "../src/views/dashboardView.js";
 
 /**
  * Render-level regressions for the management dashboard.
  *
- * The dashboard renders fleet data client-side through innerHTML; every
- * dynamic value must pass through the shipped esc() helper. These tests
- * lock down: (1) the shared token never ships in the HTML, (2) the
- * default-token warning is driven by the render option (it previously
- * rendered unconditionally as dead template text), (3) esc() escapes
- * every HTML-breaking character, and (4) no attacker-influenced object
- * interpolation exists without an esc() wrapper.
+ * The dashboard client code ships as real static assets (public/dashboard.js,
+ * public/dashboard.css) referenced from the rendered HTML. These tests lock
+ * down: (1) the shared token never ships in the HTML or the assets, (2) the
+ * default-token warning is driven by the render option, (3) esc() escapes
+ * every HTML-breaking character, (4) no attacker-influenced object
+ * interpolation exists without an esc() wrapper, and (5) the shipped client
+ * script parses as PLAIN JavaScript - a TypeScript-only construct once leaked
+ * into the inline script and killed every dashboard handler in production.
  */
+
+const dashboardJs = readFileSync(
+  fileURLToPath(new URL("../public/dashboard.js", import.meta.url)),
+  "utf-8"
+);
+const dashboardCss = readFileSync(
+  fileURLToPath(new URL("../public/dashboard.css", import.meta.url)),
+  "utf-8"
+);
 
 function render(isDefaultTokenInUse: boolean): string {
   return renderDashboardHtml({ isDefaultTokenInUse, port: 3000 });
 }
 
-test("dashboard render: the shared token never ships in the HTML", () => {
+test("dashboard render: references the static assets, no inline code blocks", () => {
+  const html = render(false);
+  assert.match(html, /<link rel="stylesheet" href="\/dashboard.css">/);
+  assert.match(html, /<script src="\/dashboard.js"><\/script>/);
+  assert.ok(!html.includes("<style>"), "CSS must ship as the external asset");
+  assert.ok(!/<script>[\s\S]/.test(html), "client JS must ship as the external asset");
+});
+
+test("dashboard assets: client script parses as plain JavaScript (no TS leak)", () => {
+  // vm.Script compiles without executing: a TypeScript-only construct such as
+  // "(pf as HTMLIFrameElement)" throws SyntaxError here, catching the leak on
+  // CI instead of in a browser where it silently killed the whole script.
+  new vm.Script(dashboardJs, { filename: "dashboard.js" });
+});
+
+test("dashboard render: the shared token never ships in the HTML or assets", () => {
   for (const flag of [true, false]) {
     const html = render(flag);
     assert.ok(!html.includes("test-admin-token"), "EXT_SHARED_TOKEN value must not be embedded in the page");
@@ -28,6 +56,10 @@ test("dashboard render: the shared token never ships in the HTML", () => {
     // no prefilled secret in any input (old regression: the token was embedded)
     assert.doesNotMatch(html, /<input[^>]+value="[^"]+"[^>]*type="password"/i);
     assert.doesNotMatch(html, /type="password"[^>]+value="[^"]+"/i);
+  }
+  for (const [name, asset] of [["dashboard.js", dashboardJs], ["dashboard.css", dashboardCss]]) {
+    assert.ok(!asset.includes("test-admin-token"), `${name} must not embed the token value`);
+    assert.ok(!asset.includes("corp-proxy-secret-token-change-me"), `${name} must not embed the default token`);
   }
 });
 
@@ -54,36 +86,38 @@ test("dashboard render: login gate is present (token is entered, not embedded)",
   assert.match(html, /autocomplete="off"/);
 });
 
-test("dashboard render: no external font dependencies (CSP would block them anyway)", () => {
+test("dashboard assets: no external font dependencies (CSP would block them anyway)", () => {
   const html = render(false);
   assert.ok(!html.includes("fonts.googleapis.com"), "Google Fonts stylesheet must not be referenced");
   assert.ok(!html.includes("fonts.gstatic.com"), "Google Fonts preconnect must not be referenced");
-  assert.ok(!html.includes("Plus Jakarta Sans"), "the removed webfont family must not remain in the CSS");
-  assert.ok(html.includes("ui-monospace"), "the mono stack must be system fonts");
+  assert.ok(!dashboardCss.includes("fonts.googleapis.com"), "Google Fonts must not be referenced from the CSS");
+  assert.ok(!dashboardCss.includes("Plus Jakarta Sans"), "the removed webfont family must not remain in the CSS");
+  assert.ok(dashboardCss.includes("ui-monospace"), "the mono stack must be system fonts");
 });
 
-test("dashboard render: the studio preview iframe is sandboxed and release names are escaped", () => {
+test("dashboard render: the studio preview iframe is sandboxed", () => {
   const html = render(false);
   // sandbox="allow-scripts" gives the preview an opaque origin: the preview
   // cannot touch dashboard sessionStorage or its same-origin API surface.
   assert.match(html, /<iframe id="previewFrame" sandbox="allow-scripts"/);
+});
 
+test("dashboard assets: release names are escaped, adminFetch sends X-Admin-Token", () => {
   // GitHub release names are attacker-influenced and must pass through esc()
-  assert.match(html, /\$\{esc\(data\.latestRelease\.name \|\| \('v' \+ data\.latestRelease\.version\)\)\}/);
-});
+  assert.match(
+    dashboardJs,
+    /\$\{esc\(data\.latestRelease\.name \|\| \('v' \+ data\.latestRelease\.version\)\)\}/
+  );
 
-test("dashboard render: adminFetch authenticates with X-Admin-Token, fleet header stays for endpoint testers", () => {
-  const html = render(false);
-  assert.match(html, /'X-Admin-Token': token/, "the management-API client must send the admin token header");
-  assert.ok(!html.includes("opts.headers = Object.assign({}, opts.headers || {}, { 'X-Ext-Token': token })"), "adminFetch must not send the fleet header");
+  assert.match(dashboardJs, /'X-Admin-Token': token/, "the management-API client must send the admin token header");
+  assert.ok(!dashboardJs.includes("opts.headers = Object.assign({}, opts.headers || {}, { 'X-Ext-Token': token })"), "adminFetch must not send the fleet header");
   // the /creds and /api/sync testers deliberately keep the fleet header
-  assert.match(html, /'X-Ext-Token': token \}/, "fleet endpoint testers must keep X-Ext-Token");
+  assert.match(dashboardJs, /'X-Ext-Token': token \}/, "fleet endpoint testers must keep X-Ext-Token");
 });
 
-test("dashboard render: shipped esc() neutralizes every HTML-breaking character", () => {
-  const html = render(false);
-  const m = html.match(/function esc\(value\) \{[\s\S]*?\n    \}/);
-  assert.ok(m, "the esc() helper must ship inside the dashboard script");
+test("dashboard assets: shipped esc() neutralizes every HTML-breaking character", () => {
+  const m = dashboardJs.match(/function esc\(value\) \{[\s\S]*?\n    \}/);
+  assert.ok(m, "the esc() helper must ship inside public/dashboard.js");
   // Execute the ACTUAL shipped implementation, not a re-implementation.
   const esc = new Function(`return (${m[0]})`)() as (v: unknown) => string;
 
@@ -109,15 +143,13 @@ test("dashboard render: shipped esc() neutralizes every HTML-breaking character"
   assert.strictEqual(esc(false), "false");
 });
 
-test("dashboard render: every attacker-influenced interpolation is esc()-wrapped", () => {
-  const html = render(false);
-
+test("dashboard assets: every attacker-influenced interpolation is esc()-wrapped", () => {
   // Interpolations of fleet/audit/rule/preset/history/release objects that are
   // NOT wrapped in esc(). Safe exceptions: boolean ternaries selecting string
   // literals, .length numbers, and new Date(...).toLocaleDateString() output
   // (all produce inert text with no HTML metacharacters).
-  const candidates = html.match(/(?<!esc\()\$\{(?:inst|l|r|p|item)\.[A-Za-z][A-Za-z.]*/g) || [];
-  const unsafe = candidates.filter((expr) => !isInertInterpolation(html, expr));
+  const candidates = dashboardJs.match(/(?<!esc\()\$\{(?:inst|l|r|p|item)\.[A-Za-z][A-Za-z.]*/g) || [];
+  const unsafe = candidates.filter((expr) => !isInertInterpolation(dashboardJs, expr));
   assert.deepStrictEqual(
     [...new Set(unsafe)],
     [],
@@ -127,14 +159,14 @@ test("dashboard render: every attacker-influenced interpolation is esc()-wrapped
 
   // The known XSS sinks from the original review must stay esc()-wrapped.
   for (const sink of ["${esc(inst.instanceId)}", "${esc(inst.ip)}", "${esc(r.name)}", "${esc(r.pattern)}", "${esc(l.details", "${esc(item.user)}", "${esc(r.htmlUrl)}"]) {
-    assert.ok(html.includes(sink), `missing esc() wrapper at sink: ${sink}`);
+    assert.ok(dashboardJs.includes(sink), `missing esc() wrapper at sink: ${sink}`);
   }
 });
 
-function isInertInterpolation(html: string, expr: string): boolean {
+function isInertInterpolation(source: string, expr: string): boolean {
   if (/\.length$/.test(expr)) return true; // a number - no HTML metacharacters
-  const i = html.indexOf(expr);
-  const context = html.slice(i, i + 120);
+  const i = source.indexOf(expr);
+  const context = source.slice(i, i + 120);
   // boolean ternary producing a literal ('checked', 'badge-online'...) or a
   // new Date(...).toLocaleDateString() - neither can emit HTML metacharacters
   return /\?\s*'/.test(context) || /new Date\(/.test(context);
