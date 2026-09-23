@@ -42,6 +42,10 @@ window.applyPopupState = function(response) {
   if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
   if (pingVal && response.ping) pingVal.textContent = response.ping;
   if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
+  // Remember the management server origin (reported by the service worker)
+  // so the diagnostics tab can call it with an absolute URL - a relative
+  // fetch() inside chrome-extension:// never reaches the server.
+  if (response.serverBase) window.__pecServerBase = response.serverBase;
   if (btnToggle) {
     btnToggle.textContent = response.bypassActive ? "Включить прокси" : "Временно отключить (15м)";
   }
@@ -130,9 +134,10 @@ function initPopup() {
       btnCheckIp.disabled = true;
       btnCheckIp.textContent = "Проверка IP...";
       try {
-        const res = await fetch("/api/ip-echo").then(r => r.json()).catch(() => null);
+        const base = window.__pecServerBase || "";
+        const res = await fetch(base + "/api/ip-echo").then(r => r.json()).catch(() => null);
         if (res && res.ip && exitIpVal) {
-          exitIpVal.textContent = res.ip + (res.country ? " (" + res.country + ")" : "");
+          exitIpVal.textContent = res.ip;
         }
       } catch {}
       setTimeout(() => {

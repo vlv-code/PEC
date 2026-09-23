@@ -28,7 +28,7 @@ export function createBuilderRouter(getSharedToken: () => string): Router {
 
   router.post("/api/builder/regenerate", (_req: Request, res: Response) => {
     const cfg = getBuildConfig();
-    generateExtensionFiles(cfg);
+    generateExtensionFiles(cfg, { force: true });
     res.json({ ok: true, files: getExtensionSourceFiles() });
   });
 

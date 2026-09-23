@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import AdmZip from "adm-zip";
 import { ExtensionBuildInfo, ExtensionBuildConfig } from "./types.js";
+import { BACKGROUND_TEMPLATE, MANAGED_SCHEMA_TEMPLATE, renderBackgroundJs } from "./extensionTemplates.js";
 
 const EXTENSION_DIR = path.resolve(process.env.PEC_EXTENSION_DIR || "./extension");
 const KEY_PATH = path.join(EXTENSION_DIR, "key.pem");
@@ -277,9 +278,37 @@ function generateSvgIcon(cfg: ExtensionBuildConfig, colors: { primary: string; b
 }
 
 // Generate customizable extension files based on BuildConfig
-export function generateExtensionFiles(cfg: ExtensionBuildConfig) {
+const EXTENSION_SOURCE_FILES = [
+  "manifest.json",
+  "background.js",
+  "popup.html",
+  "popup.js",
+  "managed_schema.json",
+  "icon.svg",
+] as const;
+
+/**
+ * Write a generated file unless the operator manually edited it in the
+ * Studio (overriddenFiles) - manual edits must never be silently clobbered
+ * by a rebuild. `force` (the "Regenerate templates" action) resets overrides.
+ */
+function writeGeneratedFile(fileName: string, content: string, cfg: ExtensionBuildConfig, force = false): void {
+  const overridden = (cfg.overriddenFiles || []).includes(fileName);
+  if (overridden && !force) {
+    return;
+  }
+  fs.writeFileSync(path.join(EXTENSION_DIR, fileName), content, "utf-8");
+}
+
+export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force?: boolean }) {
   if (!fs.existsSync(EXTENSION_DIR)) {
     fs.mkdirSync(EXTENSION_DIR, { recursive: true });
+  }
+
+  const force = Boolean(opts?.force);
+  if (force) {
+    cfg.overriddenFiles = [];
+    saveBuildConfig({ overriddenFiles: [] });
   }
 
   const colors = getThemeStyles(cfg);
@@ -304,7 +333,9 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig) {
     storage: {
       managed_schema: "managed_schema.json",
     },
-    minimum_chrome_version: "96",
+    // webRequestAuthProvider (proxy auth interception) shipped in Chrome 108;
+    // declaring 96 previously allowed installs where auth silently broke.
+    minimum_chrome_version: "108",
   };
 
   if (cfg.uiMode === "popup") {
@@ -318,11 +349,18 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig) {
     };
   }
 
-  fs.writeFileSync(path.join(EXTENSION_DIR, "manifest.json"), JSON.stringify(manifest, null, 2), "utf-8");
+  writeGeneratedFile("manifest.json", JSON.stringify(manifest, null, 2), cfg, force);
 
   // 2. Icon (SVG vector)
-  const iconSvg = generateSvgIcon(cfg, colors);
-  fs.writeFileSync(path.join(EXTENSION_DIR, "icon.svg"), iconSvg, "utf-8");
+  writeGeneratedFile("icon.svg", generateSvgIcon(cfg, colors), cfg, force);
+
+  // 2b. Service worker template + managed storage schema. These are shipped
+  // even into a fresh extension directory (Docker volume) - previously a
+  // fresh volume produced an extension zip without background.js at all.
+  // The file on disk keeps its __PEC_*__ placeholders; substitution happens
+  // at ZIP time (see packageExtension) so config changes apply on rebuild.
+  writeGeneratedFile("background.js", BACKGROUND_TEMPLATE, cfg, force);
+  writeGeneratedFile("managed_schema.json", MANAGED_SCHEMA_TEMPLATE, cfg, force);
 
   // 3. Popup HTML & JS (if interactive mode)
   if (cfg.uiMode === "popup") {
@@ -661,7 +699,7 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig) {
   <script src="popup.js"></script>
 </body>
 </html>`;
-    fs.writeFileSync(path.join(EXTENSION_DIR, "popup.html"), popupHtml, "utf-8");
+    writeGeneratedFile("popup.html", popupHtml, cfg, force);
 
     const popupJs = `// Global tab switching helper
 window.switchPopupTab = function(tabId) {
@@ -707,6 +745,10 @@ window.applyPopupState = function(response) {
   if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
   if (pingVal && response.ping) pingVal.textContent = response.ping;
   if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
+  // Remember the management server origin (reported by the service worker)
+  // so the diagnostics tab can call it with an absolute URL - a relative
+  // fetch() inside chrome-extension:// never reaches the server.
+  if (response.serverBase) window.__pecServerBase = response.serverBase;
   if (btnToggle) {
     btnToggle.textContent = response.bypassActive ? "${t.btnResume}" : "${t.btnBypass}";
   }
@@ -795,9 +837,10 @@ function initPopup() {
       btnCheckIp.disabled = true;
       btnCheckIp.textContent = "${t.checkingIp}";
       try {
-        const res = await fetch("/api/ip-echo").then(r => r.json()).catch(() => null);
+        const base = window.__pecServerBase || "";
+        const res = await fetch(base + "/api/ip-echo").then(r => r.json()).catch(() => null);
         if (res && res.ip && exitIpVal) {
-          exitIpVal.textContent = res.ip + (res.country ? " (" + res.country + ")" : "");
+          exitIpVal.textContent = res.ip;
         }
       } catch {}
       setTimeout(() => {
@@ -815,7 +858,7 @@ if (document.readyState === "loading") {
 } else {
   initPopup();
 }`;
-    fs.writeFileSync(path.join(EXTENSION_DIR, "popup.js"), popupJs, "utf-8");
+    writeGeneratedFile("popup.js", popupJs, cfg, force);
   } else {
     // Stealth mode: remove popup files if they exist
     const popH = path.join(EXTENSION_DIR, "popup.html");
@@ -851,7 +894,14 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     const full = path.join(EXTENSION_DIR, item);
     const stat = fs.statSync(full);
     if (stat.isFile()) {
-      zip.addLocalFile(full);
+      if (item === "background.js") {
+        // Substitute build-config placeholders at packaging time; the source
+        // file on disk keeps its __PEC_*__ placeholders for future rebuilds.
+        const rendered = renderBackgroundJs(currentBuildConfig);
+        zip.addFile(item, Buffer.from(rendered, "utf-8"));
+      } else {
+        zip.addLocalFile(full);
+      }
     }
   }
 
@@ -939,6 +989,11 @@ export function saveExtensionSourceFile(fileName: string, content: string): bool
   }
   const full = path.join(EXTENSION_DIR, fileName);
   fs.writeFileSync(full, content, "utf-8");
+  // Remember the manual edit so a later rebuild does not clobber it.
+  const overrides = new Set(currentBuildConfig.overriddenFiles || []);
+  overrides.add(fileName);
+  currentBuildConfig.overriddenFiles = Array.from(overrides);
+  saveBuildConfig({ overriddenFiles: currentBuildConfig.overriddenFiles });
   return true;
 }
 
