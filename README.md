@@ -97,7 +97,7 @@ cp .env.example .env
 | `XUI_ADMIN_PASS` | `change-me` | Admin password for 3x-ui panel login |
 | `XUI_INBOUND_REMARK` | `squid-in` | Remark of the inbound proxy to rotate |
 | `TRUST_PROXY` | `false` | Client IP resolution: `false` (direct exposure, X-Forwarded-For ignored), `1` (one reverse-proxy hop), `true` (trust all - trusted networks only) |
-| `PUBLIC_BASE_URL` | *(empty)* | Public URL baked into updates.xml / GPO artifacts; prevents Host-header poisoning |
+| `PUBLIC_BASE_URL` | *(empty)* | Public URL baked into updates.xml / GPO artifacts; prevents Host-header poisoning. **Required in production** (validated: bare origin, no path/trailing slash) |
 | `ROTATION_CONFIG_PATH` | `./rotation_config.json` | Path to rotation scheduler config |
 | `ROUTING_PROFILES_PATH` | `./routing_profiles.json` | Path to routing profiles store |
 

@@ -89,6 +89,7 @@ cp .env.example .env
 | `HOST` | `0.0.0.0` | Сетевой интерфейс прослушивания |
 | `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Важно:** Fleet-токен расширений (заголовок `X-Ext-Token`), низкие привилегии — зашивается в CRX/GPO-артефакты |
 | `ADMIN_TOKEN` | *(нет; обязателен в prod)* | **Важно:** Админ-токен для ВСЕХ management-API (`X-Admin-Token`). Должен отличаться от `EXT_SHARED_TOKEN`; никогда не попадает в артефакты |
+| `PUBLIC_BASE_URL` | *(пусто)* | Публичный URL сервера в updates.xml / GPO-артефактах; защищает от Host-header poisoning. **Обязателен в prod** (валидация: только origin, без пути и слэша) |
 | `CREDS_STORE` | `./current_creds.json` | Путь к файлу актуальных учетных данных |
 | `PROXY_CONFIG_PATH` | `./proxy_config.json` | Путь к сохраненным параметрам прокси |
 | `PROXY_HOST` | `10.0.0.1` | Хост/IP корпоративного прокси |

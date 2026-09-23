@@ -82,6 +82,23 @@ if (ADMIN_TOKEN === EXT_SHARED_TOKEN) {
   console.error("[SECURITY WARNING] ADMIN_TOKEN must be distinct from EXT_SHARED_TOKEN - the fleet token ships in public artifacts.");
   process.exit(1);
 }
+
+// PUBLIC_BASE_URL must be a bare origin when set: it is baked verbatim into
+// updates.xml codebase and GPO reg config, so a sloppy value poisons fleet
+// artifacts. Invalid value -> fail fast; missing -> loud one-time warning.
+const PUBLIC_BASE_URL_RAW = (process.env.PUBLIC_BASE_URL || "").trim();
+if (PUBLIC_BASE_URL_RAW) {
+  if (!/^https?:\/\/[a-z0-9.\-]+(:\d{1,5})?$/i.test(PUBLIC_BASE_URL_RAW.replace(/\/+$/, "")) || PUBLIC_BASE_URL_RAW !== PUBLIC_BASE_URL_RAW.replace(/\/+$/, "")) {
+    console.error(
+      `[pec-server] FATAL: PUBLIC_BASE_URL must be a bare origin like https://pec.example.corp (no path, no trailing slash). Got: "${PUBLIC_BASE_URL_RAW}"`
+    );
+    process.exit(1);
+  }
+} else {
+  console.warn(
+    "[SECURITY WARNING] PUBLIC_BASE_URL is not set - generated artifacts (updates.xml, GPO, pacUrl) will be derived from the incoming Host header. Set PUBLIC_BASE_URL in .env for production."
+  );
+}
 const CREDS_STORE = getCredsStorePath();
 
 // Initialize initial credentials if not found (random password, never hardcoded)
