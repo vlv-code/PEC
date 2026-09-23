@@ -113,11 +113,16 @@ export function buildUpdatesXml(extensionId: string, version: string, codebaseUr
 }
 
 export function generateGpoConfig(extensionId: string, serverBaseUrl: string, token: string) {
+  // .reg string values: escape backslashes and quotes, flatten line breaks -
+  // a raw quote or backslash in any value would corrupt the registry file.
+  const regEscape = (s: string) =>
+    String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n]/g, " ");
+
   const updateUrl = `${serverBaseUrl}/updates/updates.xml`;
   const credsUrl = `${serverBaseUrl}/creds`;
   const syncUrl = `${serverBaseUrl}/api/sync`;
 
-  const forcelistEntry = `${extensionId};${updateUrl}`;
+  const forcelistEntry = `${regEscape(extensionId)};${regEscape(updateUrl)}`;
 
   const extensionSettingsJson = {
     [extensionId]: {
@@ -136,10 +141,10 @@ export function generateGpoConfig(extensionId: string, serverBaseUrl: string, to
 "1"="${forcelistEntry}"
 
 ; Configure managed settings (token & URLs)
-[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Google\\Chrome\\3rdparty\\extensions\\${extensionId}\\policy]
-"extToken"="${token}"
-"credsUrl"="${credsUrl}"
-"syncUrl"="${syncUrl}"
+[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Google\\Chrome\\3rdparty\\extensions\\${regEscape(extensionId)}\\policy]
+"extToken"="${regEscape(token)}"
+"credsUrl"="${regEscape(credsUrl)}"
+"syncUrl"="${regEscape(syncUrl)}"
 `;
 
   return {

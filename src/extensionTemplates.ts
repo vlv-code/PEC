@@ -22,12 +22,12 @@ export const BACKGROUND_TEMPLATE = `// background.js - Enterprise Chrome MV3 Ser
 // 6. Popup messaging support (GET_STATUS, FORCE_SYNC, TOGGLE_BYPASS).
 //
 // Build placeholders (substituted by the PEC packager):
-//   __PEC_SERVER_BASE__        - default management server base URL
-//   __PEC_DEFAULT_TOKEN__      - fallback shared token (GPO extToken overrides)
-//   __PEC_SYNC_INTERVAL_MIN__  - periodic sync alarm, minutes
-//   __PEC_BYPASS_TIMEOUT_MIN__ - auto-revert of a temporary bypass, minutes
-//   __PEC_BADGE_ENABLED__      - whether the toolbar badge indicator is shown
-//   __PEC_TARGET_GROUP__       - default fleet group (GPO targetGroup overrides)
+//   PEC_SERVER_BASE          - default management server base URL
+//   PEC_DEFAULT_TOKEN        - fallback shared token (GPO extToken overrides)
+//   PEC_SYNC_INTERVAL_MIN    - periodic sync alarm, minutes
+//   PEC_BYPASS_TIMEOUT_MIN   - auto-revert of a temporary bypass, minutes
+//   PEC_BADGE_ENABLED        - whether the toolbar badge indicator is shown
+//   PEC_TARGET_GROUP         - default fleet group (GPO targetGroup overrides)
 
 const DEFAULT_SERVER_BASE = "__PEC_SERVER_BASE__";
 const DEFAULT_CREDS_URL = DEFAULT_SERVER_BASE + "/creds";
@@ -484,10 +484,13 @@ export function renderBackgroundJs(cfg: {
 }): string {
   const serverBase = String(cfg.defaultServerUrl || "https://mini-server.ic.local").replace(/\/+$/, "");
   return BACKGROUND_TEMPLATE
-    .replace(/__PEC_SERVER_BASE__/g, serverBase)
-    .replace(/__PEC_DEFAULT_TOKEN__/g, String(cfg.defaultToken || ""))
+    // The quoted placeholders are replaced together with their surrounding
+    // quotes via JSON.stringify, so a value containing quotes, backslashes
+    // or newlines can never break out of the string literal.
+    .replace(/"__PEC_SERVER_BASE__"/g, JSON.stringify(serverBase))
+    .replace(/"__PEC_DEFAULT_TOKEN__"/g, JSON.stringify(String(cfg.defaultToken || "")))
     .replace(/__PEC_SYNC_INTERVAL_MIN__/g, String(Math.max(1, Math.round(Number(cfg.syncIntervalMinutes) || 5))))
     .replace(/__PEC_BYPASS_TIMEOUT_MIN__/g, String(Math.max(1, Math.round(Number(cfg.bypassAutoTimeoutMinutes) || 15))))
     .replace(/__PEC_BADGE_ENABLED__/g, cfg.badgeIndicator === false ? "false" : "true")
-    .replace(/__PEC_TARGET_GROUP__/g, String(cfg.targetGroup || "Default Fleet"));
+    .replace(/"__PEC_TARGET_GROUP__"/g, JSON.stringify(String(cfg.targetGroup || "Default Fleet")));
 }
