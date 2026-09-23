@@ -3,8 +3,8 @@ import path from "node:path";
 import { RotationConfig, RotationHistoryItem } from "./types.js";
 import { executeRotation } from "./rotate.js";
 
-const ROTATION_CONFIG_FILE = path.resolve("./rotation_config.json");
-const HISTORY_FILE = path.resolve("./rotation_history.json");
+const ROTATION_CONFIG_FILE = path.resolve(process.env.ROTATION_CONFIG_PATH || "./rotation_config.json");
+const HISTORY_FILE = path.resolve(process.env.ROTATION_HISTORY_PATH || "./rotation_history.json");
 
 const DEFAULT_CONFIG: RotationConfig = {
   enabled: true,

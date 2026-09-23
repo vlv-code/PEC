@@ -40,18 +40,21 @@ export function getAuditLogs(): AuditLogEntry[] {
 }
 
 export function getClientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") {
-    return forwarded.split(",")[0].trim();
-  }
-  const realIp = req.headers["x-real-ip"];
-  if (typeof realIp === "string") {
-    return realIp;
-  }
-  return req.socket.remoteAddress || req.ip || "unknown";
+  // Express resolves req.ip according to the "trust proxy" setting:
+  // - trust proxy off  -> socket address (spoofed X-Forwarded-For is ignored)
+  // - trust proxy set  -> the client address as reported by the trusted proxy hop
+  // Always use this helper; never parse X-Forwarded-For manually.
+  return req.ip || req.socket.remoteAddress || "unknown";
 }
 
 export function getBaseUrl(req: Request): string {
+  // Explicitly configured public base URL wins: prevents Host-header poisoning
+  // of generated artifacts (updates.xml codebase, GPO URLs) when the server is
+  // reachable through a reverse proxy or untrusted networks.
+  const configured = process.env.PUBLIC_BASE_URL;
+  if (configured && configured.trim()) {
+    return configured.trim().replace(/\/+$/, "");
+  }
   const host = req.get("host") || "localhost:3000";
   const proto = req.get("x-forwarded-proto") || req.protocol || "http";
   return `${proto}://${host}`;

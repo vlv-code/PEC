@@ -1,11 +1,10 @@
 export interface DashboardViewOptions {
-  currentToken: string;
   isDefaultTokenInUse: boolean;
   port: number;
 }
 
 export function renderDashboardHtml(options: DashboardViewOptions): string {
-  const { currentToken, isDefaultTokenInUse, port } = options;
+  const { isDefaultTokenInUse, port } = options;
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -923,7 +922,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       <div style="display: flex; align-items: center; gap: 10px;">
         <span style="font-size: 16px;">⚠️</span>
         <span style="font-size: 12px; color: #fca5a5;">
-          <strong>Security Warning:</strong> The server is running with the default shared token (\<code>\${currentToken}\</code>). Please set a unique, secure <strong>EXT_SHARED_TOKEN</strong> in your <strong>.env</strong> file.
+          <strong>Security Warning:</strong> The server is running with the default shared token (see <code>EXT_SHARED_TOKEN</code> in <code>.env.example</code>). Please set a unique, secure <strong>EXT_SHARED_TOKEN</strong> in your <strong>.env</strong> file.
         </span>
       </div>
       <span class="badge badge-action-block" style="font-size: 10px;">DEFAULT TOKEN IN USE</span>
@@ -1509,7 +1508,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         <div class="card">
           <h2 data-i18n="titleCredsTester">Interactive /creds Tester</h2>
           <label data-i18n="lblTestToken">X-Ext-Token Header Value</label>
-          <input type="text" id="testTokenInput" value="${currentToken}" />
+          <input type="password" id="testTokenInput" value="" placeholder="paste token to test" autocomplete="off" />
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
             <button onclick="testCredsEndpoint()" data-i18n="btnSendCreds">Send GET /creds</button>
             <button class="btn-secondary" onclick="document.getElementById('testTokenInput').value = 'wrong-token'; testCredsEndpoint();" data-i18n="btnTestInvalidToken">Test Invalid Token</button>

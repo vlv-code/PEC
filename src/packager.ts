@@ -4,10 +4,10 @@ import crypto from "node:crypto";
 import AdmZip from "adm-zip";
 import { ExtensionBuildInfo, ExtensionBuildConfig } from "./types.js";
 
-const EXTENSION_DIR = path.resolve("./extension");
-const KEY_PATH = path.resolve("./extension/key.pem");
-const UPDATES_DIR = path.resolve("./dist/updates");
-const BUILD_CONFIG_PATH = path.resolve("./extension_build_config.json");
+const EXTENSION_DIR = path.resolve(process.env.PEC_EXTENSION_DIR || "./extension");
+const KEY_PATH = path.join(EXTENSION_DIR, "key.pem");
+const UPDATES_DIR = path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
+const BUILD_CONFIG_PATH = path.resolve(process.env.BUILDER_CONFIG || "./extension_build_config.json");
 
 export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
   name: "PEC - Proxy Extension Corp",

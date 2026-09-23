@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { GeoPreset, RoutingProfile, RoutingRule, ProxyConfiguration } from "./types.js";
 
-const PROFILES_FILE = path.resolve("./routing_profiles.json");
+const PROFILES_FILE = path.resolve(process.env.ROUTING_PROFILES_PATH || "./routing_profiles.json");
 
 export const GEO_PRESETS: GeoPreset[] = [
   {

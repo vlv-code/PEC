@@ -1,21 +1,27 @@
 import { Request, Response, NextFunction } from "express";
 import crypto from "node:crypto";
+import { getClientIp, recordAudit } from "../audit.js";
 
 /**
  * Standard HTTP Security Headers
+ * Note: X-XSS-Protection intentionally removed - the header is obsolete
+ * and ignored by modern browsers (it could even introduce issues).
  */
 export function securityHeadersMiddleware(req: Request, res: Response, next: NextFunction): void {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("X-XSS-Protection", "1; mode=block");
   next();
 }
 
 /**
  * Segmented and Safe CORS Policy
  * - Public delivery endpoints (proxy.pac, healthz, updates): wildcard allowed
- * - Admin and synchronization endpoints: restricted to same-origin or chrome-extension:// origins
+ * - Admin and synchronization endpoints: restricted to same-host or chrome-extension:// origins
+ *
+ * Origin matching is exact: the Origin's host:port must equal the Host header.
+ * Substring matching is not used because it is trivially bypassable
+ * (e.g. "https://evil-localhost.example" containing "localhost").
  */
 export function safeCorsMiddleware(req: Request, res: Response, next: NextFunction): void {
   const origin = req.headers.origin || "";
@@ -28,8 +34,20 @@ export function safeCorsMiddleware(req: Request, res: Response, next: NextFuncti
   if (isPublicResource) {
     res.setHeader("Access-Control-Allow-Origin", "*");
   } else if (origin) {
-    // Allow requests originating from Chrome extensions (chrome-extension://<id>) or same host
-    if (origin.startsWith("chrome-extension://") || origin.includes(req.headers.host || "")) {
+    const reqHost = req.headers.host || "";
+    let originAllowed = false;
+
+    if (origin.startsWith("chrome-extension://")) {
+      originAllowed = true;
+    } else if (reqHost) {
+      try {
+        originAllowed = new URL(origin).host === reqHost;
+      } catch {
+        originAllowed = false;
+      }
+    }
+
+    if (originAllowed) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
     }
@@ -47,6 +65,9 @@ export function safeCorsMiddleware(req: Request, res: Response, next: NextFuncti
 
 /**
  * In-Memory Sliding-Window Rate Limiter
+ * Uses the shared getClientIp() helper, which honours the Express "trust proxy"
+ * setting: with trust proxy disabled, X-Forwarded-For is ignored, so clients
+ * cannot bypass rate limits by spoofing that header.
  */
 interface RateLimitRecord {
   count: number;
@@ -72,10 +93,7 @@ export function createRateLimiter(options: {
   interval.unref?.();
 
   return (req: Request, res: Response, next: NextFunction): void => {
-    const clientIp =
-      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-      req.socket.remoteAddress ||
-      "unknown";
+    const clientIp = getClientIp(req);
 
     const now = Date.now();
     const record = store.get(clientIp);
@@ -103,13 +121,37 @@ export function createRateLimiter(options: {
 }
 
 /**
- * Timing-safe string comparison to prevent timing attacks
+ * Timing-safe string comparison that does not leak the token length.
+ * Both inputs are SHA-256 digested first, so the comparison always operates
+ * on equal-length buffers and fails in constant time.
  */
 export function timingSafeEqualString(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, "utf-8");
-  const bufB = Buffer.from(b, "utf-8");
-  if (bufA.length !== bufB.length) {
-    return false;
-  }
+  const bufA = crypto.createHash("sha256").update(a, "utf-8").digest();
+  const bufB = crypto.createHash("sha256").update(b, "utf-8").digest();
   return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * Token authentication middleware for management/admin API routes.
+ * Requires a valid X-Ext-Token header (same shared token the extension fleet uses).
+ */
+export function createTokenAuthMiddleware(getToken: () => string) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const header = req.headers["x-ext-token"];
+    const provided = Array.isArray(header) ? header[0] : header;
+    const token = getToken();
+
+    if (!token || !provided || !timingSafeEqualString(provided, token)) {
+      recordAudit({
+        ip: getClientIp(req),
+        endpoint: req.path,
+        status: 401,
+        result: "REJECTED_TOKEN",
+        details: "Admin API authentication required (X-Ext-Token)",
+      });
+      res.status(401).json({ error: "Unauthorized: a valid X-Ext-Token header is required" });
+      return;
+    }
+    next();
+  };
 }
