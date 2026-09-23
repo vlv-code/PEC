@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { RotationConfig, RotationHistoryItem } from "./types.js";
+import { writeJsonAtomic } from "./jsonStore.js";
 
 const CREDS_STORE_DEFAULT = "./current_creds.json";
 

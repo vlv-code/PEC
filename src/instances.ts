@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ProxyConfiguration, ExtensionInstance } from "./types.js";
 import { resolveProfileForInstance, getProfileById } from "./routing.js";
+import { writeJsonAtomic } from "./jsonStore.js";
 
 const CONFIG_PATH = path.resolve(process.env.PROXY_CONFIG_PATH || "./proxy_config.json");
 const INSTANCES_META_PATH = path.resolve(process.env.INSTANCES_META_PATH || "./instances_meta.json");
@@ -59,7 +60,7 @@ export function updateProxyConfig(updates: Partial<ProxyConfiguration>): ProxyCo
   };
 
   try {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(currentConfig, null, 2), "utf-8");
+    writeJsonAtomic(CONFIG_PATH, currentConfig);
   } catch (err) {
     console.error("[instances] Failed to persist proxy config:", err);
   }
@@ -106,7 +107,7 @@ try {
 
 function saveInstancesMeta() {
   try {
-    fs.writeFileSync(INSTANCES_META_PATH, JSON.stringify(persistentMeta, null, 2), "utf-8");
+    writeJsonAtomic(INSTANCES_META_PATH, persistentMeta);
   } catch (e) {
     console.error("[instances] Error saving instances meta:", e);
   }
