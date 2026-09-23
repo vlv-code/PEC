@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { GeoPreset, RoutingProfile, RoutingRule, ProxyConfiguration } from "./types.js";
+import { writeJsonAtomic } from "./jsonStore.js";
 
 const PROFILES_FILE = path.resolve(process.env.ROUTING_PROFILES_PATH || "./routing_profiles.json");
 
@@ -196,7 +197,7 @@ try {
 
 function persistProfiles() {
   try {
-    fs.writeFileSync(PROFILES_FILE, JSON.stringify(profiles, null, 2), "utf-8");
+    writeJsonAtomic(PROFILES_FILE, profiles);
   } catch (e) {
     console.error("[routing] Error saving profiles:", e);
   }

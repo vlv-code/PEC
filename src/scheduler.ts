@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { RotationConfig, RotationHistoryItem } from "./types.js";
 import { executeRotation, validateSafeEndpointUrl } from "./rotate.js";
+import { writeJsonAtomic } from "./jsonStore.js";
 
 const ROTATION_CONFIG_FILE = path.resolve(process.env.ROTATION_CONFIG_PATH || "./rotation_config.json");
 const HISTORY_FILE = path.resolve(process.env.ROTATION_HISTORY_PATH || "./rotation_history.json");

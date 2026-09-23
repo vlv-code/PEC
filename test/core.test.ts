@@ -119,3 +119,31 @@ test("builder config round-trips and studio overrides are tracked", () => {
   saveBuildConfig(orig);
   assert.strictEqual(getBuildConfig().name, orig.name);
 });
+
+test("writeJsonAtomic: atomic replace, no temp residue; readJsonStore preserves broken stores", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const { writeJsonAtomic, readJsonStore } = await import("../src/jsonStore.js");
+  const { TEST_TMP_DIR } = await import("./helpers/setup.js");
+
+  const dir = fs.mkdtempSync(path.join(TEST_TMP_DIR, "jsonstore-"));
+  const target = path.join(dir, "state.json");
+
+  // First write lands, second overwrites atomically, no tmp files remain
+  writeJsonAtomic(target, { v: 1 });
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(target, "utf-8")), { v: 1 });
+  writeJsonAtomic(target, { v: 2 });
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(target, "utf-8")), { v: 2 });
+  assert.deepStrictEqual(fs.readdirSync(dir).filter((f) => f.includes(".tmp.")), [], "no temp files may survive a completed write");
+
+  // A torn store is preserved as .corrupt-* and reads fall back to null
+  fs.writeFileSync(target, '{"v": 2', "utf-8"); // truncated mid-write
+  const corruptSnapshot = fs.readFileSync(target, "utf-8");
+  assert.strictEqual(readJsonStore(target), null, "unreadable JSON must return null, not throw");
+  const corrupt = fs.readdirSync(dir).find((f) => f.includes(".corrupt-"));
+  assert.ok(corrupt, "broken store must be preserved for post-mortem");
+  assert.strictEqual(fs.readFileSync(path.join(dir, corrupt), "utf-8"), corruptSnapshot, "preserved copy must match the broken content");
+
+  // A missing file is not an error
+  assert.strictEqual(readJsonStore(path.join(dir, "absent.json")), null);
+});

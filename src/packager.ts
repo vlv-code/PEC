@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import AdmZip from "adm-zip";
 import { ExtensionBuildInfo, ExtensionBuildConfig } from "./types.js";
 import { BACKGROUND_TEMPLATE, MANAGED_SCHEMA_TEMPLATE, renderBackgroundJs } from "./extensionTemplates.js";
+import { writeJsonAtomic } from "./jsonStore.js";
 
 const EXTENSION_DIR = path.resolve(process.env.PEC_EXTENSION_DIR || "./extension");
 const KEY_PATH = path.join(EXTENSION_DIR, "key.pem");
@@ -58,7 +59,7 @@ export function getBuildConfig(): ExtensionBuildConfig {
 export function saveBuildConfig(cfg: Partial<ExtensionBuildConfig>): ExtensionBuildConfig {
   currentBuildConfig = { ...currentBuildConfig, ...cfg };
   try {
-    fs.writeFileSync(BUILD_CONFIG_PATH, JSON.stringify(currentBuildConfig, null, 2), "utf-8");
+    writeJsonAtomic(BUILD_CONFIG_PATH, currentBuildConfig);
   } catch (e) {
     console.error("[packager] Error persisting build config:", e);
   }
