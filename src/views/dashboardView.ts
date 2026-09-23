@@ -1274,7 +1274,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
             <div class="preview-canvas">
               <!-- Popup Window Box -->
               <div class="popup-frame-box" id="popupFrameBox">
-                <iframe id="previewFrame" style="width: 100%; height: 100%; border: none;"></iframe>
+                <iframe id="previewFrame" sandbox="allow-scripts" style="width: 100%; height: 100%; border: none;"></iframe>
               </div>
 
               <!-- Stealth Mode Fallback Card -->
@@ -1814,7 +1814,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       if (data.latestRelease) {
         html += \`<div>
           <span style="color: var(--text-muted); font-size: 11px;">\${isRu ? 'Последний релиз:' : 'Latest release:'}</span>
-          <strong style="color: \${data.updateAvailable ? 'var(--warning)' : 'var(--success)'}; font-family: var(--mono); font-size: 13px; margin-left: 6px;">\${data.latestRelease.name || ('v' + data.latestRelease.version)}</strong>
+          <strong style="color: \${data.updateAvailable ? 'var(--warning)' : 'var(--success)'}; font-family: var(--mono); font-size: 13px; margin-left: 6px;">\${esc(data.latestRelease.name || ('v' + data.latestRelease.version))}</strong>
         </div>\`;
       }
 
@@ -3064,6 +3064,9 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     }
 
     window.addEventListener('message', (e) => {
+      // Only accept simulator messages from our own sandboxed preview frame
+      const pf = document.getElementById('previewFrame');
+      if (!pf || e.source !== (pf as HTMLIFrameElement).contentWindow) return;
       if (e.data && e.data.type === 'SIM_TOGGLE_BYPASS') {
         toggleSimBypass();
       }
