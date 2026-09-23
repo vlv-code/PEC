@@ -80,10 +80,12 @@ test("dashboard render: default-token warning is driven by the render option", (
   }
 });
 
-test("dashboard render: login gate is present (token is entered, not embedded)", () => {
+test("dashboard render: login gate is present (password is entered, session is server-side)", () => {
   const html = render(false);
   assert.match(html, /id="loginTokenInput"/);
-  assert.match(html, /autocomplete="off"/);
+  assert.match(html, /autocomplete="current-password"/, "the login field is a password field");
+  assert.match(html, /id="loginError"/, "failed logins must surface an error line");
+  assert.match(html, /id="btnLogout"/, "the header must carry a logout button");
 });
 
 test("dashboard assets: no external font dependencies (CSP would block them anyway)", () => {
@@ -102,15 +104,21 @@ test("dashboard render: the studio preview iframe is sandboxed", () => {
   assert.match(html, /<iframe id="previewFrame" sandbox="allow-scripts"/);
 });
 
-test("dashboard assets: release names are escaped, adminFetch sends X-Admin-Token", () => {
+test("dashboard assets: release names are escaped; auth rides a server session, not stored secrets", () => {
   // GitHub release names are attacker-influenced and must pass through esc()
   assert.match(
     dashboardJs,
     /\$\{esc\(data\.latestRelease\.name \|\| \('v' \+ data\.latestRelease\.version\)\)\}/
   );
 
-  assert.match(dashboardJs, /'X-Admin-Token': token/, "the management-API client must send the admin token header");
-  assert.ok(!dashboardJs.includes("opts.headers = Object.assign({}, opts.headers || {}, { 'X-Ext-Token': token })"), "adminFetch must not send the fleet header");
+  // The browser never holds the admin token: login exchanges the password for
+  // an HttpOnly session cookie and every API call carries only the CSRF
+  // marker header.
+  assert.match(dashboardJs, /'X-Requested-With': 'pec-dashboard'/, "API calls must carry the CSRF marker header");
+  assert.match(dashboardJs, /\/api\/auth\/login/, "the client must log in through the server");
+  assert.match(dashboardJs, /credentials: 'same-origin'/, "API calls must send the session cookie");
+  assert.ok(!dashboardJs.includes("sessionStorage"), "no secret may be stored client-side");
+  assert.ok(!dashboardJs.includes("'X-Admin-Token': token"), "adminFetch must not attach a stored token");
   // the /creds and /api/sync testers deliberately keep the fleet header
   assert.match(dashboardJs, /'X-Ext-Token': token \}/, "fleet endpoint testers must keep X-Ext-Token");
 });

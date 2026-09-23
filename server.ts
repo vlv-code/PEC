@@ -11,6 +11,7 @@ import { createInstancesRouter } from "./src/routes/instancesRoutes.js";
 import { createBuilderRouter } from "./src/routes/builderRoutes.js";
 import { createRotationRouter } from "./src/routes/rotationRoutes.js";
 import { createSystemRouter } from "./src/routes/systemRoutes.js";
+import { createAuthRouter, createCookieAuthenticator } from "./src/routes/authRoutes.js";
 import { renderDashboardHtml } from "./src/views/dashboardView.js";
 
 // Load environment variables from .env if present
@@ -125,14 +126,16 @@ app.use(safeCorsMiddleware);
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Authentication gate for management APIs.
-// Every /api/* route except the explicit allowlist below requires a valid
-// X-Ext-Token header. /api/sync stays public at the routing layer because it
-// carries its own token verification and sliding-window rate limiter (the
-// extension fleet authenticates there); /api/ip-echo is a diagnostic echo
-// endpoint used by extension popups.
-const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token");
-const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync"]);
+// Authentication gate for management APIs. Two ways in:
+//   1. X-Admin-Token bearer header (scripts, automation, API testers);
+//   2. a dashboard session cookie (HttpOnly, SameSite=Strict) with the CSRF
+//      marker header - the browser never stores the admin token itself.
+// /api/sync stays public at the routing layer because it carries its own
+// token verification and sliding-window rate limiter (the extension fleet
+// authenticates there); /api/ip-echo is a diagnostic echo endpoint used by
+// extension popups; /api/auth/login|session power the dashboard login.
+const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token", createCookieAuthenticator());
+const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync", "/auth/login", "/auth/session"]);
 app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   if (PUBLIC_API_PATHS.has(req.path)) {
     return next();
@@ -167,6 +170,7 @@ app.use(
 );
 
 // Mount Modular Routers
+app.use(createAuthRouter(() => ADMIN_TOKEN));
 app.use(createCredsRouter(() => EXT_SHARED_TOKEN));
 app.use(createRoutingRouter());
 app.use(createInstancesRouter());

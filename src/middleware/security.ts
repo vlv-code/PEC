@@ -136,26 +136,38 @@ export function timingSafeEqualString(a: string, b: string): boolean {
  * The header name is parameterized so fleet and admin tokens can be enforced
  * on disjoint route sets: extensions authenticate with the low-privilege
  * fleet token (X-Ext-Token), operators with the admin token (X-Admin-Token).
+ *
+ * For the admin gate an optional cookieAuth callback enables the dashboard's
+ * server-side session login: when the bearer header is absent, the request
+ * may still pass if it carries a valid session cookie (the callback also
+ * enforces the CSRF marker header - cross-site requests cannot set custom
+ * headers without a CORS preflight, which this server never grants).
  */
-export function createTokenAuthMiddleware(getToken: () => string, headerName = "x-ext-token") {
+export function createTokenAuthMiddleware(
+  getToken: () => string,
+  headerName = "x-ext-token",
+  cookieAuth?: (req: Request) => boolean
+) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const header = req.headers[headerName as "x-ext-token"];
     const provided = Array.isArray(header) ? header[0] : header;
     const token = getToken();
     const headerLabel = headerName.toUpperCase();
 
-    if (!token || !provided || !timingSafeEqualString(provided, token)) {
-      recordAudit({
-        ip: getClientIp(req),
-        endpoint: req.path,
-        status: 401,
-        result: "REJECTED_TOKEN",
-        details: `API authentication required (${headerLabel})`,
-      });
-      res.status(401).json({ error: `Unauthorized: a valid ${headerLabel} header is required` });
+    const headerOk = Boolean(token && provided && timingSafeEqualString(provided, token));
+    if (headerOk || (cookieAuth && cookieAuth(req))) {
+      next();
       return;
     }
-    next();
+
+    recordAudit({
+      ip: getClientIp(req),
+      endpoint: req.path,
+      status: 401,
+      result: "REJECTED_TOKEN",
+      details: `API authentication required (${headerLabel})`,
+    });
+    res.status(401).json({ error: `Unauthorized: a valid ${headerLabel} header is required` });
   };
 }
 
