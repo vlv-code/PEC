@@ -8,5 +8,9 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["server.ts", "src/**/*.ts"]
+  "include": [
+    "server.ts",
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ]
 }
