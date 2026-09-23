@@ -27,8 +27,14 @@ export function createRotationRouter(): Router {
   });
 
   router.post("/api/rotation/config", (req: Request, res: Response) => {
-    const updated = updateRotationConfig(req.body);
-    res.json(updated);
+    try {
+      const updated = updateRotationConfig(req.body);
+      // never echo the real admin password back to the client
+      res.json({ ...updated, adminPass: updated.adminPass ? "********" : "" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: msg });
+    }
   });
 
   router.post("/api/rotation/rotate-now", async (req: Request, res: Response) => {

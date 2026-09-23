@@ -1,10 +1,29 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { RotationConfig, RotationHistoryItem } from "./types.js";
-import { executeRotation } from "./rotate.js";
+import { executeRotation, validateSafeEndpointUrl } from "./rotate.js";
 
 const ROTATION_CONFIG_FILE = path.resolve(process.env.ROTATION_CONFIG_PATH || "./rotation_config.json");
 const HISTORY_FILE = path.resolve(process.env.ROTATION_HISTORY_PATH || "./rotation_history.json");
+
+const MIN_INTERVAL_MINUTES = 1;
+const MAX_INTERVAL_MINUTES = 60 * 24 * 366; // one year
+
+/**
+ * Validate and normalize a rotation interval. Prevents NaN / 0 / strings
+ * from reaching setInterval - a NaN interval previously degraded to a 1 ms
+ * timer that hammered the 3x-ui API and the filesystem.
+ */
+function normalizeIntervalMinutes(value: unknown): number {
+  const n = typeof value === "number" ? value : parseInt(String(value), 10);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < MIN_INTERVAL_MINUTES || n > MAX_INTERVAL_MINUTES) {
+    throw new Error(
+      `intervalMinutes must be an integer between ${MIN_INTERVAL_MINUTES} and ${MAX_INTERVAL_MINUTES}`
+    );
+  }
+  return n;
+}
 
 const DEFAULT_CONFIG: RotationConfig = {
   enabled: true,
@@ -85,25 +104,61 @@ export async function runManualRotation(): Promise<RotationHistoryItem> {
     const errMsg = err instanceof Error ? err.message : String(err);
     currentConfig.lastStatus = "Failed";
     currentConfig.lastError = errMsg;
+
+    let user = "unknown";
+    try {
+      const { readCurrentCreds } = await import("./rotate.js");
+      const creds = readCurrentCreds();
+      if (creds?.user) user = creds.user;
+    } catch {}
+
     const failItem: RotationHistoryItem = {
-      id: Math.random().toString(36).substring(2, 9),
+      id: crypto.randomUUID?.() ?? Math.random().toString(36).substring(2, 9),
       timestamp: new Date().toISOString(),
-      source: "manual",
-      user: "unknown",
+      source: currentConfig.panelUrl && !currentConfig.panelUrl.includes("3xui-host") ? "3x-ui" : "manual",
+      user,
       success: false,
       error: errMsg,
     };
     rotationHistory.unshift(failItem);
+    if (rotationHistory.length > 50) rotationHistory.pop();
     saveState();
     throw err;
   }
 }
 
 export function updateRotationConfig(updates: Partial<RotationConfig>): RotationConfig {
+  // Validate interval BEFORE merging: rejects NaN, 0, negative and
+  // non-integer values instead of silently degrading the scheduler.
+  if (updates.intervalMinutes !== undefined) {
+    currentConfig.intervalMinutes = normalizeIntervalMinutes(updates.intervalMinutes);
+  }
+
+  // An empty or missing adminPass means "keep the stored one" - the dashboard
+  // intentionally sends no password when the operator did not retype it.
+  const { adminPass, intervalMinutes: _ignored, panelUrl, ...restUpdates } = updates as Partial<RotationConfig> & {
+    intervalMinutes?: unknown;
+  };
+  if (typeof adminPass === "string" && adminPass.trim()) {
+    currentConfig.adminPass = adminPass.trim();
+  }
+
+  if (panelUrl !== undefined && String(panelUrl).trim()) {
+    const urlCheck = validateSafeEndpointUrl(String(panelUrl).trim());
+    if (!urlCheck.valid) {
+      throw new Error(`Invalid panelUrl: ${urlCheck.error}`);
+    }
+    currentConfig.panelUrl = String(panelUrl).trim();
+  }
+
   currentConfig = {
     ...currentConfig,
-    ...updates,
-  };
+    ...restUpdates,
+  } as RotationConfig;
+  // never persist the masked placeholder that the GET endpoint returns
+  if (currentConfig.adminPass === "********") {
+    throw new Error("Refusing to store the masked password placeholder");
+  }
 
   if (currentConfig.enabled) {
     currentConfig.nextRotationAt = new Date(Date.now() + currentConfig.intervalMinutes * 60 * 1000).toISOString();
@@ -128,9 +183,22 @@ export function startScheduler() {
     return;
   }
 
-  const intervalMs = Math.max(1, currentConfig.intervalMinutes) * 60 * 1000;
+  // Normalize persisted values before arming the timer - protects against
+  // hand-edited config files containing garbage.
+  let intervalMinutes: number;
+  try {
+    intervalMinutes = normalizeIntervalMinutes(currentConfig.intervalMinutes);
+  } catch {
+    intervalMinutes = 1440;
+    console.warn(
+      `[scheduler] Invalid persisted intervalMinutes (${currentConfig.intervalMinutes}); falling back to 1440 minutes.`
+    );
+  }
+  currentConfig.intervalMinutes = intervalMinutes;
+
+  const intervalMs = intervalMinutes * 60 * 1000;
   currentConfig.nextRotationAt = new Date(Date.now() + intervalMs).toISOString();
-  console.log(`[scheduler] Started rotation timer: interval=${currentConfig.intervalMinutes}m, next=${currentConfig.nextRotationAt}`);
+  console.log(`[scheduler] Started rotation timer: interval=${intervalMinutes}m, next=${currentConfig.nextRotationAt}`);
 
   timerHandle = setInterval(async () => {
     console.log("[scheduler] Triggering scheduled password rotation...");
