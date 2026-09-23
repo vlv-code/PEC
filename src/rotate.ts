@@ -67,20 +67,36 @@ export function validateSafeEndpointUrl(urlStr: string): { valid: boolean; error
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return { valid: false, error: "Only http:// or https:// protocol is permitted" };
     }
-    const hostname = parsed.hostname.toLowerCase();
+    // Node keeps IPv6 brackets in .hostname - strip them before matching.
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
     // Block cloud metadata services and link-local addresses (SSRF guard)
     if (
       hostname === "169.254.169.254" ||
       hostname.startsWith("169.254.") ||
       hostname === "metadata.google.internal" ||
       hostname === "metadata.goog" ||
-      hostname === "instance-data"
+      hostname === "instance-data" ||
+      // IPv6 forms of the same targets: AWS IMDSv1 endpoint and link-local
+      hostname.startsWith("fd00:ec2:") ||
+      hostname.startsWith("fe80:")
     ) {
       return { valid: false, error: "Access to cloud metadata endpoints is prohibited (SSRF prevention)" };
     }
     return { valid: true };
   } catch {
     return { valid: false, error: "Invalid URL format" };
+  }
+}
+
+/**
+ * Panel fetches must never follow redirects: a 30x would silently send the
+ * admin credentials (or an authorized request) to whatever target the panel
+ * (or an attacker who controls it) points at. redirect:"manual" keeps the
+ * 3xx response local; this helper turns it into a hard failure.
+ */
+function assertNoRedirect(res: Response, what: string): void {
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error(`${what}: panel returned redirect (${res.status}) - refused`);
   }
 }
 
@@ -104,8 +120,10 @@ export async function test3xuiConnection(config: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: config.adminUser, password: config.adminPass }),
+      redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
     });
+    assertNoRedirect(loginRes, "login");
 
     if (!loginRes.ok) {
       return { ok: false, message: `3x-ui HTTP error: ${loginRes.status} ${loginRes.statusText}` };
@@ -120,8 +138,10 @@ export async function test3xuiConnection(config: {
     // Check inbounds list
     const inboundsRes = await fetch(`${panel}/panel/api/inbounds/list`, {
       headers: { Cookie: cookie },
+      redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
     });
+    assertNoRedirect(inboundsRes, "inbounds list");
     if (!inboundsRes.ok) {
       return { ok: false, message: `Failed to list inbounds: HTTP ${inboundsRes.status}` };
     }
@@ -182,8 +202,10 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: xuiUser, password: xuiPass }),
+        redirect: "manual",
         signal: AbortSignal.timeout(timeoutMs),
       });
+      assertNoRedirect(loginRes, "login");
 
       if (!loginRes.ok) {
         throw new Error(`3x-ui login failed: HTTP ${loginRes.status}`);
@@ -198,8 +220,10 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
       // Fetch inbounds
       const inboundsRes = await fetch(`${cleanPanel}/panel/api/inbounds/list`, {
         headers: { Cookie: cookie },
+        redirect: "manual",
         signal: AbortSignal.timeout(timeoutMs),
       });
+      assertNoRedirect(inboundsRes, "inbounds list");
       const inboundsData = await inboundsRes.json();
       const inbounds = inboundsData.obj || [];
       const target = inbounds.find((i: { remark?: string }) => i.remark === inboundRemark);
@@ -223,8 +247,10 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: cookie },
         body: JSON.stringify(target),
+        redirect: "manual",
         signal: AbortSignal.timeout(timeoutMs),
       });
+      assertNoRedirect(updateRes, "inbound update");
 
       if (!updateRes.ok) {
         throw new Error(`3x-ui inbound update failed: HTTP ${updateRes.status}`);

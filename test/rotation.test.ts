@@ -161,3 +161,39 @@ test("runManualRotation: concurrent calls are serialized by the in-flight lock",
     globalThis.fetch = realFetch;
   }
 });
+
+test("SSRF: validateSafeEndpointUrl rejects IPv6 metadata and link-local targets", async () => {
+  const { validateSafeEndpointUrl } = await import("../src/rotate.js");
+  for (const bad of ["http://[fd00:ec2::254]/", "http://[fe80::1]/", "http://[FE80::a]/"]) {
+    const check = validateSafeEndpointUrl(bad);
+    assert.strictEqual(check.valid, false, `${bad} must be rejected`);
+    assert.match(check.error || "", /SSRF|metadata/i);
+  }
+  // Legitimate colocated targets stay allowed (loopback, private v4)
+  assert.strictEqual(validateSafeEndpointUrl("http://127.0.0.1:2053/xui").valid, true);
+  assert.strictEqual(validateSafeEndpointUrl("http://10.0.0.5:2053/xui").valid, true);
+});
+
+test("SSRF: a panel answering 302 is refused, not followed", async () => {
+  const { test3xuiConnection } = await import("../src/rotate.js");
+  const { withHttpServer } = await import("./helpers/http-server.js");
+
+  const { url, close } = await withHttpServer((req, res) => {
+    res.writeHead(302, { Location: "http://169.254.169.254/latest/meta-data/" });
+    res.end();
+  });
+
+  try {
+    const result = await test3xuiConnection({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      inboundRemark: "squid-in",
+      timeoutSec: 3,
+    });
+    assert.strictEqual(result.ok, false, "a redirecting panel must not be treated as connected");
+    assert.match(result.message, /redirect/i);
+  } finally {
+    await close();
+  }
+});
