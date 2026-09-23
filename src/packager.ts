@@ -141,19 +141,79 @@ export function generateGpoConfig(extensionId: string, serverBaseUrl: string, to
   };
 }
 
+// ---------------------------------------------------------------------------
+// CRX3 packaging
+//
+// Chrome (since v70) rejects CRX version 2 outright ("CRX version 3 expected").
+// The format is defined in chromium's components/crx_file/crx3.proto:
+//
+//   [4]  "Cr24" magic
+//   [4]  format version (3), little-endian
+//   [4]  header length N, little-endian
+//   [N]  protobuf CrxFileHeader {
+//          sha256_with_rsa   = field 2:  AsymmetricKeyProof {
+//                                               public_key = 1 (SPKI DER)
+//                                               signature  = 2 }
+//          signed_header_data = field 10000: SignedData { crx_id = 1 }
+//        }
+//   [M]  the ZIP archive
+//
+// Every proof signs:
+//   "CRX3 SignedData\0" + uint32_le(len(signed_header_data))
+//   + signed_header_data + archive
+// with RSA-SHA256 (PKCS#1 v1.5). crx_id = SHA256(public_key)[0..16].
+// This implementation is byte-identical to the reference `crx3` npm package.
+// ---------------------------------------------------------------------------
+
+function protobufVarint(value: number): Buffer {
+  const bytes: number[] = [];
+  let v = value;
+  while (v > 0x7f) {
+    bytes.push((v & 0x7f) | 0x80);
+    v = Math.floor(v / 128);
+  }
+  bytes.push(v);
+  return Buffer.from(bytes);
+}
+
+function protobufBytesField(fieldNo: number, value: Buffer): Buffer {
+  const tag = protobufVarint((fieldNo << 3) | 2); // wire type 2: length-delimited
+  return Buffer.concat([tag, protobufVarint(value.length), value]);
+}
+
 export function packCrxBuffer(zipBuffer: Buffer, privateKey: crypto.KeyObject): Buffer {
   const pubDer = getPublicKeySpkiDer(privateKey);
-  const signer = crypto.createSign("SHA1");
-  signer.update(zipBuffer);
+  const crxId = crypto.createHash("sha256").update(pubDer).digest().subarray(0, 16);
+
+  // SignedData { crx_id = 1 }
+  const signedData = protobufBytesField(1, crxId);
+
+  const signedDataLen = Buffer.alloc(4);
+  signedDataLen.writeUInt32LE(signedData.length, 0);
+
+  // Proof input: context string + length-prefixed signed data + archive
+  const signatureInput = Buffer.concat([
+    Buffer.from("CRX3 SignedData\0", "utf8"),
+    signedDataLen,
+    signedData,
+    zipBuffer,
+  ]);
+
+  const signer = crypto.createSign("RSA-SHA256");
+  signer.update(signatureInput);
   const signature = signer.sign(privateKey);
 
-  const header = Buffer.alloc(16);
-  header.write("Cr24", 0, 4, "latin1");
-  header.writeUInt32LE(2, 4);
-  header.writeUInt32LE(pubDer.length, 8);
-  header.writeUInt32LE(signature.length, 12);
+  // AsymmetricKeyProof { public_key = 1, signature = 2 }
+  const proof = Buffer.concat([protobufBytesField(1, pubDer), protobufBytesField(2, signature)]);
 
-  return Buffer.concat([header, pubDer, signature, zipBuffer]);
+  // CrxFileHeader { sha256_with_rsa = 2, signed_header_data = 10000 }
+  const header = Buffer.concat([protobufBytesField(2, proof), protobufBytesField(10000, signedData)]);
+
+  const out = Buffer.alloc(12);
+  out.write("Cr24", 0, "latin1");
+  out.writeUInt32LE(3, 4); // CRX version 3
+  out.writeUInt32LE(header.length, 8);
+  return Buffer.concat([out, header, zipBuffer]);
 }
 
 function getThemeStyles(cfg: ExtensionBuildConfig) {
