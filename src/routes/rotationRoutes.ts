@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import {
   getRotationConfig,
+  getRotationConfigPublic,
   getRotationHistory,
   updateRotationConfig,
   runManualRotation,
@@ -20,7 +21,7 @@ export function createRotationRouter(): Router {
 
   router.get("/api/rotation/config", (_req: Request, res: Response) => {
     res.json({
-      config: getRotationConfig(),
+      config: getRotationConfigPublic(),
       history: getRotationHistory().slice(0, 10),
     });
   });

@@ -1,10 +1,10 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { ensureKeyExists, packageExtension } from "./src/packager.js";
 import { startScheduler } from "./src/scheduler.js";
 import { atomicWriteCreds, getCredsStorePath } from "./src/rotate.js";
-import { securityHeadersMiddleware, safeCorsMiddleware } from "./src/middleware/security.js";
+import { securityHeadersMiddleware, safeCorsMiddleware, createTokenAuthMiddleware } from "./src/middleware/security.js";
 import { createCredsRouter } from "./src/routes/credsRoutes.js";
 import { createRoutingRouter } from "./src/routes/routingRoutes.js";
 import { createInstancesRouter } from "./src/routes/instancesRoutes.js";
@@ -84,6 +84,21 @@ app.use(securityHeadersMiddleware);
 app.use(safeCorsMiddleware);
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// Authentication gate for management APIs.
+// Every /api/* route except the explicit allowlist below requires a valid
+// X-Ext-Token header. /api/sync stays public at the routing layer because it
+// carries its own token verification and sliding-window rate limiter (the
+// extension fleet authenticates there); /api/ip-echo is a diagnostic echo
+// endpoint used by extension popups.
+const adminAuth = createTokenAuthMiddleware(() => EXT_SHARED_TOKEN);
+const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync"]);
+app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+  if (PUBLIC_API_PATHS.has(req.path)) {
+    return next();
+  }
+  return adminAuth(req, res, next);
+});
 
 // Chrome Extension distribution updates
 app.use(

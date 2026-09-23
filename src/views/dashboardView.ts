@@ -1550,6 +1550,16 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
   </div>
 
+  <div id="loginModal" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
+    <div style="max-width: 420px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px; text-align: center;">
+      <div style="font-size: 28px; margin-bottom: 8px;">🔐</div>
+      <h2 style="margin: 0 0 8px 0; font-size: 18px;">Authentication Required</h2>
+      <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите административный токен (EXT_SHARED_TOKEN) для доступа к консоли управления PEC.</p>
+      <input type="password" id="loginTokenInput" placeholder="EXT_SHARED_TOKEN" autocomplete="off" style="width: 100%; box-sizing: border-box; margin-bottom: 14px;" />
+      <button id="loginSubmitBtn" style="width: 100%;">Войти</button>
+    </div>
+  </div>
+
   <script>
     window.addEventListener('unhandledrejection', function(event) {
       if (event.reason && (event.reason.name === 'TypeError' || String(event.reason).includes('fetch') || String(event.reason).includes('Failed to fetch'))) {
@@ -1563,6 +1573,66 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     let allProfiles = [];
     let currentProfile = null;
     let extensionFiles = {};
+
+    // ----------------- Admin Authentication -----------------
+    // The dashboard ships without any embedded token. The operator enters the
+    // shared admin token once; it is kept in sessionStorage and attached to
+    // every management API call via adminFetch().
+    const ADMIN_TOKEN_KEY = 'pec_admin_token';
+    function getAdminToken() {
+      try { return sessionStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch (e) { return ''; }
+    }
+    function setAdminToken(t) {
+      try { if (t) { sessionStorage.setItem(ADMIN_TOKEN_KEY, t); } else { sessionStorage.removeItem(ADMIN_TOKEN_KEY); } } catch (e) {}
+    }
+    function showLoginModal() {
+      const m = document.getElementById('loginModal');
+      if (m) m.style.display = 'flex';
+      const i = document.getElementById('loginTokenInput');
+      if (i) i.focus();
+    }
+    function hideLoginModal() {
+      const m = document.getElementById('loginModal');
+      if (m) m.style.display = 'none';
+    }
+    let loginPendingRetry = null;
+    async function adminFetch(url, opts) {
+      opts = opts || {};
+      const token = getAdminToken();
+      if (token) {
+        opts.headers = Object.assign({}, opts.headers || {}, { 'X-Ext-Token': token });
+      }
+      const res = await fetch(url, opts);
+      if (res.status === 401) {
+        setAdminToken('');
+        loginPendingRetry = { url: url, opts: opts };
+        showLoginModal();
+      }
+      return res;
+    }
+    function handleLoginSubmit() {
+      const input = document.getElementById('loginTokenInput');
+      const v = ((input && input.value) || '').trim();
+      if (!v) { if (input) input.focus(); return; }
+      setAdminToken(v);
+      const ti = document.getElementById('testTokenInput');
+      if (ti && !ti.value) ti.value = v;
+      hideLoginModal();
+      if (loginPendingRetry) {
+        const r = loginPendingRetry;
+        loginPendingRetry = null;
+        adminFetch(r.url, r.opts).catch(function (e) { console.warn('Retry after login failed:', e); });
+      } else {
+        bootDashboard();
+      }
+    }
+    function bootDashboard() {
+      if (window.__pecBooted) return;
+      window.__pecBooted = true;
+      refreshAll();
+      setInterval(fetchFleet, 5000);
+      setInterval(fetchStatus, 10000);
+    }
 
     // ----------------- Layout & Theme Switchers -----------------
     function setServerLayout(layout) {
@@ -1670,7 +1740,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       container.innerHTML = \`<span style="color: var(--text-muted);">\${currentLang === 'ru' ? 'Запрос к GitHub Releases API...' : 'Fetching GitHub Releases API...'}</span>\`;
 
       try {
-        const res = await fetch('/api/github/releases');
+        const res = await adminFetch('/api/github/releases');
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         cachedReleases = data;
@@ -2313,7 +2383,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     // ----------------- Routing & Profiles -----------------
     async function loadPresets() {
       try {
-        const res = await fetch('/api/routing/presets');
+        const res = await adminFetch('/api/routing/presets');
         const presets = await res.json();
         const container = document.getElementById('presetsContainer');
         
@@ -2338,7 +2408,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
     async function loadProfiles() {
       try {
-        const res = await fetch('/api/routing/profiles');
+        const res = await adminFetch('/api/routing/profiles');
         allProfiles = await res.json();
         const sel = document.getElementById('profileSelect');
         
@@ -2471,7 +2541,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       currentProfile.targetGroup = document.getElementById('profTargetGroup').value.trim();
 
       try {
-        const res = await fetch('/api/routing/profiles', {
+        const res = await adminFetch('/api/routing/profiles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(currentProfile)
@@ -2513,7 +2583,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       if (!currentProfile) return;
       if (!confirm('Are you sure you want to delete profile "' + currentProfile.name + '"?')) return;
       try {
-        const res = await fetch('/api/routing/profiles/' + currentProfile.id, { method: 'DELETE' });
+        const res = await adminFetch('/api/routing/profiles/' + currentProfile.id, { method: 'DELETE' });
         const data = await res.json();
         if (data.ok) {
           alert('Profile deleted');
@@ -2548,7 +2618,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
     async function loadBuilderConfig() {
       try {
-        const res = await fetch('/api/builder/config');
+        const res = await adminFetch('/api/builder/config');
         const cfg = await res.json();
         
         document.getElementById('bldName').value = cfg.name || 'Corp Proxy Auth & Sync';
@@ -2668,7 +2738,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
     async function regenerateTemplatesFromConfig() {
       try {
-        const res = await fetch('/api/builder/regenerate', { method: 'POST' });
+        const res = await adminFetch('/api/builder/regenerate', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
           await loadExtensionFiles();
@@ -2940,7 +3010,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
     async function loadExtensionFiles() {
       try {
-        const res = await fetch('/api/builder/files');
+        const res = await adminFetch('/api/builder/files');
         extensionFiles = await res.json();
         loadFileContent();
         updateLivePreview();
@@ -2961,7 +3031,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       const fileName = document.getElementById('codeFileSelect').value;
       const content = document.getElementById('codeEditor').value;
       try {
-        const res = await fetch('/api/builder/file', {
+        const res = await adminFetch('/api/builder/file', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileName, content })
@@ -3000,7 +3070,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       };
 
       try {
-        const res = await fetch('/api/builder/config', {
+        const res = await adminFetch('/api/builder/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -3016,7 +3086,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     async function buildAndPackExtension() {
       await saveBuilderConfigOnly(false);
       try {
-        const res = await fetch('/api/builder/build', { method: 'POST' });
+        const res = await adminFetch('/api/builder/build', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
           alert('Extension package built successfully! .CRX signed, .ZIP created, and updates.xml regenerated.');
@@ -3033,7 +3103,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     // ----------------- Fleet & Instances -----------------
     async function fetchFleet() {
       try {
-        const res = await fetch('/api/instances');
+        const res = await adminFetch('/api/instances');
         const data = await res.json();
         const isRu = currentLang === 'ru';
         document.getElementById('badgeFleetOnline').textContent = data.online + (isRu ? ' онлайн' : ' online');
@@ -3074,7 +3144,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
     async function assignProfileToInstance(instanceId, profileId) {
       try {
-        await fetch('/api/instances/assign-profile', {
+        await adminFetch('/api/instances/assign-profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ instanceId, profileId })
@@ -3088,7 +3158,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     // ----------------- Extension Info & GPO -----------------
     async function fetchExtensionInfo() {
       try {
-        const res = await fetch('/api/extension/info');
+        const res = await adminFetch('/api/extension/info');
         const data = await res.json();
         document.getElementById('dispExtId').textContent = data.extensionId;
         document.getElementById('dispExtVer').textContent = data.version;
@@ -3117,7 +3187,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     // ----------------- System Status & Kill-Switch -----------------
     async function fetchStatus() {
       try {
-        const res = await fetch('/api/status');
+        const res = await adminFetch('/api/status');
         const data = await res.json();
         const isRu = currentLang === 'ru';
         
@@ -3140,7 +3210,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     async function toggleKillSwitch() {
       globalKillSwitch = !globalKillSwitch;
       try {
-        await fetch('/api/config', {
+        await adminFetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ killSwitch: globalKillSwitch })
@@ -3164,7 +3234,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     // ----------------- 3x-ui Rotation -----------------
     async function fetchRotationConfig() {
       try {
-        const res = await fetch('/api/rotation/config');
+        const res = await adminFetch('/api/rotation/config');
         const data = await res.json();
         const cfg = data.config;
         
@@ -3196,7 +3266,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       if (pass) payload.adminPass = pass;
 
       try {
-        const res = await fetch('/api/rotation/config', {
+        const res = await adminFetch('/api/rotation/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -3222,7 +3292,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       };
 
       try {
-        const res = await fetch('/api/3xui/test', {
+        const res = await adminFetch('/api/3xui/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -3239,7 +3309,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
     async function manualRotate() {
       if (!confirm('Rotate proxy credentials immediately?')) return;
       try {
-        const res = await fetch('/api/rotation/rotate-now', { method: 'POST' });
+        const res = await adminFetch('/api/rotation/rotate-now', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
           alert('Rotated! New user: ' + data.result.user + ' (source: ' + data.result.source + ')');
@@ -3352,9 +3422,21 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       fetchRotationConfig();
     }
 
-    refreshAll();
-    setInterval(fetchFleet, 5000);
-    setInterval(fetchStatus, 10000);
+    (function () {
+      const loginBtn = document.getElementById('loginSubmitBtn');
+      const loginInput = document.getElementById('loginTokenInput');
+      if (loginBtn) loginBtn.addEventListener('click', handleLoginSubmit);
+      if (loginInput) loginInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleLoginSubmit(); });
+
+      const tok = getAdminToken();
+      if (tok) {
+        const ti = document.getElementById('testTokenInput');
+        if (ti) ti.value = tok;
+        bootDashboard();
+      } else {
+        showLoginModal();
+      }
+    })();
   </script>
 </body>
 </html>`;

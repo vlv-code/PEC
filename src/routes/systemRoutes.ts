@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { readCurrentCreds } from "../rotate.js";
 import { getRotationConfig } from "../scheduler.js";
-import { getActiveInstances } from "../instances.js";
+import { getActiveInstances, getProxyConfig } from "../instances.js";
 import { getAllProfiles } from "../routing.js";
 import { recordAudit, getClientIp, getAuditLogs } from "../audit.js";
 
@@ -50,6 +50,7 @@ export function createSystemRouter(options: {
       activeInstancesCount: instances.filter((i) => i.status === "ONLINE").length,
       totalInstancesCount: instances.length,
       profilesCount: profilesList.length,
+      killSwitch: getProxyConfig().killSwitch || false,
       nextRotationAt: rotConfig.nextRotationAt || null,
       rotationIntervalMinutes: rotConfig.intervalMinutes,
       rotationEnabled: rotConfig.enabled,

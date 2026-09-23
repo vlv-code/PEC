@@ -52,6 +52,14 @@ export function getRotationConfig(): RotationConfig {
   return { ...currentConfig };
 }
 
+/**
+ * Masked view of the rotation config for API responses.
+ * The 3x-ui admin password must never leave the server in plaintext.
+ */
+export function getRotationConfigPublic(): RotationConfig {
+  return { ...currentConfig, adminPass: currentConfig.adminPass ? "********" : "" };
+}
+
 export function getRotationHistory(): RotationHistoryItem[] {
   return [...rotationHistory];
 }
