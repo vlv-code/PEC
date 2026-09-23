@@ -109,8 +109,8 @@ cp .env.example .env
 
 ```bash
 # 1. Клонирование репозитория
-git clone https://github.com/corp/pec-proxy-extension-corp.git
-cd pec-proxy-extension-corp
+git clone https://github.com/vlv-code/PEC.git
+cd PEC
 
 # 2. Установка зависимостей
 npm install
