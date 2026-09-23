@@ -1560,6 +1560,21 @@
           '}' +
         '});' +
         'window.addEventListener("unhandledrejection", function(e) { e.preventDefault(); });' +
+        // Report the document height to the parent so the sandboxed preview
+        // iframe can size itself to the popup content (a real Chrome popup
+        // sizes to content; the sandbox blocks the parent from measuring).
+        'function __postPreviewHeight() {' +
+          'try {' +
+            'var h = Math.max(' +
+              'document.documentElement ? document.documentElement.scrollHeight : 0,' +
+              'document.body ? document.body.scrollHeight : 0);' +
+            'window.parent.postMessage({ type: "PREVIEW_RESIZE", height: h }, "*");' +
+          '} catch (e) {}' +
+        '}' +
+        'window.addEventListener("load", __postPreviewHeight);' +
+        'setTimeout(__postPreviewHeight, 60);' +
+        'setTimeout(__postPreviewHeight, 400);' +
+        'if (window.ResizeObserver) { new ResizeObserver(__postPreviewHeight).observe(document.documentElement); }' +
         'var _origFetch = window.fetch;' +
         'window.fetch = function(url, opts) {' +
           'if (typeof url === "string" && url.includes("/api/ip-echo")) {' +
@@ -1575,7 +1590,9 @@
         scriptClose;
 
       let doc = htmlContent;
-      const popupScriptRegex = new RegExp('<' + 'script\s+src="popup\.js">' + '<' + '/script>', 'i');
+      // NB: built with RegExp so that \s and \. are real regex escapes - a
+      // plain string literal would turn '\s' into 's' and never match.
+      const popupScriptRegex = new RegExp('<script[^>]*src="popup\\.js"[^>]*>\\s*</script>', 'i');
       if (doc.includes('popup.js')) {
         doc = doc.replace(popupScriptRegex, mockScript + scriptOpen + jsContent + scriptClose);
       } else {
@@ -1597,6 +1614,11 @@
       if (!pf || e.source !== pf.contentWindow) return;
       if (e.data && e.data.type === 'SIM_TOGGLE_BYPASS') {
         toggleSimBypass();
+      } else if (e.data && e.data.type === 'PREVIEW_RESIZE' && typeof e.data.height === 'number') {
+        // Size the preview to the popup content like a real Chrome popup,
+        // clamped to a sane band so a broken template cannot blow up the UI.
+        const h = Math.max(180, Math.min(700, Math.round(e.data.height)));
+        pf.style.height = h + 'px';
       }
     });
 
