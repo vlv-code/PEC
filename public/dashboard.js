@@ -477,6 +477,8 @@
         optSync60: 'Every 1 hour',
         lblExtDesc: 'Enterprise Description',
         phExtDesc: 'Enterprise Chrome extension for automatic proxy synchronization',
+        lblServerUrl: 'Sync Server Base URL (API Base URL)',
+        phServerUrl: 'https://pec.example.corp',
         lblSecPolicies: 'Security & Leak Prevention Policies',
         lblWebrtcShield: 'WebRTC IP Shield (no UDP leak)',
         lblDnsGuard: 'DNS Leak Guard',
@@ -717,6 +719,8 @@
         optSync60: 'Каждый 1 час',
         lblExtDesc: 'Корпоративное описание',
         phExtDesc: 'Корпоративное расширение Chrome для автоматической синхронизации прокси',
+        lblServerUrl: 'Сервер синхронизации (API Base URL)',
+        phServerUrl: 'https://pec.example.corp',
         lblSecPolicies: 'Политики безопасности и защита от утечек',
         lblWebrtcShield: 'Защита WebRTC (предотвращение утечки IP)',
         lblDnsGuard: 'Защита DNS (резолв через прокси)',
@@ -1218,6 +1222,12 @@
         document.getElementById('bldThemeColor').value = cfg.themeColor || '#0284c7';
         document.getElementById('bldEmoji').value = cfg.iconEmoji || '🛡️';
         document.getElementById('bldDesc').value = cfg.description || 'Enterprise Chrome extension for automatic proxy synchronization';
+        const srvInput = document.getElementById('bldServerUrl');
+        if (srvInput) {
+          srvInput.value = (cfg.defaultServerUrl && !cfg.defaultServerUrl.includes('mini-server.ic.local'))
+            ? cfg.defaultServerUrl
+            : window.location.origin;
+        }
         document.getElementById('bldSyncInterval').value = cfg.syncIntervalMinutes || 15;
         document.getElementById('bldWebRtc').checked = cfg.webRtcProtection !== false;
         document.getElementById('bldDnsGuard').checked = cfg.dnsLeakProtection !== false;
@@ -1673,6 +1683,9 @@
         themeColor: document.getElementById('bldThemeColor').value.trim(),
         iconEmoji: document.getElementById('bldEmoji').value.trim(),
         description: document.getElementById('bldDesc').value.trim(),
+        defaultServerUrl: document.getElementById('bldServerUrl')
+          ? document.getElementById('bldServerUrl').value.trim()
+          : '',
         syncIntervalMinutes: parseInt(document.getElementById('bldSyncInterval').value, 10) || 15,
         webRtcProtection: document.getElementById('bldWebRtc').checked,
         dnsLeakProtection: document.getElementById('bldDnsGuard').checked,

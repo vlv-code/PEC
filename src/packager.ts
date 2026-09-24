@@ -2,6 +2,7 @@ import "./loadEnv.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 import AdmZip from "adm-zip";
 import { ExtensionBuildInfo, ExtensionBuildConfig } from "./types.js";
 import { BACKGROUND_TEMPLATE, MANAGED_SCHEMA_TEMPLATE, renderBackgroundJs } from "./extensionTemplates.js";
@@ -290,6 +291,124 @@ function generateSvgIcon(cfg: ExtensionBuildConfig, colors: { primary: string; b
 </svg>`;
 }
 
+function crc32(buf: Buffer): number {
+  let table = (globalThis as unknown as { _pecCrcTable?: Uint32Array })._pecCrcTable;
+  if (!table) {
+    table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      table[i] = c;
+    }
+    (globalThis as unknown as { _pecCrcTable?: Uint32Array })._pecCrcTable = table;
+  }
+  let crc = -1;
+  for (let i = 0; i < buf.length; i++) crc = (crc >>> 8) ^ table[(crc ^ buf[i]) & 0xff];
+  return (crc ^ -1) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length, 0);
+  const typeBuf = Buffer.from(type, "ascii");
+  const body = Buffer.concat([typeBuf, data]);
+  const crcBuf = Buffer.alloc(4);
+  crcBuf.writeUInt32BE(crc32(body), 0);
+  return Buffer.concat([len, body, crcBuf]);
+}
+
+/**
+ * Generate a valid 128x128 RGBA PNG icon in pure Node.js.
+ * Chrome Manifest V3 strictly requires PNG icons (SVG causes "Could not decode image" install error).
+ */
+export function generatePngIcon(primaryHex = "#00f0ff", bgHex = "#0a1020"): Buffer {
+  const width = 128;
+  const height = 128;
+  const pR = parseInt(primaryHex.slice(1, 3), 16) || 0;
+  const pG = parseInt(primaryHex.slice(3, 5), 16) || 240;
+  const pB = parseInt(primaryHex.slice(5, 7), 16) || 255;
+  const bR = parseInt(bgHex.slice(1, 3), 16) || 10;
+  const bG = parseInt(bgHex.slice(3, 5), 16) || 16;
+  const bB = parseInt(bgHex.slice(5, 7), 16) || 32;
+
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6; // RGBA
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  const rowSize = 1 + width * 4;
+  const raw = Buffer.alloc(height * rowSize);
+
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * rowSize;
+    raw[rowOffset] = 0;
+    const t = y / height;
+    const bgR = Math.round(pR * (1 - t) * 0.4 + bR);
+    const bgG = Math.round(pG * (1 - t) * 0.4 + bG);
+    const bgB = Math.round(pB * (1 - t) * 0.4 + bB);
+
+    for (let x = 0; x < width; x++) {
+      const px = rowOffset + 1 + x * 4;
+      let inCard = false;
+      const margin = 8;
+      const rad = 24;
+      const left = margin + rad;
+      const right = width - margin - rad;
+      const top = margin + rad;
+      const bottom = height - margin - rad;
+      if (x >= margin && x < width - margin && y >= margin && y < height - margin) {
+        if (x < left && y < top) inCard = (x - left) ** 2 + (y - top) ** 2 <= rad ** 2;
+        else if (x > right && y < top) inCard = (x - right) ** 2 + (y - top) ** 2 <= rad ** 2;
+        else if (x < left && y > bottom) inCard = (x - left) ** 2 + (y - bottom) ** 2 <= rad ** 2;
+        else if (x > right && y > bottom) inCard = (x - right) ** 2 + (y - bottom) ** 2 <= rad ** 2;
+        else inCard = true;
+      }
+
+      if (!inCard) {
+        raw[px] = 0;
+        raw[px + 1] = 0;
+        raw[px + 2] = 0;
+        raw[px + 3] = 0;
+        continue;
+      }
+
+      const dx = Math.abs(x - 64);
+      const isShieldTop = y >= 34 && y <= 60 && dx <= 30;
+      const isShieldBottom = y > 60 && y <= 94 && dx <= 30 * (1 - (y - 60) / 38);
+      const inShield = isShieldTop || isShieldBottom;
+
+      const isShieldInner =
+        inShield &&
+        ((y >= 40 && y <= 58 && dx <= 24) || (y > 58 && y <= 88 && dx <= 24 * (1 - (y - 58) / 34)));
+
+      if (inShield && !isShieldInner) {
+        raw[px] = 255;
+        raw[px + 1] = 255;
+        raw[px + 2] = 255;
+        raw[px + 3] = 255;
+      } else if (inShield && isShieldInner) {
+        raw[px] = Math.round(pR * 0.9);
+        raw[px + 1] = Math.round(pG * 0.9);
+        raw[px + 2] = Math.round(pB * 0.9);
+        raw[px + 3] = 255;
+      } else {
+        raw[px] = bgR;
+        raw[px + 1] = bgG;
+        raw[px + 2] = bgB;
+        raw[px + 3] = 255;
+      }
+    }
+  }
+
+  const idat = zlib.deflateSync(raw);
+  return Buffer.concat([sig, pngChunk("IHDR", ihdr), pngChunk("IDAT", idat), pngChunk("IEND", Buffer.alloc(0))]);
+}
+
 // Generate customizable extension files based on BuildConfig
 const EXTENSION_SOURCE_FILES = [
   "manifest.json",
@@ -297,6 +416,7 @@ const EXTENSION_SOURCE_FILES = [
   "popup.html",
   "popup.js",
   "managed_schema.json",
+  "icon.png",
   "icon.svg",
 ] as const;
 
@@ -305,12 +425,22 @@ const EXTENSION_SOURCE_FILES = [
  * Studio (overriddenFiles) - manual edits must never be silently clobbered
  * by a rebuild. `force` (the "Regenerate templates" action) resets overrides.
  */
-function writeGeneratedFile(fileName: string, content: string, cfg: ExtensionBuildConfig, force = false): void {
+function writeGeneratedFile(
+  fileName: string,
+  content: string | Buffer,
+  cfg: ExtensionBuildConfig,
+  force = false
+): void {
   const overridden = (cfg.overriddenFiles || []).includes(fileName);
   if (overridden && !force) {
     return;
   }
-  fs.writeFileSync(path.join(EXTENSION_DIR, fileName), content, "utf-8");
+  const fullPath = path.join(EXTENSION_DIR, fileName);
+  if (Buffer.isBuffer(content)) {
+    fs.writeFileSync(fullPath, content);
+  } else {
+    fs.writeFileSync(fullPath, content, "utf-8");
+  }
 }
 
 export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force?: boolean }) {
@@ -349,22 +479,26 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
     // webRequestAuthProvider (proxy auth interception) shipped in Chrome 108;
     // declaring 96 previously allowed installs where auth silently broke.
     minimum_chrome_version: "108",
+    // Chrome strictly requires PNG format for extension icons (SVG is rejected by Blink)
+    icons: {
+      16: "icon.png",
+      48: "icon.png",
+      128: "icon.png",
+    },
   };
 
   if (cfg.uiMode === "popup") {
     manifest.action = {
       default_title: cfg.name,
       default_popup: "popup.html",
-      default_icon: "icon.svg",
-    };
-    manifest.icons = {
-      128: "icon.svg",
+      default_icon: "icon.png",
     };
   }
 
   writeGeneratedFile("manifest.json", JSON.stringify(manifest, null, 2), cfg, force);
 
-  // 2. Icon (SVG vector)
+  // 2. Icon (both PNG for Chrome runtime and SVG for Studio vector preview/editor)
+  writeGeneratedFile("icon.png", generatePngIcon(colors.primary, colors.bg), cfg, force);
   writeGeneratedFile("icon.svg", generateSvgIcon(cfg, colors), cfg, force);
 
   // 2b. Service worker template + managed storage schema. These are shipped
@@ -886,8 +1020,17 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     fs.mkdirSync(UPDATES_DIR, { recursive: true });
   }
 
-  // Generate / refresh extension files based on current build config
-  generateExtensionFiles(currentBuildConfig);
+  const effectiveBaseUrl = (currentBuildConfig.defaultServerUrl && !currentBuildConfig.defaultServerUrl.includes("mini-server.ic.local"))
+    ? currentBuildConfig.defaultServerUrl.trim().replace(/\/+$/, "")
+    : (baseUrl ? baseUrl.trim().replace(/\/+$/, "") : "http://localhost:3000");
+
+  const buildConfigToPack: ExtensionBuildConfig = {
+    ...currentBuildConfig,
+    defaultServerUrl: effectiveBaseUrl,
+  };
+
+  // Generate / refresh extension files based on build config to pack
+  generateExtensionFiles(buildConfigToPack);
 
   const privKey = ensureKeyExists();
   const spkiDer = getPublicKeySpkiDer(privKey);
@@ -895,8 +1038,8 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
 
   const manifestPath = path.join(EXTENSION_DIR, "manifest.json");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-  const version = manifest.version || currentBuildConfig.version || "1.2.0";
-  const name = manifest.name || currentBuildConfig.name || "Corp Proxy Auth & Sync";
+  const version = manifest.version || buildConfigToPack.version || "1.2.0";
+  const name = manifest.name || buildConfigToPack.name || "Corp Proxy Auth & Sync";
 
   const zip = new AdmZip();
   const items = fs.readdirSync(EXTENSION_DIR);
@@ -910,7 +1053,7 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
       if (item === "background.js") {
         // Substitute build-config placeholders at packaging time; the source
         // file on disk keeps its __PEC_*__ placeholders for future rebuilds.
-        const rendered = renderBackgroundJs(currentBuildConfig);
+        const rendered = renderBackgroundJs(buildConfigToPack);
         zip.addFile(item, Buffer.from(rendered, "utf-8"));
       } else {
         zip.addLocalFile(full);
@@ -926,8 +1069,7 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   const crxPath = path.join(UPDATES_DIR, "extension.crx");
   fs.writeFileSync(crxPath, crxBuffer);
 
-  const effectiveBaseUrl = baseUrl || "http://localhost:3000";
-  const codebaseUrl = `${effectiveBaseUrl.replace(/\/+$/, "")}/updates/extension.crx`;
+  const codebaseUrl = `${effectiveBaseUrl}/updates/extension.crx`;
   const xmlContent = buildUpdatesXml(extensionId, version, codebaseUrl);
   const xmlPath = path.join(UPDATES_DIR, "updates.xml");
   fs.writeFileSync(xmlPath, xmlContent, "utf-8");
