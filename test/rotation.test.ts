@@ -30,6 +30,9 @@ test("rotation config: interval validation rejects NaN, zero, negatives and garb
   assert.throws(() => updateRotationConfig({ intervalMinutes: "abc" as unknown as number }), /intervalMinutes/);
   assert.throws(() => updateRotationConfig({ intervalMinutes: -5 }), /intervalMinutes/);
   assert.throws(() => updateRotationConfig({ intervalMinutes: 1.5 }), /intervalMinutes/);
+  // >2^31-1 ms (~24.8 days) would make Node clamp setInterval to 1 ms - a
+  // hot loop hammering the panel; the cap must reject it
+  assert.throws(() => updateRotationConfig({ intervalMinutes: 144000 }), /intervalMinutes/);
   // valid value passes and persists
   updateRotationConfig({ intervalMinutes: 90, enabled: false });
   assert.strictEqual(getRotationConfig().intervalMinutes, 90);
