@@ -126,6 +126,85 @@ function assertNoRedirect(res: Response, what: string): void {
   }
 }
 
+/**
+ * Login to the 3x-ui panel, transparently supporting both generations:
+ * - current panels issue a CSRF token (GET /csrf-token with the session
+ *   cookie, then X-CSRF-Token on POST /login) - without it login is a bare 403;
+ * - older panels accept a plain POST /login.
+ * Returns the Cookie header value to authorize subsequent API calls.
+ */
+async function panelLogin(
+  panel: string,
+  username: string,
+  password: string,
+  timeoutMs: number
+): Promise<{ cookie: string; csrfToken: string | null }> {
+  let cookie = "";
+  let csrfToken: string | null = null;
+
+  // Newer panels: obtain the session cookie + CSRF token first.
+  // Network failures throw immediately (no point retrying /login on an unreachable host).
+  // HTTP non-200 responses (e.g. 404 on older panels without CSRF) fall through to plain login.
+  const csrfRes = await fetch(`${panel}/csrf-token`, {
+    redirect: "manual",
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  assertNoRedirect(csrfRes, "csrf-token");
+  if (csrfRes.ok) {
+    cookie = csrfRes.headers.get("set-cookie") || "";
+    const data = (await csrfRes.json().catch(() => null)) as { obj?: string } | null;
+    if (data && typeof data.obj === "string" && data.obj) {
+      csrfToken = data.obj;
+    }
+  }
+
+  const loginRes = await fetch(`${panel}/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    body: JSON.stringify({ username, password }),
+    redirect: "manual",
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  assertNoRedirect(loginRes, "login");
+
+  if (!loginRes.ok) {
+    throw new Error(`3x-ui login failed: HTTP ${loginRes.status}`);
+  }
+
+  const freshCookie = loginRes.headers.get("set-cookie");
+  const mergedCookie = mergeCookies(cookie, freshCookie);
+  const loginData = await loginRes.json().catch(() => ({}));
+  if (loginData && loginData.success === false) {
+    throw new Error(`3x-ui login rejected: ${loginData.msg || "Invalid credentials"}`);
+  }
+  return { cookie: mergedCookie, csrfToken };
+}
+
+/** Combine a session cookie from the CSRF handshake with login Set-Cookies. */
+function mergeCookies(base: string, fresh: string | null): string {
+  const jar = new Map<string, string>();
+  for (const raw of [base, fresh || ""]) {
+    for (const part of raw.split(/,(?=[^;]+?=)/)) {
+      const pair = part.split(";")[0].trim();
+      const eq = pair.indexOf("=");
+      if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+    }
+  }
+  return [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+}
+
+/** Auth headers for panel API calls (cookie + CSRF where the panel issued one). */
+function panelApiHeaders(auth: { cookie: string; csrfToken: string | null }): Record<string, string> {
+  return {
+    ...(auth.cookie ? { Cookie: auth.cookie } : {}),
+    ...(auth.csrfToken ? { "X-CSRF-Token": auth.csrfToken } : {}),
+  };
+}
+
 export async function test3xuiConnection(config: {
   panelUrl: string;
   adminUser: string;
@@ -142,28 +221,11 @@ export async function test3xuiConnection(config: {
   const timeoutMs = (config.timeoutSec || 8) * 1000;
 
   try {
-    const loginRes = await fetch(`${panel}/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: config.adminUser, password: config.adminPass }),
-      redirect: "manual",
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    assertNoRedirect(loginRes, "login");
-
-    if (!loginRes.ok) {
-      return { ok: false, message: `3x-ui HTTP error: ${loginRes.status} ${loginRes.statusText}` };
-    }
-
-    const cookie = loginRes.headers.get("set-cookie") || "";
-    const loginData = await loginRes.json().catch(() => ({}));
-    if (loginData && loginData.success === false) {
-      return { ok: false, message: `3x-ui rejected credentials: ${loginData.msg || "Invalid admin login"}` };
-    }
+    const auth = await panelLogin(panel, config.adminUser, config.adminPass, timeoutMs);
 
     // Check inbounds list
     const inboundsRes = await fetch(`${panel}/panel/api/inbounds/list`, {
-      headers: { Cookie: cookie },
+      headers: panelApiHeaders(auth),
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -224,28 +286,11 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
       }
 
       const cleanPanel = panelUrl.replace(/\/+$/, "");
-      const loginRes = await fetch(`${cleanPanel}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: xuiUser, password: xuiPass }),
-        redirect: "manual",
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      assertNoRedirect(loginRes, "login");
-
-      if (!loginRes.ok) {
-        throw new Error(`3x-ui login failed: HTTP ${loginRes.status}`);
-      }
-
-      const cookie = loginRes.headers.get("set-cookie") || "";
-      const loginData = await loginRes.json().catch(() => ({}));
-      if (loginData && loginData.success === false) {
-        throw new Error(`3x-ui login rejected: ${loginData.msg || "Invalid credentials"}`);
-      }
+      const auth = await panelLogin(cleanPanel, xuiUser as string, xuiPass as string, timeoutMs);
 
       // Fetch inbounds
       const inboundsRes = await fetch(`${cleanPanel}/panel/api/inbounds/list`, {
-        headers: { Cookie: cookie },
+        headers: panelApiHeaders(auth),
         redirect: "manual",
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -271,7 +316,7 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
 
       const updateRes = await fetch(`${cleanPanel}/panel/api/inbounds/update/${target.id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: cookie },
+        headers: { "Content-Type": "application/json", ...panelApiHeaders(auth) },
         body: JSON.stringify(target),
         redirect: "manual",
         signal: AbortSignal.timeout(timeoutMs),
