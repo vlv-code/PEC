@@ -200,3 +200,114 @@ test("SSRF: a panel answering 302 is refused, not followed", async () => {
     await close();
   }
 });
+
+test("test3xuiConnection: modern 3x-ui with CSRF token handshake and session cookie", async () => {
+  const { test3xuiConnection } = await import("../src/rotate.js");
+  const { withHttpServer } = await import("./helpers/http-server.js");
+
+  let csrfRequested = false;
+  let loginReceivedCsrf = "";
+  let loginReceivedCookie = "";
+  let inboundsReceivedCookie = "";
+  let inboundsReceivedCsrf = "";
+
+  const { url, close } = await withHttpServer((req, res) => {
+    if (req.method === "GET" && req.url === "/csrf-token") {
+      csrfRequested = true;
+      res.setHeader("Set-Cookie", "3x-ui=csrf-session-123; Path=/; HttpOnly");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, obj: "token-abc-999" }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/login") {
+      loginReceivedCsrf = (req.headers["x-csrf-token"] as string) || "";
+      loginReceivedCookie = req.headers["cookie"] || "";
+      if (loginReceivedCsrf !== "token-abc-999" || !loginReceivedCookie.includes("3x-ui=csrf-session-123")) {
+        res.writeHead(403);
+        res.end();
+        return;
+      }
+      res.setHeader("Set-Cookie", "fresh_login=val456; Path=/");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/panel/api/inbounds/list") {
+      inboundsReceivedCookie = req.headers["cookie"] || "";
+      inboundsReceivedCsrf = (req.headers["x-csrf-token"] as string) || "";
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, obj: [{ id: 42, remark: "squid-in", protocol: "http" }] }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  try {
+    const result = await test3xuiConnection({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      inboundRemark: "squid-in",
+      timeoutSec: 3,
+    });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.inboundFound, true);
+    assert.strictEqual(result.inboundId, 42);
+    assert.strictEqual(csrfRequested, true);
+    assert.strictEqual(loginReceivedCsrf, "token-abc-999");
+    assert.ok(loginReceivedCookie.includes("3x-ui=csrf-session-123"));
+    assert.ok(inboundsReceivedCookie.includes("3x-ui=csrf-session-123"));
+    assert.strictEqual(inboundsReceivedCsrf, "token-abc-999");
+  } finally {
+    await close();
+  }
+});
+
+test("test3xuiConnection: legacy 3x-ui panel without CSRF (404 fallback)", async () => {
+  const { test3xuiConnection } = await import("../src/rotate.js");
+  const { withHttpServer } = await import("./helpers/http-server.js");
+
+  let csrfRequested = false;
+  let loginRequested = false;
+
+  const { url, close } = await withHttpServer((req, res) => {
+    if (req.method === "GET" && req.url === "/csrf-token") {
+      csrfRequested = true;
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    if (req.method === "POST" && req.url === "/login") {
+      loginRequested = true;
+      res.setHeader("Set-Cookie", "3x-ui=legacy-session; Path=/");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/panel/api/inbounds/list") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, obj: [{ id: 10, remark: "squid-in", protocol: "http" }] }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  try {
+    const result = await test3xuiConnection({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      inboundRemark: "squid-in",
+      timeoutSec: 3,
+    });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.inboundFound, true);
+    assert.strictEqual(result.inboundId, 10);
+    assert.strictEqual(csrfRequested, true);
+    assert.strictEqual(loginRequested, true);
+  } finally {
+    await close();
+  }
+});
