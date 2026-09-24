@@ -10,7 +10,10 @@ const ROTATION_CONFIG_FILE = path.resolve(process.env.ROTATION_CONFIG_PATH || ".
 const HISTORY_FILE = path.resolve(process.env.ROTATION_HISTORY_PATH || "./rotation_history.json");
 
 const MIN_INTERVAL_MINUTES = 1;
-const MAX_INTERVAL_MINUTES = 60 * 24 * 366; // one year
+// setTimeout/setInterval accept delays only up to 2^31-1 ms (~24.8 days):
+// a larger value makes Node clamp the timer to 1 ms, turning the rotation
+// scheduler into a hot loop that hammers the 3x-ui panel with logins.
+const MAX_INTERVAL_MINUTES = Math.floor((2 ** 31 - 1) / 60_000); // 35791 (~24.8 days)
 const MAX_HISTORY_ENTRIES = 50;
 
 /**
