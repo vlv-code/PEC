@@ -387,6 +387,9 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           <label data-i18n="lblExtDesc">Enterprise Description</label>
           <input type="text" id="bldDesc" oninput="onConfigChangeLive()" placeholder="Enterprise Chrome extension for automatic proxy synchronization" data-i18n-ph="phExtDesc" />
 
+          <label data-i18n="lblServerUrl">Sync Server Base URL (API Base URL)</label>
+          <input type="text" id="bldServerUrl" oninput="onConfigChangeLive()" placeholder="https://pec.example.corp" data-i18n-ph="phServerUrl" />
+
           <!-- 4. Security & User Feature Policies -->
           <div style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px;">
             <label style="margin-bottom: 8px;" data-i18n="lblSecPolicies">Security & Leak Prevention Policies</label>
