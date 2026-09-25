@@ -138,6 +138,10 @@ export function generateGpoConfig(extensionId: string, serverBaseUrl: string, to
 
   const regContent = `Windows Registry Editor Version 5.00
 
+; ============================================================================
+; Google Chrome Enterprise Policies
+; ============================================================================
+
 ; Force install extension via GPO
 [HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Google\\Chrome\\ExtensionInstallForcelist]
 "1"="${forcelistEntry}"
@@ -147,6 +151,28 @@ export function generateGpoConfig(extensionId: string, serverBaseUrl: string, to
 "extToken"="${regEscape(token)}"
 "credsUrl"="${regEscape(credsUrl)}"
 "syncUrl"="${regEscape(syncUrl)}"
+
+; Allowlist for manual install and activation
+[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Google\\Chrome\\ExtensionInstallAllowlist]
+"1"="${regEscape(extensionId)}"
+
+; ============================================================================
+; Microsoft Edge Enterprise Policies
+; ============================================================================
+
+; Force install extension via GPO
+[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Edge\\ExtensionInstallForcelist]
+"1"="${forcelistEntry}"
+
+; Configure managed settings (token & URLs)
+[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Edge\\3rdparty\\extensions\\${regEscape(extensionId)}\\policy]
+"extToken"="${regEscape(token)}"
+"credsUrl"="${regEscape(credsUrl)}"
+"syncUrl"="${regEscape(syncUrl)}"
+
+; Allowlist for manual install and activation
+[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Edge\\ExtensionInstallAllowlist]
+"1"="${regEscape(extensionId)}"
 `;
 
   return {
