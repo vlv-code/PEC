@@ -34,14 +34,27 @@ export function safeCorsMiddleware(req: Request, res: Response, next: NextFuncti
   if (isPublicResource) {
     res.setHeader("Access-Control-Allow-Origin", "*");
   } else if (origin) {
-    const reqHost = req.headers.host || "";
+    const rawForwarded = req.headers["x-forwarded-host"];
+    const forwardedHost = (Array.isArray(rawForwarded) ? rawForwarded[0] : rawForwarded || "").split(",")[0].trim();
+    const rawHost = forwardedHost || req.headers.host || "";
+    const reqHost = rawHost.split(",")[0].trim();
+
     let originAllowed = false;
 
-    if (origin.startsWith("chrome-extension://")) {
+    if (
+      origin.startsWith("chrome-extension://") ||
+      origin.startsWith("extension://") ||
+      origin.startsWith("moz-extension://")
+    ) {
       originAllowed = true;
     } else if (reqHost) {
       try {
-        originAllowed = new URL(origin).host === reqHost;
+        const originUrl = new URL(origin);
+        const originHost = originUrl.host;
+        const originHostname = originUrl.hostname;
+        const reqHostname = reqHost.replace(/:\d+$/, "");
+
+        originAllowed = originHost === reqHost || originHostname === reqHostname;
       } catch {
         originAllowed = false;
       }
@@ -49,6 +62,7 @@ export function safeCorsMiddleware(req: Request, res: Response, next: NextFuncti
 
     if (originAllowed) {
       res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
       res.setHeader("Vary", "Origin");
     }
   }
