@@ -207,3 +207,45 @@ test("dashboard assets: preview iframe sizes correctly and auto-resizes to conte
   );
   assert.doesNotMatch(dashboardJs, /'<script\s\+src="popup/, "the broken string-regex form must stay gone");
 });
+
+test("dashboard render & assets: Proxy Settings tab, multi-proxy table, modals and client APIs are present", () => {
+  const html = render(false);
+
+  // Navigation tab and container
+  assert.ok(html.includes('id="tabBtnProxySettings"'), "must render tabBtnProxySettings");
+  assert.ok(html.includes('data-i18n="tabBtnProxySettings"'), "must have data-i18n for tabBtnProxySettings");
+  assert.ok(html.includes('id="tab-proxy-settings"'), "must render tab-proxy-settings container");
+
+  // Proxy Registry Card & Table
+  assert.ok(html.includes('id="proxiesTable"'), "must render proxiesTable");
+  assert.ok(html.includes('id="proxiesTableBody"'), "must render proxiesTableBody");
+  assert.ok(html.includes('id="activePacDirectiveText"'), "must render active PAC directive indicator text");
+  assert.ok(html.includes('id="activeProxyBadge"'), "must render active proxy badge");
+
+  // 3x-ui and Modals
+  assert.ok(html.includes('id="rotInsecureTls"'), "must render insecure TLS toggle for 3x-ui");
+  assert.ok(html.includes('id="modalAdd3xui"'), "must render modalAdd3xui");
+  assert.ok(html.includes('id="add3xuiTag"'), "must render add3xuiTag input");
+  assert.ok(html.includes('id="add3xuiPreview"'), "must render add3xuiPreview");
+  assert.ok(html.includes('id="modalProxyForm"'), "must render modalProxyForm");
+  assert.ok(html.includes('id="proxyFormTag"'), "must render proxyFormTag");
+  assert.ok(html.includes('id="proxyFormProtocol"'), "must render proxyFormProtocol");
+  assert.ok(html.includes('id="proxyFormHost"'), "must render proxyFormHost");
+  assert.ok(html.includes('id="proxyFormPort"'), "must render proxyFormPort");
+
+  // Client JS functions in dashboard.js
+  assert.ok(dashboardJs.includes("function fetchProxies()"), "must declare fetchProxies");
+  assert.ok(dashboardJs.includes("function renderProxiesTable("), "must declare renderProxiesTable");
+  assert.ok(dashboardJs.includes("function activateProxy("), "must declare activateProxy");
+  assert.ok(dashboardJs.includes("function syncProxy("), "must declare syncProxy");
+  assert.ok(dashboardJs.includes("function deleteProxy("), "must declare deleteProxy");
+  assert.ok(dashboardJs.includes("function lookup3xuiInbound()"), "must declare lookup3xuiInbound");
+  assert.ok(dashboardJs.includes("function submitAdd3xuiProxy()"), "must declare submitAdd3xuiProxy");
+  assert.ok(dashboardJs.includes("function submitProxyForm()"), "must declare submitProxyForm");
+
+  // Translations
+  assert.ok(dashboardJs.includes("tabBtnProxySettings: 'Proxy Settings'"), "EN translation for tabBtnProxySettings");
+  assert.ok(dashboardJs.includes("titleProxyRegistry: 'Proxy Registry'"), "EN translation for titleProxyRegistry");
+  assert.ok(dashboardJs.includes("titleProxyRegistry: 'Реестр прокси-серверов'"), "RU translation for titleProxyRegistry");
+});
+

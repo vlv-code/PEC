@@ -149,7 +149,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder">Extension Constructor Studio</button>
       <button id="tabBtnFleet" class="tab-btn" onclick="switchTab('fleet')" data-i18n="tabBtnFleet">Fleet & Target Assignment</button>
       <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo">GPO Deployment</button>
-      <button id="tabBtnRotation" class="tab-btn" onclick="switchTab('rotation')" data-i18n="tabBtnRotation">3x-ui API & Scheduler</button>
+      <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings">Proxy Settings</button>
       <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs">Audit & Tester</button>
     </div>
 
@@ -619,8 +619,53 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       </div>
     </div>
 
-    <!-- ==================== TAB 5: 3X-UI ROTATION ==================== -->
-    <div id="tab-rotation" class="tab-pane">
+    <!-- ==================== TAB 5: PROXY SETTINGS & 3X-UI ==================== -->
+    <div id="tab-proxy-settings" class="tab-pane">
+      <!-- 1. Upstream Proxy Nodes Registry Card -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h2>
+          <span data-i18n="titleProxyRegistry">Proxy Registry</span>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" id="btnAdd3xui" onclick="openAdd3xuiModal()" class="btn-secondary" style="font-size: 12px;" data-i18n="btnAdd3xui">+ Add from 3x-ui by Tag</button>
+            <button type="button" id="btnAddManual" onclick="openAddManualModal()" style="font-size: 12px;" data-i18n="btnAddManual">+ Add Manual Proxy</button>
+          </div>
+        </h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;" data-i18n="subProxyRegistry">
+          Manage upstream corporate proxy servers, tag-based sync with 3x-ui inbounds, and manual nodes.
+        </p>
+
+        <!-- Active PAC Directive Indicator Banner -->
+        <div id="activePacDirectiveBanner" style="background: var(--card-inner); border: 1px solid var(--border); border-left: 4px solid var(--primary); padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px;">
+          <div>
+            <strong data-i18n="lblActivePacDirective">Active PAC Directive:</strong>
+            <code id="activePacDirectiveText" style="color: var(--primary); font-weight: 700; margin-left: 6px;">DIRECT</code>
+          </div>
+          <span id="activeProxyBadge" class="badge badge-offline" data-i18n="badgeNoActiveProxy">No Active Proxy</span>
+        </div>
+
+        <!-- Table Container -->
+        <div class="table-container">
+          <table id="proxiesTable">
+            <thead>
+              <tr>
+                <th style="width: 70px; text-align: center;" data-i18n="thProxyActive">Active</th>
+                <th data-i18n="thProxyTagName">Tag / Name</th>
+                <th data-i18n="thProxyType">Type</th>
+                <th data-i18n="thProxyProtocol">Protocol</th>
+                <th data-i18n="thProxyHostPort">Host : Port</th>
+                <th data-i18n="thProxyUser">User</th>
+                <th data-i18n="thProxyStatus">Status</th>
+                <th style="text-align: right;" data-i18n="thProxyActions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="proxiesTableBody">
+              <tr><td colspan="8" style="text-align: center; color: var(--text-muted);" data-i18n="txtNoProxies">Loading proxies...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 2. 3x-ui Connection & Rotation Scheduler (grid-2) -->
       <div class="grid-2">
         <div class="card">
           <h2 data-i18n="title3xuiCreds">3x-ui API Credentials & Timing Scheduler</h2>
@@ -660,6 +705,11 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
               </select>
             </div>
           </div>
+
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 8px; text-transform: none; font-weight: normal; cursor: pointer;">
+            <input type="checkbox" id="rotInsecureTls" style="width: auto; margin-bottom: 0;" />
+            <span data-i18n="lblInsecureTls">Allow Insecure / Self-Signed TLS</span>
+          </label>
 
           <div style="display: flex; gap: 8px; margin-top: 10px;">
             <button onclick="saveRotationConfig()" data-i18n="btnSaveScheduler">Save Scheduler Settings</button>
@@ -779,6 +829,104 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
       <div style="display: flex; gap: 8px;">
         <button id="credSubmitBtn" style="flex: 1;">Сохранить</button>
         <button id="credCancelBtn" class="btn-secondary" style="flex: 1;">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add Proxy from 3x-ui by Tag -->
+  <div id="modalAdd3xui" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
+    <div style="max-width: 500px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 24px;">
+      <h2 style="margin: 0 0 12px 0; font-size: 17px;" data-i18n="titleAdd3xui">Add Proxy from 3x-ui by Inbound Tag</h2>
+      <p style="color: #94a3b8; font-size: 12px; margin: 0 0 16px 0;" data-i18n="subAdd3xui">Enter inbound tag configured in your 3x-ui panel to fetch and link credentials.</p>
+
+      <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblAdd3xuiTag">Inbound Tag</label>
+      <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <input type="text" id="add3xuiTag" placeholder="corp-socks" data-i18n-ph="phAdd3xuiTag" style="flex: 1; margin-bottom: 0;" />
+        <button type="button" id="btnAdd3xuiFetch" onclick="lookup3xuiInbound()" class="btn-secondary" style="font-size: 12px; white-space: nowrap;" data-i18n="btnFetchInbound">Fetch Info</button>
+      </div>
+
+      <!-- Inbound preview box -->
+      <div id="add3xuiPreview" style="background: var(--card-inner); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: var(--text-muted);">
+        <span data-i18n="txtInboundPreviewPlaceholder">Click "Fetch Info" to preview inbound parameters before adding.</span>
+      </div>
+
+      <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblAdd3xuiName">Friendly Name (optional)</label>
+      <input type="text" id="add3xuiName" placeholder="Production SOCKS5 Node" data-i18n-ph="phAdd3xuiName" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+
+      <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblAdd3xuiHost">Host Override (optional)</label>
+      <input type="text" id="add3xuiHost" placeholder="10.0.0.1 or proxy.corp.local" data-i18n-ph="phAdd3xuiHost" style="width: 100%; box-sizing: border-box; margin-bottom: 14px;" />
+
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">
+        <input type="checkbox" id="add3xuiIsActive" checked style="width: auto; margin-bottom: 0;" />
+        <span data-i18n="lblMakeActive">Make this proxy active immediately</span>
+      </label>
+
+      <div id="add3xuiError" style="display: none; color: #ef4444; font-size: 12px; margin-bottom: 12px;"></div>
+
+      <div style="display: flex; gap: 8px;">
+        <button type="button" id="btnAdd3xuiSubmit" onclick="submitAdd3xuiProxy()" style="flex: 1;" data-i18n="btnAdd3xuiSubmit">Add 3x-ui Proxy</button>
+        <button type="button" onclick="closeAdd3xuiModal()" class="btn-secondary" style="flex: 1;" data-i18n="btnCancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add Manual or Edit Proxy Form -->
+  <div id="modalProxyForm" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
+    <div style="max-width: 480px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 24px;">
+      <h2 id="proxyFormTitle" style="margin: 0 0 12px 0; font-size: 17px;" data-i18n="titleAddManualProxy">Add Manual Proxy Node</h2>
+      <input type="hidden" id="proxyFormId" value="" />
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+        <div>
+          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyTag">Tag</label>
+          <input type="text" id="proxyFormTag" placeholder="manual-us-1" data-i18n-ph="phProxyTag" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+        </div>
+        <div>
+          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyName">Friendly Name</label>
+          <input type="text" id="proxyFormName" placeholder="Backup US Gateway" data-i18n-ph="phProxyName" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 10px; margin-bottom: 10px;">
+        <div>
+          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyProtocol">Protocol</label>
+          <select id="proxyFormProtocol" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
+            <option value="socks5">SOCKS5</option>
+            <option value="http">HTTP</option>
+            <option value="https">HTTPS</option>
+          </select>
+        </div>
+        <div>
+          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyHost">Host / IP</label>
+          <input type="text" id="proxyFormHost" placeholder="192.168.1.100" data-i18n-ph="phProxyHost" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+        </div>
+        <div>
+          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyPort">Port</label>
+          <input type="number" id="proxyFormPort" placeholder="1080" data-i18n-ph="phProxyPort" min="1" max="65535" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+        <div>
+          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyUser">Username</label>
+          <input type="text" id="proxyFormUser" placeholder="proxyuser" data-i18n-ph="phProxyUser" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+        </div>
+        <div>
+          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyPass">Password</label>
+          <input type="password" id="proxyFormPass" placeholder="••••••••" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+        </div>
+      </div>
+
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">
+        <input type="checkbox" id="proxyFormIsActive" checked style="width: auto; margin-bottom: 0;" />
+        <span data-i18n="lblMakeActive">Make this proxy active immediately</span>
+      </label>
+
+      <div id="proxyFormError" style="display: none; color: #ef4444; font-size: 12px; margin-bottom: 12px;"></div>
+
+      <div style="display: flex; gap: 8px;">
+        <button type="button" id="btnProxyFormSubmit" onclick="submitProxyForm()" style="flex: 1;" data-i18n="btnSaveProxy">Save Proxy</button>
+        <button type="button" id="btnProxyFormCancel" onclick="closeProxyFormModal()" class="btn-secondary" style="flex: 1;" data-i18n="btnCancel">Cancel</button>
       </div>
     </div>
   </div>

@@ -47,6 +47,7 @@ async function withServer<T>(fn: (base: string) => Promise<T>): Promise<T> {
   initDashboardCredentials({ username: "admin", fallbackPassword: TEST_ADMIN_TOKEN });
 
   const server = buildApp().listen(0);
+  await new Promise((resolve) => server.once("listening", resolve));
   const port = (server.address() as AddressInfo).port;
   try {
     return await fn(`http://127.0.0.1:${port}`);
