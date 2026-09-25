@@ -135,3 +135,21 @@ export interface ExtensionBuildInfo {
   lastPackTime?: string;
   uiMode?: "stealth" | "popup";
 }
+
+export interface ProxyNode {
+  id: string;                      // Unique ID (crypto.randomBytes(4).toString("hex") or uuid)
+  tag: string;                     // Inbound tag or manual custom tag
+  name: string;                    // Friendly display name
+  type: "3x-ui" | "manual";        // Source type
+  protocol: "socks5" | "http" | "https";
+  host: string;                    // Proxy IP or FQDN
+  port: number;                    // Listen port (1-65535)
+  username?: string;               // Auth username
+  password?: string;               // Auth password
+  isActive: boolean;               // If true, feeds PAC and active creds
+  lastSync?: string;               // ISO timestamp of last sync / rotation
+  status?: "OK" | "ERROR" | "IDLE";
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
