@@ -4,6 +4,7 @@ import { ProxyConfiguration, ExtensionInstance } from "./types.js";
 import { resolveProfileForInstance, getProfileById } from "./routing.js";
 import { writeJsonAtomic } from "./jsonStore.js";
 import { getProxyConfigPath, getInstancesMetaPath } from "./storage.js";
+import { getActiveProxy } from "./proxies.js";
 
 const CONFIG_PATH = getProxyConfigPath();
 const INSTANCES_META_PATH = getInstancesMetaPath();
@@ -34,6 +35,19 @@ try {
 }
 
 export function getProxyConfig(): ProxyConfiguration {
+  try {
+    const active = getActiveProxy();
+    if (active) {
+      return {
+        ...currentConfig,
+        protocol: active.protocol,
+        host: active.host,
+        port: active.port,
+      };
+    }
+  } catch {
+    // If store is unreadable or during circular bootstrap, fall back to currentConfig
+  }
   return { ...currentConfig };
 }
 
@@ -153,7 +167,7 @@ export function registerHeartbeat(data: {
     lastSync: now,
     syncCount: (existing?.syncCount || 0) + 1,
     status: "ONLINE",
-    activeProxyMode: data.activeProxyMode || existing?.activeProxyMode || currentConfig.protocol,
+    activeProxyMode: data.activeProxyMode || existing?.activeProxyMode || getProxyConfig().protocol,
     group: effectiveGroup,
     assignedProfileId: effectiveProfileId,
     appliedProfileName: resolvedProfile?.name || "Default Profile",

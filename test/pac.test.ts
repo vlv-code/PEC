@@ -1,11 +1,43 @@
 import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert";
+import fs from "node:fs";
+import express from "express";
+import type { AddressInfo } from "node:net";
 import { RoutingProfile, RoutingRule } from "../src/types.js";
 import { getAllProfiles, saveProfile, resolveProfileForInstance, generatePacScript, GEO_PRESETS, deleteProfile } from "../src/routing.js";
 import { getProxyConfig } from "../src/instances.js";
+import { createProxy, setActiveProxy } from "../src/proxies.js";
+import { getProxiesStorePath } from "../src/storage.js";
+import { readCurrentCreds } from "../src/rotate.js";
+import { createCredsRouter } from "../src/routes/credsRoutes.js";
+import { TEST_TOKEN } from "./helpers/setup.js";
 
 const PROXY_CFG = getProxyConfig();
+
+function clearProxiesStore() {
+  const storePath = getProxiesStorePath();
+  if (fs.existsSync(storePath)) {
+    fs.unlinkSync(storePath);
+  }
+}
+
+function buildApp() {
+  const app = express();
+  app.use(express.json());
+  app.use(createCredsRouter(() => TEST_TOKEN));
+  return app;
+}
+
+async function withServer<T>(fn: (base: string) => Promise<T>): Promise<T> {
+  const server = buildApp().listen(0);
+  const port = (server.address() as AddressInfo).port;
+  try {
+    return await fn(`http://127.0.0.1:${port}`);
+  } finally {
+    server.close();
+  }
+}
 
 function makeProfile(overrides: Partial<RoutingProfile> & { rules: RoutingRule[] }): RoutingProfile {
   return {
@@ -221,3 +253,137 @@ test("PAC: fuzzed rule and profile names never reach executable PAC lines", () =
     assert.ok(!executable.includes('return "PROXY evil'), `payload #${i} injected a proxy directive`);
   }
 });
+
+test("PAC: directives dynamically reflect active proxy node (SOCKS5 -> HTTP -> HTTPS)", () => {
+  clearProxiesStore();
+  const profile = makeProfile({
+    name: "Full Proxy Profile",
+    defaultPolicy: "proxy",
+    rules: [],
+  });
+
+  // 1. Create and activate SOCKS5 proxy
+  createProxy({
+    tag: "node-socks",
+    name: "SOCKS Node",
+    protocol: "socks5",
+    host: "10.0.0.50",
+    port: 1080,
+    isActive: true,
+  });
+
+  let pac = generatePacScript(profile, PROXY_CFG);
+  assert.match(pac, /return "SOCKS5 10\.0\.0\.50:1080; DIRECT";/);
+
+  // 2. Create and activate HTTP proxy
+  const httpNode = createProxy({
+    tag: "node-http",
+    name: "HTTP Node",
+    protocol: "http",
+    host: "10.0.0.60",
+    port: 8080,
+    isActive: true,
+  });
+  setActiveProxy(httpNode.id);
+
+  pac = generatePacScript(profile, PROXY_CFG);
+  assert.match(pac, /return "PROXY 10\.0\.0\.60:8080; DIRECT";/);
+
+  // 3. Create and activate HTTPS proxy
+  const httpsNode = createProxy({
+    tag: "node-https",
+    name: "HTTPS Node",
+    protocol: "https",
+    host: "10.0.0.70",
+    port: 8443,
+    isActive: true,
+  });
+  setActiveProxy(httpsNode.id);
+
+  pac = generatePacScript(profile, PROXY_CFG);
+  assert.match(pac, /return "HTTPS 10\.0\.0\.70:8443; DIRECT";/);
+
+  // 4. Kill-switch still forces DIRECT regardless of active proxy
+  const killPac = generatePacScript(profile, { ...PROXY_CFG, killSwitch: true });
+  assert.match(killPac, /Kill-Switch Active/);
+  assert.match(killPac, /return "DIRECT";/);
+
+  clearProxiesStore();
+});
+
+test("Fleet sync: /creds and readCurrentCreds return active proxy credentials", async () => {
+  clearProxiesStore();
+  createProxy({
+    tag: "auth-proxy",
+    name: "Auth Node",
+    protocol: "socks5",
+    host: "10.0.0.99",
+    port: 1080,
+    username: "active_user_abc",
+    password: "active_password_xyz",
+    isActive: true,
+  });
+
+  // Verify readCurrentCreds
+  const creds = readCurrentCreds();
+  assert.ok(creds, "creds should be readable");
+  assert.strictEqual(creds?.user, "active_user_abc");
+  assert.strictEqual(creds?.pass, "active_password_xyz");
+
+  // Verify /creds endpoint
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/creds`, {
+      headers: { "x-ext-token": TEST_TOKEN },
+    });
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.user, "active_user_abc");
+    assert.strictEqual(body.pass, "active_password_xyz");
+  });
+
+  clearProxiesStore();
+});
+
+test("Fleet sync: /api/sync and /proxy.pac return active proxy configuration", async () => {
+  clearProxiesStore();
+  createProxy({
+    tag: "sync-node",
+    name: "Sync Node",
+    protocol: "https",
+    host: "10.20.30.40",
+    port: 9443,
+    username: "fleet_user",
+    password: "fleet_password",
+    isActive: true,
+  });
+
+  await withServer(async (base) => {
+    // 1. /api/sync
+    const syncRes = await fetch(`${base}/api/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-ext-token": TEST_TOKEN,
+      },
+      body: JSON.stringify({ instanceId: "inst_test_sync" }),
+    });
+    assert.strictEqual(syncRes.status, 200);
+    const syncBody = await syncRes.json();
+    assert.strictEqual(syncBody.ok, true);
+    assert.strictEqual(syncBody.config.protocol, "https");
+    assert.strictEqual(syncBody.config.host, "10.20.30.40");
+    assert.strictEqual(syncBody.config.port, 9443);
+    assert.strictEqual(syncBody.creds.user, "fleet_user");
+    assert.strictEqual(syncBody.creds.pass, "fleet_password");
+
+    // 2. /proxy.pac
+    const pacRes = await fetch(`${base}/proxy.pac`);
+    assert.strictEqual(pacRes.status, 200);
+    const pacText = await pacRes.text();
+    // Default profile has preset:ai_services -> proxy
+    assert.match(pacText, /HTTPS 10\.20\.30\.40:9443; DIRECT/);
+  });
+
+  clearProxiesStore();
+});
+
