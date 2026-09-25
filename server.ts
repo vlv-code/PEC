@@ -131,7 +131,7 @@ app.use(express.urlencoded({ extended: true }));
 // authenticates there); /api/ip-echo is a diagnostic echo endpoint used by
 // extension popups; /api/auth/login|session power the dashboard login.
 const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token", createCookieAuthenticator());
-const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync", "/auth/login", "/auth/session"]);
+const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync", "/auth/login", "/auth/session", "/extension/download-zip"]);
 app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   if (PUBLIC_API_PATHS.has(req.path)) {
     return next();
@@ -158,6 +158,9 @@ app.use(
       if (filePath.endsWith(".crx")) {
         res.setHeader("Content-Type", "application/x-chrome-extension");
         res.setHeader("Content-Disposition", 'attachment; filename="extension.crx"');
+      } else if (filePath.endsWith(".zip")) {
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Disposition", 'attachment; filename="corp-proxy-extension.zip"');
       } else if (filePath.endsWith(".xml")) {
         res.setHeader("Content-Type", "application/xml; charset=utf-8");
       }

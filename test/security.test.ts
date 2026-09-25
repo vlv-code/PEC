@@ -7,6 +7,7 @@ import { timingSafeEqualString, createTokenAuthMiddleware, safeCorsMiddleware, r
 import { createSystemRouter } from "../src/routes/systemRoutes.js";
 import { createInstancesRouter } from "../src/routes/instancesRoutes.js";
 import { createCredsRouter } from "../src/routes/credsRoutes.js";
+import { createBuilderRouter } from "../src/routes/builderRoutes.js";
 import { TEST_TOKEN, TEST_ADMIN_TOKEN } from "./helpers/setup.js";
 
 test("timingSafeEqualString compares digests (no length leak, safe on any input)", () => {
@@ -118,7 +119,7 @@ test("HTTP: two-token access matrix - fleet token on admin routes, admin token o
   const app = express();
   app.use(express.json());
   const adminAuth = createTokenAuthMiddleware(() => TEST_ADMIN_TOKEN, "x-admin-token");
-  const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync"]);
+  const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync", "/extension/download-zip"]);
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     return adminAuth(req, res, next);
@@ -126,6 +127,7 @@ test("HTTP: two-token access matrix - fleet token on admin routes, admin token o
   app.use(createSystemRouter({ port: 3000, getFleetToken: () => TEST_TOKEN, defaultFleetToken: "default-x", adminTokenConfigured: true, credsStorePath: "/tmp/x.json" }));
   app.use(createInstancesRouter());
   app.use(createCredsRouter(() => TEST_TOKEN));
+  app.use(createBuilderRouter(() => TEST_TOKEN, () => TEST_ADMIN_TOKEN));
 
   const server = app.listen(0);
   const port = (server.address() as AddressInfo).port;
@@ -174,6 +176,10 @@ test("HTTP: two-token access matrix - fleet token on admin routes, admin token o
     // /api/ip-echo stays public (used by extension popups)
     const echo = await fetch(`${base}/api/ip-echo`);
     assert.strictEqual(echo.status, 200);
+
+    // /api/extension/download-zip stays public (downloadable without token in browser)
+    const zipRes = await fetch(`${base}/api/extension/download-zip`);
+    assert.strictEqual(zipRes.status, 200);
   } finally {
     server.close();
   }

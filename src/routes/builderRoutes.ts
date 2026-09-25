@@ -91,7 +91,8 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
   });
 
   router.get("/api/extension/download-zip", (req: Request, res: Response) => {
-    const zipPath = path.resolve("./dist/updates/extension.zip");
+    const updatesDir = path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
+    const zipPath = path.join(updatesDir, "extension.zip");
     if (!fs.existsSync(zipPath)) {
       packageExtension(getBaseUrl(req));
     }

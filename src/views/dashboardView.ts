@@ -538,7 +538,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           <div style="display: flex; gap: 8px;">
             <button onclick="saveCurrentCodeFile()" class="btn-secondary" style="font-size: 12px;" data-i18n="btnSaveCode">Save File Edits & Apply</button>
             <a href="/updates/extension.crx" class="btn" style="font-size: 12px;" data-i18n="btnDownloadCrx">Download .CRX</a>
-            <a href="/api/extension/download-zip" class="btn-secondary" style="font-size: 12px;" data-i18n="btnDownloadZip">Download .ZIP</a>
+            <a href="/api/extension/download-zip" download="corp-proxy-extension.zip" class="btn-secondary" style="font-size: 12px;" data-i18n="btnDownloadZip">Download .ZIP</a>
           </div>
         </div>
       </div>
@@ -600,7 +600,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           </div>
           <div style="margin-top: 16px;">
             <a href="/updates/extension.crx" class="btn" style="font-size: 13px;" data-i18n="btnDownloadCrxPkg">Download .CRX Package</a>
-            <a href="/api/extension/download-zip" class="btn-secondary" style="font-size: 13px; margin-left: 8px;" data-i18n="btnDownloadZipPkg">Download .ZIP</a>
+            <a href="/api/extension/download-zip" download="corp-proxy-extension.zip" class="btn-secondary" style="font-size: 13px; margin-left: 8px;" data-i18n="btnDownloadZipPkg">Download .ZIP</a>
           </div>
         </div>
 
