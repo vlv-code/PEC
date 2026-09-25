@@ -271,4 +271,27 @@ test("Proxy Repository: edge cases and error handling", () => {
   const masked = getAllProxies(true);
   const maskedC = masked.find((p) => p.id === c.id);
   assert.strictEqual(maskedC?.password, "");
+
+  // 7. updateProxy guarantees id and createdAt immutability
+  const originalCreatedAt = b.createdAt;
+  const updatedB = updateProxy(b.id, {
+    id: "hacked-id",
+    createdAt: "1970-01-01T00:00:00.000Z",
+    name: "Proxy B New Name",
+  } as any);
+  assert.strictEqual(updatedB.id, b.id, "Proxy id must be immutable");
+  assert.strictEqual(updatedB.createdAt, originalCreatedAt, "createdAt must be immutable");
+
+  // 8. Activating auth-less proxy clears credentials in current_creds.json
+  // First ensure creds exist from proxy with credentials
+  updateProxy(b.id, { username: "user-b", password: "pass-b", isActive: true });
+  const credsBefore = JSON.parse(fs.readFileSync(getCredsStorePath(), "utf-8"));
+  assert.strictEqual(credsBefore.user, "user-b");
+  assert.strictEqual(credsBefore.pass, "pass-b");
+
+  // Activate proxy c (which has no credentials)
+  setActiveProxy(c.id);
+  const credsAfter = JSON.parse(fs.readFileSync(getCredsStorePath(), "utf-8"));
+  assert.strictEqual(credsAfter.user, "");
+  assert.strictEqual(credsAfter.pass, "");
 });
