@@ -102,3 +102,25 @@ test("purity: the rendered background.js (placeholders substituted) parses as Ja
   assert.ok(bg.includes("chrome.storage.local"), "instanceId persistence must use chrome.storage.local");
   assert.ok(!bg.includes("ephemeralInstanceId"), "the old ephemeral module-level instanceId must be gone");
 });
+
+test("purity: extension html files must not contain inline event handlers (MV3 CSP compliance)", async () => {
+  const inlineEventRegex = /\son[a-z]+=/i;
+
+  // 1. Source popup.html
+  const sourceHtml = fs.readFileSync(path.join(REPO_ROOT, "extension", "popup.html"), "utf-8");
+  assert.ok(
+    !inlineEventRegex.test(sourceHtml),
+    "extension/popup.html must not contain inline event handlers (e.g. onclick=) which violate MV3 CSP"
+  );
+
+  // 2. Packaged popup.html in extension.zip
+  const { packageExtension } = await import("../src/packager.js");
+  packageExtension("https://purity-render.example.corp");
+  const zipPath = path.join(TEST_TMP_DIR, "updates", "extension.zip");
+  const AdmZip = (await import("adm-zip")).default;
+  const packagedHtml = new AdmZip(zipPath).readAsText("popup.html");
+  assert.ok(
+    !inlineEventRegex.test(packagedHtml),
+    "Packaged popup.html must not contain inline event handlers (e.g. onclick=) which violate MV3 CSP"
+  );
+});

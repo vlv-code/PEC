@@ -755,10 +755,10 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
   </header>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-conn" onclick="window.switchPopupTab('tab-conn')">${t.tabConn}</button>
-    <button class="tab-btn" data-tab="tab-rules" onclick="window.switchPopupTab('tab-rules')">${t.tabRules}</button>
-    <button class="tab-btn" data-tab="tab-diag" onclick="window.switchPopupTab('tab-diag')">${t.tabDiag}</button>
-    <button class="tab-btn" data-tab="tab-help" onclick="window.switchPopupTab('tab-help')">${t.tabHelp}</button>
+    <button class="tab-btn active" data-tab="tab-conn">${t.tabConn}</button>
+    <button class="tab-btn" data-tab="tab-rules">${t.tabRules}</button>
+    <button class="tab-btn" data-tab="tab-diag">${t.tabDiag}</button>
+    <button class="tab-btn" data-tab="tab-help">${t.tabHelp}</button>
   </div>
 
   <!-- TAB 1: Connection -->
