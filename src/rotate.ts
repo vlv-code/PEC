@@ -4,12 +4,9 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { RotationConfig, RotationHistoryItem } from "./types.js";
 import { writeJsonAtomic } from "./jsonStore.js";
+import { getCredsStorePath } from "./storage.js";
 
-const CREDS_STORE_DEFAULT = "./current_creds.json";
-
-export function getCredsStorePath(): string {
-  return path.resolve(process.env.CREDS_STORE || CREDS_STORE_DEFAULT);
-}
+export { getCredsStorePath };
 
 /**
  * Create the credentials store with a cryptographically random password if
