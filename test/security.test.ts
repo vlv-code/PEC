@@ -74,6 +74,7 @@ test("admin auth middleware: 401 without/with wrong token, pass-through with val
   app.get("/api/ping", (_req: Request, res: Response) => res.json({ ok: true }));
 
   const server = app.listen(0);
+  await new Promise((resolve) => server.once("listening", resolve));
   const port = (server.address() as AddressInfo).port;
   const base = `http://127.0.0.1:${port}`;
 
@@ -93,7 +94,10 @@ test("admin auth middleware: 401 without/with wrong token, pass-through with val
     const body = await ok.json();
     assert.strictEqual(body.ok, true);
   } finally {
-    server.close();
+    if (typeof (server as any).closeAllConnections === "function") {
+      (server as any).closeAllConnections();
+    }
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
 
