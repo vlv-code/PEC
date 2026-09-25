@@ -18,23 +18,30 @@ function buildApp() {
   return app;
 }
 
-async function withServer<T>(fn: (base: string) => Promise<T>): Promise<T> {
-  const app = buildApp();
-  let server: any;
-  const port = await new Promise<number>((resolve) => {
-    server = app.listen(0, "127.0.0.1", () => {
-      resolve((server.address() as AddressInfo).port);
-    });
-  });
-  try {
-    return await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    if (typeof server.closeAllConnections === "function") {
-      server.closeAllConnections();
-    }
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+let sharedBase = "";
+let serverInstance: any = null;
+
+async function getSharedBase(): Promise<string> {
+  if (!sharedBase) {
+    const app = buildApp();
+    serverInstance = app.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => serverInstance.once("listening", () => resolve()));
+    const port = (serverInstance.address() as AddressInfo).port;
+    sharedBase = `http://127.0.0.1:${port}`;
   }
+  return sharedBase;
 }
+
+async function withServer<T>(fn: (base: string) => Promise<T>): Promise<T> {
+  const base = await getSharedBase();
+  return await fn(base);
+}
+
+test.after(() => {
+  if (serverInstance) {
+    serverInstance.close();
+  }
+});
 
 function resetProxiesStore() {
   const storePath = getProxiesStorePath();

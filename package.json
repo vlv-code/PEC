@@ -9,7 +9,7 @@
     "pack:extension": "tsx scripts/pack-extension.ts",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 test/*.test.ts",
     "test:coverage": "tsx --test --experimental-test-coverage test/*.test.ts"
   },
   "dependencies": {
