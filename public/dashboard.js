@@ -60,7 +60,7 @@
         const res = await fetch('/api/auth/login', {
           method: 'POST',
           credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'pec-dashboard' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: u, password: v })
         });
         if (res.ok) {
