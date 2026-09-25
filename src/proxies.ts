@@ -30,12 +30,10 @@ function syncActiveProxyToConfigAndCreds(node: ProxyNode): void {
     port: node.port,
   });
 
-  if (node.username || node.password) {
-    atomicWriteCreds(getCredsStorePath(), {
-      user: node.username || "",
-      pass: node.password || "",
-    });
-  }
+  atomicWriteCreds(getCredsStorePath(), {
+    user: node.username || "",
+    pass: node.password || "",
+  });
 }
 
 export function getAllProxies(maskPasswords = false): ProxyNode[] {
@@ -61,13 +59,8 @@ export function getActiveProxy(): ProxyNode | undefined {
   return found ? { ...found } : undefined;
 }
 
-export type CreateProxyInput = Omit<ProxyNode, "id" | "createdAt" | "updatedAt"> & {
-  tag?: string;
-  name?: string;
-  type?: "3x-ui" | "manual";
-  protocol?: "socks5" | "http" | "https";
-  isActive?: boolean;
-};
+export type CreateProxyInput = Pick<ProxyNode, "host" | "port"> &
+  Partial<Omit<ProxyNode, "id" | "createdAt" | "updatedAt" | "host" | "port">>;
 
 export function createProxy(data: CreateProxyInput): ProxyNode {
   const cleanHost = validateHost(data.host);
@@ -148,6 +141,8 @@ export function updateProxy(id: string, updates: Partial<ProxyNode>): ProxyNode 
   const updatedNode: ProxyNode = {
     ...existing,
     ...cleanUpdates,
+    id: existing.id,
+    createdAt: existing.createdAt,
     isActive: willBeActive,
     updatedAt: new Date().toISOString(),
   };
