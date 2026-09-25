@@ -13,6 +13,8 @@ import { createBuilderRouter } from "./src/routes/builderRoutes.js";
 import { createRotationRouter } from "./src/routes/rotationRoutes.js";
 import { createSystemRouter } from "./src/routes/systemRoutes.js";
 import { createAuthRouter, createCookieAuthenticator } from "./src/routes/authRoutes.js";
+import { createProxiesRouter } from "./src/routes/proxiesRoutes.js";
+import { initDefaultProxyIfNeeded } from "./src/proxies.js";
 import { initDashboardCredentials } from "./src/auth.js";
 import { renderDashboardHtml } from "./src/views/dashboardView.js";
 
@@ -103,6 +105,7 @@ if (!fs.existsSync(CREDS_STORE)) {
   console.log(`[pec-server] Initializing credentials storage at ${CREDS_STORE}`);
   ensureCredsStore(CREDS_STORE);
 }
+initDefaultProxyIfNeeded();
 
 // Ensure RSA private/public key and base extension distribution package exist
 try {
@@ -175,6 +178,7 @@ app.use(createRoutingRouter());
 app.use(createInstancesRouter());
 app.use(createBuilderRouter(() => EXT_SHARED_TOKEN, () => ADMIN_TOKEN));
 app.use(createRotationRouter());
+app.use(createProxiesRouter());
 app.use(
   createSystemRouter({
     port: PORT,
