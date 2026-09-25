@@ -1,13 +1,13 @@
 import "./loadEnv.js";
 import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import { RotationConfig, RotationHistoryItem } from "./types.js";
 import { executeRotation, validateSafeEndpointUrl } from "./rotate.js";
 import { writeJsonAtomic } from "./jsonStore.js";
+import { getRotationConfigPath, getRotationHistoryPath } from "./storage.js";
 
-const ROTATION_CONFIG_FILE = path.resolve(process.env.ROTATION_CONFIG_PATH || "./rotation_config.json");
-const HISTORY_FILE = path.resolve(process.env.ROTATION_HISTORY_PATH || "./rotation_history.json");
+const ROTATION_CONFIG_FILE = getRotationConfigPath();
+const HISTORY_FILE = getRotationHistoryPath();
 
 const MIN_INTERVAL_MINUTES = 1;
 // setTimeout/setInterval accept delays only up to 2^31-1 ms (~24.8 days):

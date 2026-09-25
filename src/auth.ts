@@ -1,8 +1,8 @@
 import "./loadEnv.js";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
 import { writeJsonAtomic } from "./jsonStore.js";
+import { getDashboardAuthPath } from "./storage.js";
 
 /**
  * Server-side admin sessions and dashboard credentials.
@@ -148,7 +148,7 @@ export function requestIsSecure(req: { secure?: boolean; headers: Record<string,
 // password) and then changeable from the dashboard settings.
 // ---------------------------------------------------------------------------
 
-const AUTH_STORE_PATH = path.resolve(process.env.DASHBOARD_AUTH_PATH || "./dashboard_auth.json");
+const AUTH_STORE_PATH = getDashboardAuthPath();
 
 /** Where the credential store lives (exported for ops tooling and tests). */
 export function getDashboardAuthStorePath(): string {

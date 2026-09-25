@@ -7,11 +7,12 @@ import AdmZip from "adm-zip";
 import { ExtensionBuildInfo, ExtensionBuildConfig } from "./types.js";
 import { BACKGROUND_TEMPLATE, MANAGED_SCHEMA_TEMPLATE, renderBackgroundJs } from "./extensionTemplates.js";
 import { writeJsonAtomic } from "./jsonStore.js";
+import { getBuilderConfigPath } from "./storage.js";
 
 const EXTENSION_DIR = path.resolve(process.env.PEC_EXTENSION_DIR || "./extension");
 const KEY_PATH = path.join(EXTENSION_DIR, "key.pem");
 const UPDATES_DIR = path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
-const BUILD_CONFIG_PATH = path.resolve(process.env.BUILDER_CONFIG || "./extension_build_config.json");
+const BUILD_CONFIG_PATH = getBuilderConfigPath();
 
 export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
   name: "PEC - Proxy Extension Corp",

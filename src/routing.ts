@@ -1,11 +1,11 @@
 import "./loadEnv.js";
 import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import { GeoPreset, RoutingProfile, RoutingRule, ProxyConfiguration } from "./types.js";
 import { writeJsonAtomic } from "./jsonStore.js";
+import { getRoutingProfilesPath } from "./storage.js";
 
-const PROFILES_FILE = path.resolve(process.env.ROUTING_PROFILES_PATH || "./routing_profiles.json");
+const PROFILES_FILE = getRoutingProfilesPath();
 
 export const GEO_PRESETS: GeoPreset[] = [
   {

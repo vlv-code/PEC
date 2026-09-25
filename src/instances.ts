@@ -1,12 +1,12 @@
 import "./loadEnv.js";
 import fs from "node:fs";
-import path from "node:path";
 import { ProxyConfiguration, ExtensionInstance } from "./types.js";
 import { resolveProfileForInstance, getProfileById } from "./routing.js";
 import { writeJsonAtomic } from "./jsonStore.js";
+import { getProxyConfigPath, getInstancesMetaPath } from "./storage.js";
 
-const CONFIG_PATH = path.resolve(process.env.PROXY_CONFIG_PATH || "./proxy_config.json");
-const INSTANCES_META_PATH = path.resolve(process.env.INSTANCES_META_PATH || "./instances_meta.json");
+const CONFIG_PATH = getProxyConfigPath();
+const INSTANCES_META_PATH = getInstancesMetaPath();
 
 const DEFAULT_CONFIG: ProxyConfiguration = {
   enabled: true,

@@ -12,6 +12,8 @@ import path from "node:path";
  */
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pec-test-"));
 
+process.env.DATA_DIR = path.join(tmp, "data");
+process.env.PROXIES_STORE_PATH = path.join(tmp, "proxies.json");
 process.env.CREDS_STORE = path.join(tmp, "current_creds.json");
 process.env.DASHBOARD_AUTH_PATH = path.join(tmp, "dashboard_auth.json");
 process.env.PROXY_CONFIG_PATH = path.join(tmp, "proxy_config.json");
