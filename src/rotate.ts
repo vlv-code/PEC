@@ -202,11 +202,169 @@ function panelApiHeaders(auth: { cookie: string; csrfToken: string | null }): Re
   };
 }
 
+export async function sync3xuiInboundByTag(params: {
+  panelUrl: string;
+  adminUser: string;
+  adminPass: string;
+  tag: string;
+  rotatePassword?: boolean;
+  timeoutSec?: number;
+}): Promise<{
+  ok: boolean;
+  inboundId?: number;
+  tag?: string;
+  remark?: string;
+  protocol?: "socks5" | "http" | "https";
+  port?: number;
+  username?: string;
+  password?: string;
+  message: string;
+}> {
+  const urlCheck = validateSafeEndpointUrl(params.panelUrl);
+  if (!urlCheck.valid) {
+    return { ok: false, message: `SSRF Security Check Failed: ${urlCheck.error}` };
+  }
+
+  const panel = params.panelUrl.replace(/\/+$/, "");
+  const timeoutMs = (params.timeoutSec || 10) * 1000;
+
+  try {
+    const auth = await panelLogin(panel, params.adminUser, params.adminPass, timeoutMs);
+
+    // Fetch inbounds
+    const inboundsRes = await fetch(`${panel}/panel/api/inbounds/list`, {
+      headers: panelApiHeaders(auth),
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    assertNoRedirect(inboundsRes, "inbounds list");
+    if (!inboundsRes.ok) {
+      return { ok: false, message: `Failed to list inbounds: HTTP ${inboundsRes.status}` };
+    }
+
+    const inboundsData = await inboundsRes.json();
+    const inbounds: Array<{
+      id: number;
+      tag?: string;
+      remark?: string;
+      protocol?: string;
+      port?: number;
+      settings?: string | Record<string, unknown>;
+      streamSettings?: string | Record<string, unknown>;
+    }> = inboundsData.obj || [];
+
+    let target = inbounds.find((i) => i.tag === params.tag);
+    if (!target) {
+      target = inbounds.find((i) => i.remark === params.tag);
+    }
+    if (!target) {
+      return { ok: false, message: `Inbound with tag '${params.tag}' not found` };
+    }
+
+    // Parse settings
+    let settings: any = {};
+    if (typeof target.settings === "string") {
+      try {
+        settings = JSON.parse(target.settings);
+      } catch {
+        settings = {};
+      }
+    } else if (typeof target.settings === "object" && target.settings !== null) {
+      settings = target.settings;
+    }
+
+    const accounts = Array.isArray(settings.accounts) ? settings.accounts : [];
+    const user = accounts[0]?.user;
+    const pass = accounts[0]?.pass;
+
+    // Protocol mapping
+    let streamSettings: any = {};
+    if (typeof target.streamSettings === "string") {
+      try {
+        streamSettings = JSON.parse(target.streamSettings);
+      } catch {
+        streamSettings = {};
+      }
+    } else if (typeof target.streamSettings === "object" && target.streamSettings !== null) {
+      streamSettings = target.streamSettings;
+    }
+
+    let protocol: "socks5" | "http" | "https" = "socks5";
+    if (streamSettings?.security === "tls") {
+      protocol = "https";
+    } else if (target.protocol === "socks") {
+      protocol = "socks5";
+    } else if (target.protocol === "http") {
+      protocol = "http";
+    } else if (target.protocol === "socks5" || target.protocol === "https") {
+      protocol = target.protocol;
+    } else {
+      protocol = "socks5";
+    }
+
+    if (params.rotatePassword) {
+      if (!accounts || accounts.length === 0) {
+        return { ok: false, message: "Inbound has no accounts" };
+      }
+
+      const newPassword = crypto.randomBytes(18).toString("base64url");
+      settings.accounts[0].pass = newPassword;
+      target.settings = typeof target.settings === "string" ? JSON.stringify(settings) : settings;
+
+      const updateRes = await fetch(`${panel}/panel/api/inbounds/update/${target.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...panelApiHeaders(auth) },
+        body: JSON.stringify(target),
+        redirect: "manual",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      assertNoRedirect(updateRes, "inbound update");
+
+      if (!updateRes.ok) {
+        return { ok: false, message: `3x-ui inbound update failed: HTTP ${updateRes.status}` };
+      }
+
+      const updateData = await updateRes.json().catch(() => ({}));
+      if (updateData && updateData.success === false) {
+        return { ok: false, message: `3x-ui inbound update rejected: ${updateData.msg || "Unknown error"}` };
+      }
+
+      return {
+        ok: true,
+        inboundId: target.id,
+        tag: target.tag,
+        remark: target.remark,
+        protocol,
+        port: target.port,
+        username: user,
+        password: newPassword,
+        message: "Rotated successfully",
+      };
+    }
+
+    return {
+      ok: true,
+      inboundId: target.id,
+      tag: target.tag,
+      remark: target.remark,
+      protocol,
+      port: target.port,
+      username: user,
+      password: pass,
+      message: "Inbound fetched successfully",
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: msg };
+  }
+}
+
 export async function test3xuiConnection(config: {
   panelUrl: string;
   adminUser: string;
   adminPass: string;
-  inboundRemark: string;
+  inboundRemark?: string;
+  inboundTag?: string;
   timeoutSec?: number;
 }): Promise<{ ok: boolean; message: string; inboundFound?: boolean; inboundId?: number }> {
   const urlCheck = validateSafeEndpointUrl(config.panelUrl);
@@ -232,22 +390,35 @@ export async function test3xuiConnection(config: {
     }
 
     const inboundsData = await inboundsRes.json();
-    const inbounds: Array<{ id: number; remark?: string; protocol?: string }> = inboundsData.obj || [];
-    const target = inbounds.find((i) => i.remark === config.inboundRemark);
+    const inbounds: Array<{ id: number; tag?: string; remark?: string; protocol?: string }> = inboundsData.obj || [];
+
+    let target = undefined;
+    const targetTag = config.inboundTag?.trim();
+    const targetRemark = config.inboundRemark?.trim();
+
+    if (targetTag) {
+      target = inbounds.find((i) => i.tag === targetTag) || inbounds.find((i) => i.remark === targetTag);
+    }
+    if (!target && targetRemark) {
+      target = inbounds.find((i) => i.tag === targetRemark) || inbounds.find((i) => i.remark === targetRemark);
+    }
 
     if (!target) {
+      const searchKey = targetTag || targetRemark || "";
+      const label = targetTag ? `tag/remark "${searchKey}"` : `remark "${searchKey}"`;
       return {
         ok: true,
         inboundFound: false,
-        message: `Connected successfully, but inbound with remark "${config.inboundRemark}" was not found (found ${inbounds.length} inbounds).`,
+        message: `Connected successfully, but inbound with ${label} was not found (found ${inbounds.length} inbounds).`,
       };
     }
 
+    const displayName = target.remark || target.tag || String(target.id);
     return {
       ok: true,
       inboundFound: true,
       inboundId: target.id,
-      message: `Connected successfully to 3x-ui! Found inbound "${target.remark}" (id: ${target.id}, protocol: ${target.protocol || "http"}).`,
+      message: `Connected successfully to 3x-ui! Found inbound "${displayName}" (id: ${target.id}, protocol: ${target.protocol || "http"}).`,
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -259,7 +430,9 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
   const panel = customConfig?.panelUrl || process.env.XUI_PANEL_URL;
   const xuiUser = customConfig?.adminUser || process.env.XUI_ADMIN_USER;
   const xuiPass = customConfig?.adminPass || process.env.XUI_ADMIN_PASS;
+  const inboundTag = customConfig?.inboundTag || process.env.XUI_INBOUND_TAG;
   const inboundRemark = customConfig?.inboundRemark || process.env.XUI_INBOUND_REMARK || "squid-in";
+  const targetTag = inboundTag || inboundRemark;
   const timeoutMs = 10000;
   const credsStorePath = getCredsStorePath();
 
@@ -277,54 +450,36 @@ export async function executeRotation(customConfig?: Partial<RotationConfig>): P
     let failureReason = "";
 
     try {
-      const ssrfCheck = validateSafeEndpointUrl(panelUrl);
-      if (!ssrfCheck.valid) {
-        throw new Error(`SSRF Security Check Failed: ${ssrfCheck.error}`);
-      }
-
-      const cleanPanel = panelUrl.replace(/\/+$/, "");
-      const auth = await panelLogin(cleanPanel, xuiUser as string, xuiPass as string, timeoutMs);
-
-      // Fetch inbounds
-      const inboundsRes = await fetch(`${cleanPanel}/panel/api/inbounds/list`, {
-        headers: panelApiHeaders(auth),
-        redirect: "manual",
-        signal: AbortSignal.timeout(timeoutMs),
+      const syncResult = await sync3xuiInboundByTag({
+        panelUrl,
+        adminUser: xuiUser as string,
+        adminPass: xuiPass as string,
+        tag: targetTag,
+        rotatePassword: true,
+        timeoutSec: Math.floor(timeoutMs / 1000),
       });
-      assertNoRedirect(inboundsRes, "inbounds list");
-      const inboundsData = await inboundsRes.json();
-      const inbounds = inboundsData.obj || [];
-      const target = inbounds.find((i: { remark?: string }) => i.remark === inboundRemark);
 
-      if (!target) {
-        throw new Error(`Inbound '${inboundRemark}' not found in 3x-ui panel`);
+      if (!syncResult.ok) {
+        throw new Error(syncResult.message);
       }
 
-      const settings = typeof target.settings === "string" ? JSON.parse(target.settings) : target.settings;
-      if (!settings.accounts || !settings.accounts[0]) {
-        throw new Error(`Inbound '${inboundRemark}' has no accounts in settings`);
-      }
-
-      // Generate secure 24-character random password
-      const newPassword = crypto.randomBytes(18).toString("base64url");
-      const username = settings.accounts[0].user || "corp-user";
-      settings.accounts[0].pass = newPassword;
-      target.settings = JSON.stringify(settings);
-
-      const updateRes = await fetch(`${cleanPanel}/panel/api/inbounds/update/${target.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...panelApiHeaders(auth) },
-        body: JSON.stringify(target),
-        redirect: "manual",
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      assertNoRedirect(updateRes, "inbound update");
-
-      if (!updateRes.ok) {
-        throw new Error(`3x-ui inbound update failed: HTTP ${updateRes.status}`);
-      }
+      const username = syncResult.username || "corp-user";
+      const newPassword = syncResult.password!;
 
       atomicWriteCreds(credsStorePath, { user: username, pass: newPassword });
+
+      try {
+        const { getActiveProxy, updateProxy } = await import("./proxies.js");
+        const activeProxy = getActiveProxy();
+        if (activeProxy && activeProxy.type === "3x-ui") {
+          updateProxy(activeProxy.id, {
+            password: newPassword,
+            lastSync: new Date().toISOString(),
+          });
+        }
+      } catch (proxyErr) {
+        console.warn("[rotate] Failed to sync rotated password to active proxy node:", proxyErr);
+      }
 
       return {
         id: crypto.randomBytes(4).toString("hex"),
