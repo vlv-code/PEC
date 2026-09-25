@@ -38,6 +38,7 @@ const DEFAULT_CONFIG: RotationConfig = {
   adminUser: process.env.XUI_ADMIN_USER || "admin",
   adminPass: process.env.XUI_ADMIN_PASS || "",
   inboundRemark: process.env.XUI_INBOUND_REMARK || "squid-in",
+  inboundTag: process.env.XUI_INBOUND_TAG || undefined,
   insecureSkipVerify: process.env.XUI_INSECURE_SKIP_VERIFY === "true",
   lastStatus: "Idle",
 };

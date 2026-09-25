@@ -2,7 +2,7 @@ import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { executeRotation, atomicWriteCreds, getCredsStorePath } from "../src/rotate.js";
+import { executeRotation, atomicWriteCreds, getCredsStorePath, sync3xuiInboundByTag, test3xuiConnection } from "../src/rotate.js";
 
 /**
  * The rotation history file must be seeded BEFORE the scheduler module loads
@@ -311,3 +311,398 @@ test("test3xuiConnection: legacy 3x-ui panel without CSRF (404 fallback)", async
     await close();
   }
 });
+
+test("sync3xuiInboundByTag: read-only lookup by tag and protocol mapping", async () => {
+  const { withHttpServer } = await import("./helpers/http-server.js");
+
+  const inbounds = [
+    {
+      id: 101,
+      tag: "socks-inbound",
+      remark: "primary-socks",
+      protocol: "socks",
+      port: 1080,
+      settings: JSON.stringify({
+        accounts: [{ user: "user-socks", pass: "pass-socks" }],
+      }),
+    },
+    {
+      id: 102,
+      tag: "tls-inbound",
+      remark: "secure-http",
+      protocol: "http",
+      port: 8443,
+      streamSettings: JSON.stringify({ security: "tls" }),
+      settings: JSON.stringify({
+        accounts: [{ user: "user-tls", pass: "pass-tls" }],
+      }),
+    },
+    {
+      id: 103,
+      tag: "plain-http",
+      remark: "http-inbound",
+      protocol: "http",
+      port: 8080,
+      settings: JSON.stringify({
+        accounts: [{ user: "user-http", pass: "pass-http" }],
+      }),
+    },
+  ];
+
+  const { url, close } = await withHttpServer((req, res) => {
+    if (req.method === "POST" && req.url === "/login") {
+      res.setHeader("Set-Cookie", "3x-ui=test-session; Path=/");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/panel/api/inbounds/list") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, obj: inbounds }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  try {
+    // 1. Lookup by tag (socks -> socks5)
+    const socksRes = await sync3xuiInboundByTag({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      tag: "socks-inbound",
+      rotatePassword: false,
+    });
+    assert.strictEqual(socksRes.ok, true);
+    assert.strictEqual(socksRes.inboundId, 101);
+    assert.strictEqual(socksRes.tag, "socks-inbound");
+    assert.strictEqual(socksRes.protocol, "socks5");
+    assert.strictEqual(socksRes.port, 1080);
+    assert.strictEqual(socksRes.username, "user-socks");
+    assert.strictEqual(socksRes.password, "pass-socks");
+    assert.strictEqual(socksRes.message, "Inbound fetched successfully");
+
+    // 2. TLS mapping (security: tls -> https)
+    const tlsRes = await sync3xuiInboundByTag({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      tag: "tls-inbound",
+      rotatePassword: false,
+    });
+    assert.strictEqual(tlsRes.ok, true);
+    assert.strictEqual(tlsRes.protocol, "https");
+    assert.strictEqual(tlsRes.port, 8443);
+    assert.strictEqual(tlsRes.username, "user-tls");
+
+    // 3. Plain HTTP mapping
+    const httpRes = await sync3xuiInboundByTag({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      tag: "plain-http",
+      rotatePassword: false,
+    });
+    assert.strictEqual(httpRes.ok, true);
+    assert.strictEqual(httpRes.protocol, "http");
+    assert.strictEqual(httpRes.port, 8080);
+
+    // 4. Fallback lookup by remark if tag does not match
+    const remarkRes = await sync3xuiInboundByTag({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      tag: "primary-socks",
+      rotatePassword: false,
+    });
+    assert.strictEqual(remarkRes.ok, true);
+    assert.strictEqual(remarkRes.inboundId, 101);
+  } finally {
+    await close();
+  }
+});
+
+test("sync3xuiInboundByTag: rotates password in 3x-ui panel", async () => {
+  const { withHttpServer } = await import("./helpers/http-server.js");
+
+  let updatedPayload: any = null;
+
+  const { url, close } = await withHttpServer(async (req, res) => {
+    if (req.method === "POST" && req.url === "/login") {
+      res.setHeader("Set-Cookie", "3x-ui=test-session; Path=/");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/panel/api/inbounds/list") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          success: true,
+          obj: [
+            {
+              id: 201,
+              tag: "rotate-me",
+              protocol: "socks",
+              port: 10808,
+              settings: JSON.stringify({
+                accounts: [{ user: "rotate-user", pass: "old-pass-123" }],
+              }),
+            },
+          ],
+        })
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/panel/api/inbounds/update/201") {
+      let body = "";
+      for await (const chunk of req) {
+        body += chunk;
+      }
+      updatedPayload = JSON.parse(body);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  try {
+    const rotateRes = await sync3xuiInboundByTag({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      tag: "rotate-me",
+      rotatePassword: true,
+    });
+
+    assert.strictEqual(rotateRes.ok, true);
+    assert.strictEqual(rotateRes.inboundId, 201);
+    assert.strictEqual(rotateRes.username, "rotate-user");
+    assert.strictEqual(rotateRes.message, "Rotated successfully");
+    assert.notStrictEqual(rotateRes.password, "old-pass-123");
+    assert.ok(rotateRes.password && rotateRes.password.length >= 20);
+
+    // Verify the panel received the updated settings with the new password
+    assert.ok(updatedPayload);
+    const parsedSettings =
+      typeof updatedPayload.settings === "string" ? JSON.parse(updatedPayload.settings) : updatedPayload.settings;
+    assert.strictEqual(parsedSettings.accounts[0].pass, rotateRes.password);
+  } finally {
+    await close();
+  }
+});
+
+test("sync3xuiInboundByTag: error handling for missing inbound, empty accounts, SSRF", async () => {
+  const { withHttpServer } = await import("./helpers/http-server.js");
+
+  // SSRF check
+  const ssrfRes = await sync3xuiInboundByTag({
+    panelUrl: "http://169.254.169.254",
+    adminUser: "admin",
+    adminPass: "pass",
+    tag: "any",
+  });
+  assert.strictEqual(ssrfRes.ok, false);
+  assert.match(ssrfRes.message, /SSRF|prohibited/i);
+
+  const { url, close } = await withHttpServer((req, res) => {
+    if (req.method === "POST" && req.url === "/login") {
+      res.setHeader("Set-Cookie", "3x-ui=test-session; Path=/");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/panel/api/inbounds/list") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          success: true,
+          obj: [
+            {
+              id: 301,
+              tag: "no-accounts",
+              protocol: "socks",
+              port: 10808,
+              settings: JSON.stringify({ accounts: [] }),
+            },
+          ],
+        })
+      );
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  try {
+    // Missing tag
+    const notFoundRes = await sync3xuiInboundByTag({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      tag: "does-not-exist",
+    });
+    assert.strictEqual(notFoundRes.ok, false);
+    assert.strictEqual(notFoundRes.message, "Inbound with tag 'does-not-exist' not found");
+
+    // Inbound without accounts attempting rotation
+    const noAccRes = await sync3xuiInboundByTag({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      tag: "no-accounts",
+      rotatePassword: true,
+    });
+    assert.strictEqual(noAccRes.ok, false);
+    assert.strictEqual(noAccRes.message, "Inbound has no accounts");
+  } finally {
+    await close();
+  }
+});
+
+test("test3xuiConnection: supports inboundTag looking up tag first then remark", async () => {
+  const { test3xuiConnection } = await import("../src/rotate.js");
+  const { withHttpServer } = await import("./helpers/http-server.js");
+
+  const { url, close } = await withHttpServer((req, res) => {
+    if (req.method === "POST" && req.url === "/login") {
+      res.setHeader("Set-Cookie", "3x-ui=test-session; Path=/");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/panel/api/inbounds/list") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          success: true,
+          obj: [
+            { id: 501, tag: "tagged-inbound", remark: "other-remark", protocol: "socks" },
+            { id: 502, tag: "remark-match", remark: "only-remark", protocol: "http" },
+          ],
+        })
+      );
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  try {
+    // Look up by inboundTag
+    const res1 = await test3xuiConnection({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      inboundTag: "tagged-inbound",
+      timeoutSec: 3,
+    });
+    assert.strictEqual(res1.ok, true);
+    assert.strictEqual(res1.inboundFound, true);
+    assert.strictEqual(res1.inboundId, 501);
+
+    // Look up by inboundTag matching remark as fallback
+    const res2 = await test3xuiConnection({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      inboundTag: "only-remark",
+      timeoutSec: 3,
+    });
+    assert.strictEqual(res2.ok, true);
+    assert.strictEqual(res2.inboundFound, true);
+    assert.strictEqual(res2.inboundId, 502);
+  } finally {
+    await close();
+  }
+});
+
+test("executeRotation: rotates by inboundTag and updates active 3x-ui proxy in proxies store", async () => {
+  const { createProxy, getActiveProxy } = await import("../src/proxies.js");
+  const { withHttpServer } = await import("./helpers/http-server.js");
+
+  // Create an active 3x-ui proxy node in the proxies repository
+  const proxy = createProxy({
+    tag: "prod-tag",
+    name: "Production Inbound",
+    type: "3x-ui",
+    protocol: "socks5",
+    host: "127.0.0.1",
+    port: 10808,
+    username: "initial-user",
+    password: "initial-password",
+    isActive: true,
+  });
+
+  let rotationPayload: any = null;
+
+  const { url, close } = await withHttpServer(async (req, res) => {
+    if (req.method === "POST" && req.url === "/login") {
+      res.setHeader("Set-Cookie", "3x-ui=test-session; Path=/");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/panel/api/inbounds/list") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          success: true,
+          obj: [
+            {
+              id: 999,
+              tag: "prod-tag",
+              remark: "prod-remark",
+              protocol: "socks",
+              port: 10808,
+              settings: JSON.stringify({
+                accounts: [{ user: "prod-user", pass: "initial-password" }],
+              }),
+            },
+          ],
+        })
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/panel/api/inbounds/update/999") {
+      let body = "";
+      for await (const chunk of req) {
+        body += chunk;
+      }
+      rotationPayload = JSON.parse(body);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  try {
+    const result = await executeRotation({
+      panelUrl: url,
+      adminUser: "admin",
+      adminPass: "pass",
+      inboundTag: "prod-tag",
+      enabled: false,
+    });
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.source, "3x-ui");
+    assert.strictEqual(result.user, "prod-user");
+
+    // Check that active proxy in proxies store was updated with new password and lastSync
+    const active = getActiveProxy();
+    assert.ok(active);
+    assert.strictEqual(active.id, proxy.id);
+    assert.notStrictEqual(active.password, "initial-password");
+    assert.ok(active.password && active.password.length >= 20);
+    assert.ok(active.lastSync);
+  } finally {
+    await close();
+  }
+});
+

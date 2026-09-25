@@ -76,6 +76,7 @@ export interface RotationConfig {
   adminUser: string;
   adminPass: string;
   inboundRemark: string;
+  inboundTag?: string;
   insecureSkipVerify: boolean;
   lastRotatedAt?: string;
   nextRotationAt?: string;
