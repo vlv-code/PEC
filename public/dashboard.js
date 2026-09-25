@@ -10,6 +10,8 @@
     let allProfiles = [];
     let currentProfile = null;
     let extensionFiles = {};
+    let currentLang = 'ru';
+    let currentProxiesList = [];
 
     // ----------------- Admin Authentication -----------------
     // Server-side sessions: the browser never holds the admin token. The
@@ -171,6 +173,11 @@
       return String(value == null ? '' : value).replace(/[&<>"'`]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c];
       });
+    }
+
+    function t(key, fallback) {
+      const dict = (typeof I18N !== 'undefined' && I18N[currentLang]) || {};
+      return dict[key] || fallback || key;
     }
 
     // ----------------- Toast notifications -----------------
@@ -393,7 +400,8 @@
         tabBtnBuilder: 'Extension Constructor Studio',
         tabBtnFleet: 'Fleet & Target Assignment',
         tabBtnGpo: 'GPO Deployment',
-        tabBtnRotation: '3x-ui API & Scheduler',
+        tabBtnRotation: 'Proxy Settings',
+        tabBtnProxySettings: 'Proxy Settings',
         tabBtnLogs: 'Audit & Tester',
         activeFleetSuffix: ' active',
 
@@ -537,7 +545,61 @@
         lblGpoSettings: '2. ExtensionSettings (JSON)',
         btnDownloadReg: 'Download Windows .REG Policy File',
 
-        // Tab 5: 3x-ui Rotation
+        // Tab 5: Proxy Settings & 3x-ui
+        titleProxyRegistry: 'Proxy Registry',
+        subProxyRegistry: 'Manage upstream corporate proxy servers, tag-based sync with 3x-ui inbounds, and manual nodes.',
+        btnAdd3xui: '+ Add from 3x-ui by Tag',
+        btnAddManual: '+ Add Manual Proxy',
+        lblActivePacDirective: 'Active PAC Directive:',
+        badgeNoActiveProxy: 'No Active Proxy',
+        badgeActive: 'ACTIVE',
+        thProxyActive: 'Active',
+        thProxyTagName: 'Tag / Name',
+        thProxyType: 'Type',
+        thProxyProtocol: 'Protocol',
+        thProxyHostPort: 'Host : Port',
+        thProxyUser: 'User',
+        thProxyStatus: 'Status',
+        thProxyActions: 'Actions',
+        txtNoProxies: 'No proxy nodes configured yet.',
+        btnSetActive: 'Activate',
+        btnEditProxy: 'Edit',
+        btnDeleteProxy: 'Delete',
+        btnSyncProxy: 'Sync & Rotate',
+        lblInsecureTls: 'Allow Insecure / Self-Signed TLS',
+        titleAdd3xui: 'Add Proxy from 3x-ui by Inbound Tag',
+        subAdd3xui: 'Enter inbound tag configured in your 3x-ui panel to fetch and link credentials.',
+        lblAdd3xuiTag: 'Inbound Tag',
+        phAdd3xuiTag: 'corp-socks',
+        btnFetchInbound: 'Fetch Info',
+        txtInboundPreviewPlaceholder: 'Click "Fetch Info" to preview inbound parameters before adding.',
+        lblAdd3xuiName: 'Friendly Name (optional)',
+        phAdd3xuiName: 'Production SOCKS5 Node',
+        lblAdd3xuiHost: 'Host Override (optional)',
+        phAdd3xuiHost: '10.0.0.1 or proxy.corp.local',
+        lblMakeActive: 'Make this proxy active immediately',
+        btnAdd3xuiSubmit: 'Add 3x-ui Proxy',
+        titleAddManualProxy: 'Add Manual Proxy Node',
+        titleEditProxy: 'Edit Proxy Node',
+        lblProxyTag: 'Tag',
+        phProxyTag: 'manual-us-1',
+        lblProxyName: 'Friendly Name',
+        phProxyName: 'Backup US Gateway',
+        lblProxyProtocol: 'Protocol',
+        lblProxyHost: 'Host / IP',
+        phProxyHost: '192.168.1.100',
+        lblProxyPort: 'Port',
+        phProxyPort: '1080',
+        lblProxyUser: 'Username',
+        phProxyUser: 'proxyuser',
+        lblProxyPass: 'Password',
+        btnSaveProxy: 'Save Proxy',
+        btnCancel: 'Cancel',
+        confirmDeleteProxy: 'Are you sure you want to delete this proxy node?',
+        toastProxyActivated: 'Proxy activated!',
+        toastProxySynced: 'Proxy synchronized!',
+        toastProxyDeleted: 'Proxy deleted',
+        toastProxySaved: 'Proxy saved!',
         title3xuiCreds: '3x-ui API Credentials & Timing Scheduler',
         lbl3xuiPanelUrl: '3x-ui Panel URL',
         phRotPanelUrl: 'https://3xui-host:2053/basepath',
@@ -635,7 +697,8 @@
         tabBtnBuilder: 'Конструктор расширения',
         tabBtnFleet: 'Флот и устройства',
         tabBtnGpo: 'GPO & Реестр Windows',
-        tabBtnRotation: 'Ротация паролей 3x-ui',
+        tabBtnRotation: 'Настройки прокси',
+        tabBtnProxySettings: 'Настройки прокси',
         tabBtnLogs: 'Аудит и Тестер API',
         activeFleetSuffix: ' активных',
 
@@ -779,7 +842,61 @@
         lblGpoSettings: '2. ExtensionSettings (JSON)',
         btnDownloadReg: 'Скачать файл реестра Windows (.REG)',
 
-        // Tab 5: 3x-ui Rotation
+        // Tab 5: Proxy Settings & 3x-ui
+        titleProxyRegistry: 'Реестр прокси-серверов',
+        subProxyRegistry: 'Управление вышестоящими корпоративными прокси, синхронизация с 3x-ui по тегам и ручные узлы.',
+        btnAdd3xui: '+ Добавить по тегу из 3x-ui',
+        btnAddManual: '+ Добавить вручную',
+        lblActivePacDirective: 'Активная директива PAC:',
+        badgeNoActiveProxy: 'Нет активного прокси',
+        badgeActive: 'АКТИВЕН',
+        thProxyActive: 'Активен',
+        thProxyTagName: 'Тег / Имя',
+        thProxyType: 'Тип',
+        thProxyProtocol: 'Протокол',
+        thProxyHostPort: 'Хост : Порт',
+        thProxyUser: 'Пользователь',
+        thProxyStatus: 'Статус',
+        thProxyActions: 'Действия',
+        txtNoProxies: 'Прокси-узлы еще не настроены.',
+        btnSetActive: 'Активировать',
+        btnEditProxy: 'Изменить',
+        btnDeleteProxy: 'Удалить',
+        btnSyncProxy: 'Синхронизировать',
+        lblInsecureTls: 'Разрешить небезопасный / самоподписанный TLS',
+        titleAdd3xui: 'Добавить прокси из 3x-ui по тегу',
+        subAdd3xui: 'Введите тег входящего подключения из панели 3x-ui для загрузки и привязки реквизитов.',
+        lblAdd3xuiTag: 'Тег входящего (Tag)',
+        phAdd3xuiTag: 'corp-socks',
+        btnFetchInbound: 'Запросить данные',
+        txtInboundPreviewPlaceholder: 'Нажмите "Запросить данные", чтобы проверить параметры входящего подключения.',
+        lblAdd3xuiName: 'Название узла (опционально)',
+        phAdd3xuiName: 'Основной рабочий SOCKS5',
+        lblAdd3xuiHost: 'Хост (опционально)',
+        phAdd3xuiHost: '10.0.0.1 или proxy.corp.local',
+        lblMakeActive: 'Сделать активным сразу после добавления',
+        btnAdd3xuiSubmit: 'Добавить прокси 3x-ui',
+        titleAddManualProxy: 'Добавить прокси вручную',
+        titleEditProxy: 'Редактировать прокси-узел',
+        lblProxyTag: 'Тег',
+        phProxyTag: 'manual-us-1',
+        lblProxyName: 'Понятное имя',
+        phProxyName: 'Резервный шлюз',
+        lblProxyProtocol: 'Протокол',
+        lblProxyHost: 'Хост / IP',
+        phProxyHost: '192.168.1.100',
+        lblProxyPort: 'Порт',
+        phProxyPort: '1080',
+        lblProxyUser: 'Логин',
+        phProxyUser: 'proxyuser',
+        lblProxyPass: 'Пароль',
+        btnSaveProxy: 'Сохранить прокси',
+        btnCancel: 'Отмена',
+        confirmDeleteProxy: 'Вы уверены, что хотите удалить этот прокси-узел?',
+        toastProxyActivated: 'Прокси активирован!',
+        toastProxySynced: 'Прокси синхронизирован!',
+        toastProxyDeleted: 'Прокси удален',
+        toastProxySaved: 'Прокси сохранен!',
         title3xuiCreds: 'Учетные данные 3x-ui API и планировщик',
         lbl3xuiPanelUrl: 'URL панели 3x-ui',
         phRotPanelUrl: 'https://3xui-host:2053/basepath',
@@ -859,7 +976,7 @@
       }
     };
 
-    let currentLang = 'ru';
+    currentLang = 'ru';
 
     function setLanguage(lang) {
       currentLang = (lang === 'en' || lang === 'ru') ? lang : 'ru';
@@ -939,16 +1056,25 @@
       if (typeof loadPresets === 'function') loadPresets();
       if (typeof fetchFleet === 'function') fetchFleet();
       if (typeof fetchStatus === 'function') fetchStatus();
+      if (typeof renderProxiesTable === 'function' && currentProxiesList) renderProxiesTable(currentProxiesList);
     }
 
     function switchTab(name) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      
-      const pane = document.getElementById('tab-' + name);
+
+      let targetId = 'tab-' + name;
+      if (!document.getElementById(targetId)) {
+        if (name === 'rotation') targetId = 'tab-proxy-settings';
+        else if (name === 'proxy-settings') targetId = 'tab-rotation';
+      }
+      const pane = document.getElementById(targetId);
       if (pane) pane.classList.add('active');
-      
-      const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(name));
+
+      const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
+        const oc = b.getAttribute('onclick') || '';
+        return oc.includes(name) || ((name === 'rotation' || name === 'proxy-settings') && (oc.includes('rotation') || oc.includes('proxy-settings')));
+      });
       if (btn) btn.classList.add('active');
     }
 
@@ -1916,6 +2042,8 @@
         document.getElementById('rotRemark').value = cfg.inboundRemark || '';
         document.getElementById('rotInterval').value = String(cfg.intervalMinutes || 1440);
         document.getElementById('rotEnabled').value = String(cfg.enabled);
+        const rotInsecure = document.getElementById('rotInsecureTls');
+        if (rotInsecure) rotInsecure.checked = Boolean(cfg.insecureSkipVerify);
         
         document.getElementById('rotStatusText').textContent = cfg.lastStatus || 'Idle';
         document.getElementById('rotNextRun').textContent = cfg.nextRotationAt ? new Date(cfg.nextRotationAt).toLocaleString() : 'Disabled';
@@ -1934,12 +2062,14 @@
         toast('Rotation interval must be a whole number of minutes (>= 1).', 'error');
         return;
       }
+      const rotInsecure = document.getElementById('rotInsecureTls');
       const payload = {
         panelUrl: document.getElementById('rotPanelUrl').value.trim(),
         adminUser: document.getElementById('rotAdminUser').value.trim(),
         inboundRemark: document.getElementById('rotRemark').value.trim(),
         intervalMinutes: intervalNum,
         enabled: document.getElementById('rotEnabled').value === 'true',
+        insecureSkipVerify: rotInsecure ? rotInsecure.checked : false,
       };
       const pass = document.getElementById('rotAdminPass').value;
       if (pass) payload.adminPass = pass;
@@ -2016,6 +2146,405 @@
         <td>${esc(item.user)}</td>
         <td><span class="badge ${item.success ? 'badge-online' : 'badge-offline'}">${item.success ? 'SUCCESS' : 'FAILED'}</span></td>
       </tr>`).join('');
+    }
+
+    // ----------------- Upstream Proxy Registry -----------------
+    async function fetchProxies() {
+      try {
+        const res = await adminFetch('/api/proxies');
+        if (!res.ok) {
+          console.warn('Failed to fetch proxies: HTTP ' + res.status);
+          return;
+        }
+        currentProxiesList = (await res.json()) || [];
+        renderProxiesTable(currentProxiesList);
+      } catch (e) {
+        console.error('Error fetching proxies:', e);
+      }
+    }
+
+    function renderProxiesTable(proxies) {
+      const list = proxies || [];
+      const tbody = document.getElementById('proxiesTableBody');
+      if (tbody) {
+        if (!list.length) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">' + esc(t('txtNoProxies', 'No proxy nodes configured yet.')) + '</td></tr>';
+        } else {
+          tbody.innerHTML = list.map(function (px) {
+            const activeCell = px.isActive
+              ? '<span class="badge badge-online" style="cursor: default;" title="' + esc(t('badgeActive', 'ACTIVE')) + '">● ' + esc(t('badgeActive', 'ACTIVE')) + '</span>'
+              : '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 3px 8px;" onclick="activateProxy(\'' + esc(px.id) + '\')">' + esc(t('btnSetActive', 'Activate')) + '</button>';
+
+            const nameHtml = (px.name && px.name !== px.tag)
+              ? '<div style="font-size: 11px; color: var(--text-muted);">' + esc(px.name) + '</div>'
+              : '';
+
+            const typeBadge = px.type === '3x-ui' ? 'badge-action-proxy' : 'badge-secondary';
+            const statusBadge = px.status === 'OK' ? 'badge-online' : (px.status === 'ERROR' ? 'badge-offline' : 'badge-secondary');
+            const syncTime = px.lastSync ? '<div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">' + new Date(px.lastSync).toLocaleTimeString() + '</div>' : '';
+
+            const syncBtn = px.type === '3x-ui'
+              ? '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 3px 6px;" onclick="syncProxy(\'' + esc(px.id) + '\')" title="' + esc(t('btnSyncProxy', 'Sync & Rotate')) + '">🔄</button>'
+              : '';
+
+            return '<tr>' +
+              '<td style="text-align: center;">' + activeCell + '</td>' +
+              '<td><div><strong>' + esc(px.tag) + '</strong></div>' + nameHtml + '</td>' +
+              '<td><span class="badge ' + esc(typeBadge) + '">' + esc(px.type) + '</span></td>' +
+              '<td><code style="font-size: 11px; text-transform: uppercase;">' + esc(px.protocol) + '</code></td>' +
+              '<td><code>' + esc(px.host) + ':' + esc(px.port) + '</code></td>' +
+              '<td><span>' + esc(px.username || '—') + '</span></td>' +
+              '<td><span class="badge ' + esc(statusBadge) + '" title="' + esc(px.errorMessage || '') + '">' + esc(px.status || 'IDLE') + '</span>' + syncTime + '</td>' +
+              '<td style="text-align: right;"><div style="display: flex; gap: 4px; justify-content: flex-end;">' +
+                syncBtn +
+                '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 3px 6px;" onclick="openEditProxyModal(\'' + esc(px.id) + '\')" title="' + esc(t('btnEditProxy', 'Edit')) + '">✏️</button>' +
+                '<button type="button" class="btn-danger" style="font-size: 11px; padding: 3px 6px;" onclick="deleteProxy(\'' + esc(px.id) + '\')" title="' + esc(t('btnDeleteProxy', 'Delete')) + '">🗑️</button>' +
+              '</div></td>' +
+            '</tr>';
+          }).join('');
+        }
+      }
+
+      // Update active PAC directive indicator
+      const active = list.find(function (px) { return px.isActive; });
+      const pacText = document.getElementById('activePacDirectiveText');
+      const activeBadge = document.getElementById('activeProxyBadge');
+      if (pacText) {
+        if (active) {
+          let directive = 'PROXY ' + active.host + ':' + active.port + '; DIRECT';
+          if (active.protocol === 'socks5') directive = 'SOCKS5 ' + active.host + ':' + active.port + '; DIRECT';
+          else if (active.protocol === 'https') directive = 'HTTPS ' + active.host + ':' + active.port + '; DIRECT';
+          pacText.textContent = directive;
+        } else {
+          pacText.textContent = 'DIRECT';
+        }
+      }
+      if (activeBadge) {
+        if (active) {
+          activeBadge.textContent = active.tag + ' (' + active.protocol + ')';
+          activeBadge.className = 'badge badge-action-proxy';
+        } else {
+          activeBadge.textContent = t('badgeNoActiveProxy', 'No Active Proxy');
+          activeBadge.className = 'badge badge-offline';
+        }
+      }
+    }
+
+    async function activateProxy(id) {
+      try {
+        const res = await adminFetch('/api/proxies/' + encodeURIComponent(id) + '/activate', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          toast(t('toastProxyActivated', 'Proxy activated!'), 'success');
+          await fetchProxies();
+          fetchStatus();
+        } else {
+          toast(data.error || 'Failed to activate proxy', 'error');
+        }
+      } catch (e) {
+        toast('Error activating proxy: ' + e, 'error');
+      }
+    }
+
+    async function syncProxy(id) {
+      try {
+        toast('Syncing proxy with 3x-ui...', 'info');
+        const res = await adminFetch('/api/proxies/' + encodeURIComponent(id) + '/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rotatePassword: true })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          toast(data.message || t('toastProxySynced', 'Proxy synchronized!'), 'success');
+          await fetchProxies();
+          fetchStatus();
+        } else {
+          toast(data.error || 'Failed to sync proxy', 'error');
+        }
+      } catch (e) {
+        toast('Error syncing proxy: ' + e, 'error');
+      }
+    }
+
+    async function deleteProxy(id) {
+      if (!confirm(t('confirmDeleteProxy', 'Are you sure you want to delete this proxy node?'))) return;
+      try {
+        const res = await adminFetch('/api/proxies/' + encodeURIComponent(id), { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          toast(t('toastProxyDeleted', 'Proxy deleted'), 'success');
+          await fetchProxies();
+          fetchStatus();
+        } else {
+          toast(data.error || 'Failed to delete proxy', 'error');
+        }
+      } catch (e) {
+        toast('Error deleting proxy: ' + e, 'error');
+      }
+    }
+
+    function openAdd3xuiModal() {
+      const tagEl = document.getElementById('add3xuiTag');
+      const nameEl = document.getElementById('add3xuiName');
+      const hostEl = document.getElementById('add3xuiHost');
+      const activeEl = document.getElementById('add3xuiIsActive');
+      const previewEl = document.getElementById('add3xuiPreview');
+      const errEl = document.getElementById('add3xuiError');
+      if (tagEl) tagEl.value = '';
+      if (nameEl) nameEl.value = '';
+      if (hostEl) hostEl.value = '';
+      if (activeEl) activeEl.checked = true;
+      if (previewEl) previewEl.innerHTML = '<span data-i18n="txtInboundPreviewPlaceholder">' + esc(t('txtInboundPreviewPlaceholder', 'Click "Fetch Info" to preview inbound parameters before adding.')) + '</span>';
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+      const modal = document.getElementById('modalAdd3xui');
+      if (modal) modal.style.display = 'flex';
+      if (tagEl) tagEl.focus();
+    }
+
+    function closeAdd3xuiModal() {
+      const modal = document.getElementById('modalAdd3xui');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function lookup3xuiInbound() {
+      const tagEl = document.getElementById('add3xuiTag');
+      const tag = tagEl ? tagEl.value.trim() : '';
+      const errEl = document.getElementById('add3xuiError');
+      const previewEl = document.getElementById('add3xuiPreview');
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+      if (!tag) {
+        if (errEl) { errEl.textContent = 'Please enter an inbound tag'; errEl.style.display = 'block'; }
+        return;
+      }
+      if (previewEl) previewEl.textContent = 'Querying 3x-ui panel...';
+
+      try {
+        const res = await adminFetch('/api/3xui/inbound-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tag: tag })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok && data.inbound) {
+          const ib = data.inbound;
+          if (previewEl) {
+            previewEl.innerHTML = '<div style="color: var(--success); font-weight: 600; margin-bottom: 4px;">Inbound Found:</div>' +
+              '<div><strong>Protocol:</strong> ' + esc(ib.protocol) + ' &bull; <strong>Port:</strong> ' + esc(ib.port) + '</div>' +
+              '<div><strong>Username:</strong> ' + esc(ib.username || 'none') + ' &bull; <strong>Password:</strong> ' + (ib.hasPassword ? 'Present' : 'None') + '</div>';
+          }
+          const nameEl = document.getElementById('add3xuiName');
+          if (nameEl && !nameEl.value.trim()) {
+            nameEl.value = ib.tag || tag;
+          }
+        } else {
+          const msg = data.error || 'Failed to lookup inbound from 3x-ui';
+          if (previewEl) previewEl.textContent = 'Lookup failed: ' + msg;
+          if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+        }
+      } catch (e) {
+        if (previewEl) previewEl.textContent = 'Error: ' + e;
+        if (errEl) { errEl.textContent = String(e); errEl.style.display = 'block'; }
+      }
+    }
+
+    async function submitAdd3xuiProxy() {
+      const tagEl = document.getElementById('add3xuiTag');
+      const nameEl = document.getElementById('add3xuiName');
+      const hostEl = document.getElementById('add3xuiHost');
+      const activeEl = document.getElementById('add3xuiIsActive');
+      const errEl = document.getElementById('add3xuiError');
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+
+      const tag = tagEl ? tagEl.value.trim() : '';
+      if (!tag) {
+        if (errEl) { errEl.textContent = 'Tag is required'; errEl.style.display = 'block'; }
+        return;
+      }
+      const payload = {
+        type: '3x-ui',
+        tag: tag,
+        name: nameEl && nameEl.value.trim() ? nameEl.value.trim() : undefined,
+        host: hostEl && hostEl.value.trim() ? hostEl.value.trim() : undefined,
+        isActive: activeEl ? Boolean(activeEl.checked) : true
+      };
+
+      try {
+        const res = await adminFetch('/api/proxies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.id) {
+          closeAdd3xuiModal();
+          toast(t('toastProxySaved', 'Proxy saved!'), 'success');
+          await fetchProxies();
+          fetchStatus();
+        } else {
+          if (errEl) { errEl.textContent = data.error || 'Failed to add proxy'; errEl.style.display = 'block'; }
+        }
+      } catch (e) {
+        if (errEl) { errEl.textContent = String(e); errEl.style.display = 'block'; }
+      }
+    }
+
+    function openAddManualModal() {
+      const idEl = document.getElementById('proxyFormId');
+      const titleEl = document.getElementById('proxyFormTitle');
+      const tagEl = document.getElementById('proxyFormTag');
+      const nameEl = document.getElementById('proxyFormName');
+      const protoEl = document.getElementById('proxyFormProtocol');
+      const hostEl = document.getElementById('proxyFormHost');
+      const portEl = document.getElementById('proxyFormPort');
+      const userEl = document.getElementById('proxyFormUser');
+      const passEl = document.getElementById('proxyFormPass');
+      const activeEl = document.getElementById('proxyFormIsActive');
+      const errEl = document.getElementById('proxyFormError');
+
+      if (idEl) idEl.value = '';
+      if (titleEl) titleEl.textContent = t('titleAddManualProxy', 'Add Manual Proxy Node');
+      if (tagEl) { tagEl.value = ''; tagEl.disabled = false; }
+      if (nameEl) nameEl.value = '';
+      if (protoEl) { protoEl.value = 'socks5'; protoEl.disabled = false; }
+      if (hostEl) hostEl.value = '';
+      if (portEl) { portEl.value = '10808'; portEl.disabled = false; }
+      if (userEl) userEl.value = '';
+      if (passEl) { passEl.value = ''; passEl.placeholder = '••••••••'; }
+      if (activeEl) activeEl.checked = true;
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+
+      const modal = document.getElementById('modalProxyForm');
+      if (modal) modal.style.display = 'flex';
+      if (tagEl) tagEl.focus();
+    }
+
+    function openEditProxyModal(id) {
+      const px = (currentProxiesList || []).find(function (p) { return p.id === id; });
+      if (!px) return;
+
+      const idEl = document.getElementById('proxyFormId');
+      const titleEl = document.getElementById('proxyFormTitle');
+      const tagEl = document.getElementById('proxyFormTag');
+      const nameEl = document.getElementById('proxyFormName');
+      const protoEl = document.getElementById('proxyFormProtocol');
+      const hostEl = document.getElementById('proxyFormHost');
+      const portEl = document.getElementById('proxyFormPort');
+      const userEl = document.getElementById('proxyFormUser');
+      const passEl = document.getElementById('proxyFormPass');
+      const activeEl = document.getElementById('proxyFormIsActive');
+      const errEl = document.getElementById('proxyFormError');
+
+      if (idEl) idEl.value = px.id;
+      if (titleEl) titleEl.textContent = t('titleEditProxy', 'Edit Proxy Node') + ': ' + px.tag;
+      if (tagEl) { tagEl.value = px.tag; tagEl.disabled = (px.type === '3x-ui'); }
+      if (nameEl) nameEl.value = px.name || '';
+      if (protoEl) { protoEl.value = px.protocol || 'socks5'; protoEl.disabled = (px.type === '3x-ui'); }
+      if (hostEl) hostEl.value = px.host || '';
+      if (portEl) { portEl.value = String(px.port || ''); portEl.disabled = (px.type === '3x-ui'); }
+      if (userEl) userEl.value = px.username || '';
+      if (passEl) { passEl.value = ''; passEl.placeholder = '•••••••• (leave empty to keep unchanged)'; }
+      if (activeEl) activeEl.checked = Boolean(px.isActive);
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+
+      const modal = document.getElementById('modalProxyForm');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeProxyFormModal() {
+      const modal = document.getElementById('modalProxyForm');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function submitProxyForm() {
+      const idEl = document.getElementById('proxyFormId');
+      const tagEl = document.getElementById('proxyFormTag');
+      const nameEl = document.getElementById('proxyFormName');
+      const protoEl = document.getElementById('proxyFormProtocol');
+      const hostEl = document.getElementById('proxyFormHost');
+      const portEl = document.getElementById('proxyFormPort');
+      const userEl = document.getElementById('proxyFormUser');
+      const passEl = document.getElementById('proxyFormPass');
+      const activeEl = document.getElementById('proxyFormIsActive');
+      const errEl = document.getElementById('proxyFormError');
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+
+      const id = idEl ? idEl.value.trim() : '';
+      const tag = tagEl ? tagEl.value.trim() : '';
+      const name = nameEl ? nameEl.value.trim() : '';
+      const protocol = protoEl ? protoEl.value : 'socks5';
+      const host = hostEl ? hostEl.value.trim() : '';
+      const portRaw = portEl ? portEl.value.trim() : '';
+      const username = userEl ? userEl.value.trim() : '';
+      const password = passEl ? passEl.value : '';
+      const isActive = activeEl ? Boolean(activeEl.checked) : false;
+
+      if (!tag || !host || !portRaw) {
+        if (errEl) { errEl.textContent = 'Tag, Host, and Port are required.'; errEl.style.display = 'block'; }
+        return;
+      }
+      const portNum = parseInt(portRaw, 10);
+      if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+        if (errEl) { errEl.textContent = 'Port must be a number between 1 and 65535.'; errEl.style.display = 'block'; }
+        return;
+      }
+
+      try {
+        let res;
+        if (id) {
+          // Editing existing proxy
+          const payload = {
+            name: name || undefined,
+            host: host,
+            port: portNum,
+            username: username !== '' ? username : undefined,
+            isActive: isActive
+          };
+          const existing = (currentProxiesList || []).find(function (p) { return p.id === id; });
+          if (existing && existing.type === 'manual') {
+            payload.tag = tag;
+            payload.protocol = protocol;
+          }
+          if (password) {
+            payload.password = password;
+          }
+          res = await adminFetch('/api/proxies/' + encodeURIComponent(id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          // Adding new manual proxy
+          const payload = {
+            type: 'manual',
+            tag: tag,
+            name: name || undefined,
+            protocol: protocol,
+            host: host,
+            port: portNum,
+            username: username || undefined,
+            password: password || undefined,
+            isActive: isActive
+          };
+          res = await adminFetch('/api/proxies', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && (data.id || data.ok)) {
+          closeProxyFormModal();
+          toast(t('toastProxySaved', 'Proxy saved!'), 'success');
+          await fetchProxies();
+          fetchStatus();
+        } else {
+          if (errEl) { errEl.textContent = data.error || 'Failed to save proxy'; errEl.style.display = 'block'; }
+        }
+      } catch (e) {
+        if (errEl) { errEl.textContent = String(e); errEl.style.display = 'block'; }
+      }
     }
 
     function renderAuditLogs(logs) {
@@ -2107,6 +2636,7 @@ ${JSON.stringify(json, null, 2)}`;
       fetchFleet();
       fetchExtensionInfo();
       fetchRotationConfig();
+      fetchProxies();
     }
 
     (async function initAuth() {

@@ -130,6 +130,7 @@ test("HTTP: two-token access matrix - fleet token on admin routes, admin token o
   app.use(createBuilderRouter(() => TEST_TOKEN, () => TEST_ADMIN_TOKEN));
 
   const server = app.listen(0);
+  await new Promise((resolve) => server.once("listening", resolve));
   const port = (server.address() as AddressInfo).port;
   const base = `http://127.0.0.1:${port}`;
 
