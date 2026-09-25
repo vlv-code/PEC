@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { GeoPreset, RoutingProfile, RoutingRule, ProxyConfiguration } from "./types.js";
 import { writeJsonAtomic } from "./jsonStore.js";
 import { getRoutingProfilesPath } from "./storage.js";
+import { getActiveProxy } from "./proxies.js";
 
 const PROFILES_FILE = getRoutingProfilesPath();
 
@@ -295,13 +296,18 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
     return `// Corp Proxy: Kill-Switch Active\nfunction FindProxyForURL(url, host) { return "DIRECT"; }\n`;
   }
 
-  const safeHost = String(proxyConfig.host || "10.0.0.1").replace(/[^a-zA-Z0-9.-]/g, "");
-  const safePort = Math.min(65535, Math.max(1, parseInt(String(proxyConfig.port || "10809"), 10) || 10809));
+  const activeProxy = getActiveProxy();
+  const effectiveProtocol = (activeProxy?.protocol || proxyConfig.protocol || "http").toLowerCase();
+  const rawHost = activeProxy?.host || proxyConfig.host || "10.0.0.1";
+  const rawPort = activeProxy?.port || proxyConfig.port || 10809;
+
+  const safeHost = String(rawHost).replace(/[^a-zA-Z0-9.-]/g, "");
+  const safePort = Math.min(65535, Math.max(1, parseInt(String(rawPort), 10) || 10809));
 
   let proxyDirective = "PROXY " + safeHost + ":" + safePort + "; DIRECT";
-  if (proxyConfig.protocol === "socks5") {
+  if (effectiveProtocol === "socks5") {
     proxyDirective = "SOCKS5 " + safeHost + ":" + safePort + "; DIRECT";
-  } else if (proxyConfig.protocol === "https") {
+  } else if (effectiveProtocol === "https") {
     proxyDirective = "HTTPS " + safeHost + ":" + safePort + "; DIRECT";
   }
 
