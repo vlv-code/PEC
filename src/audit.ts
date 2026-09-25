@@ -19,7 +19,11 @@ export interface AuditLogEntry {
     | "RATE_LIMITED"
     | "LOGIN_OK"
     | "LOGIN_FAILED"
-    | "LOGOUT";
+    | "LOGOUT"
+    | "PROXY_CREATED"
+    | "PROXY_UPDATED"
+    | "PROXY_DELETED"
+    | "PROXY_ACTIVATED";
   details?: string;
 }
 
