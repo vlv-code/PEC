@@ -12,6 +12,7 @@ import { getBuilderConfigPath } from "./storage.js";
 const EXTENSION_DIR = path.resolve(process.env.PEC_EXTENSION_DIR || "./extension");
 const KEY_PATH = path.join(EXTENSION_DIR, "key.pem");
 const UPDATES_DIR = path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
+const UNPACKED_DIR = path.resolve(process.env.PEC_UNPACKED_DIR || path.join(path.dirname(UPDATES_DIR), "unpacked"));
 const BUILD_CONFIG_PATH = getBuilderConfigPath();
 
 export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
@@ -576,7 +577,9 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
       helpdesk: isRu ? "Техподдержка" : "Helpdesk",
       buildVer: isRu ? "Версия сборки" : "Build Version",
       contactSupport: isRu ? "Написать в службу поддержки" : "Contact IT Support Desk",
-      rulesNotice: isRu ? "Правила управляются централизованно через сервер /proxy.pac." : "Rules are centrally managed and compiled to /proxy.pac dynamically.",
+      rulesNotice: isRu ? "Правила маршрутизации и обхода определяются активным PAC-профилем с сервера PEC." : "Rules are centrally managed and compiled to /proxy.pac dynamically.",
+      connError: isRu ? "Ошибка связи" : "Connection Error",
+      serverUnreachable: isRu ? "Сервер PEC недоступен" : "PEC Server Unreachable",
     };
 
     const popupHtml = `<!DOCTYPE html>
@@ -748,9 +751,9 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
       <div class="brand-icon">${cfg.iconEmoji || "🛡️"}</div>
       <span>${t.brand}</span>
     </div>
-    <div class="status-badge" id="badge">
+    <div class="status-badge offline" id="badge">
       <span class="dot"></span>
-      <span id="statusText">${t.active}</span>
+      <span id="statusText">${t.offline}</span>
     </div>
   </header>
 
@@ -766,19 +769,19 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
     <div class="card">
       <div class="row">
         <span class="label">${t.proxyMode}</span>
-        <span class="val" id="modeVal">HTTP / SOCKS5</span>
+        <span class="val" id="modeVal">—</span>
       </div>
       <div class="row">
         <span class="label">${t.activeEndpoint}</span>
-        <span class="val" id="serverVal">proxy.corp.internal</span>
+        <span class="val" id="serverVal">—</span>
       </div>
       <div class="row">
         <span class="label">${t.routingProfile}</span>
-        <span class="val" id="profileVal">Selective (PAC)</span>
+        <span class="val" id="profileVal">—</span>
       </div>
       <div class="row">
         <span class="label">${t.latency}</span>
-        <span class="val" id="pingVal" style="color: var(--success);">28 ms</span>
+        <span class="val" id="pingVal">—</span>
       </div>
     </div>
 
@@ -801,27 +804,11 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
     <div class="card">
       <div class="row" style="margin-bottom: 6px;">
         <span class="label">${t.defaultFallback}</span>
-        <span class="tag">DIRECT</span>
+        <span class="tag" id="tabRulesDefaultPolicy">DIRECT</span>
       </div>
-      <div class="rule-item">
-        <span>${t.aiModels}</span>
-        <span class="tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16,185,129,0.3);">PROXY</span>
+      <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-top: 8px;">
+        ${t.rulesNotice}
       </div>
-      <div class="rule-item">
-        <span>${t.corpIntranet}</span>
-        <span class="tag">DIRECT</span>
-      </div>
-      <div class="rule-item">
-        <span>${t.adsTelemetry}</span>
-        <span class="tag" style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border-color: rgba(239,68,68,0.3);">SINKHOLE</span>
-      </div>
-      <div class="rule-item">
-        <span>${t.socialMedia}</span>
-        <span class="tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16,185,129,0.3);">PROXY</span>
-      </div>
-    </div>
-    <div style="font-size: 11px; color: var(--text-muted);">
-      ${t.rulesNotice}
     </div>
   </div>
 
@@ -914,10 +901,10 @@ window.applyPopupState = function(response) {
       badge.className = "status-badge";
     }
   }
-  if (modeVal && response.protocol) modeVal.textContent = response.protocol.toUpperCase();
-  if (serverVal) serverVal.textContent = response.host ? (response.host + ":" + response.port) : "Direct";
+  if (modeVal) modeVal.textContent = response.protocol ? response.protocol.toUpperCase() : "—";
+  if (serverVal) serverVal.textContent = (response.online && response.host) ? (response.host + ":" + response.port) : (response.online ? "Direct" : "${t.offline}");
   if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
-  if (pingVal && response.ping) pingVal.textContent = response.ping;
+  if (pingVal) pingVal.textContent = (response.online && response.ping) ? response.ping : "—";
   if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
   // Remember the management server origin (reported by the service worker)
   // so the diagnostics tab can call it with an absolute URL - a relative
@@ -940,6 +927,7 @@ function initPopup() {
   const modeVal = document.getElementById("modeVal");
   const serverVal = document.getElementById("serverVal");
   const profileVal = document.getElementById("profileVal");
+  const pingVal = document.getElementById("pingVal");
   const exitIpVal = document.getElementById("exitIpVal");
   const btnSync = document.getElementById("btnSync");
   const btnToggle = document.getElementById("btnToggleBypass");
@@ -958,7 +946,11 @@ function initPopup() {
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ action: "GET_STATUS" }, (response) => {
         if (chrome.runtime.lastError || !response) {
-          if (statusText) statusText.textContent = "${t.active}";
+          if (statusText) statusText.textContent = "${t.connError}";
+          if (badge) badge.className = "status-badge offline";
+          if (serverVal) serverVal.textContent = "${t.serverUnreachable}";
+          if (modeVal) modeVal.textContent = "—";
+          if (pingVal) pingVal.textContent = "—";
           return;
         }
         window.applyPopupState(response);
@@ -971,19 +963,24 @@ function initPopup() {
       btnSync.disabled = true;
       const originalText = btnSync.innerHTML;
       btnSync.innerHTML = "<span>${t.syncingCreds}</span>";
+      const startMs = Date.now();
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ action: "FORCE_SYNC" }, () => {
+        chrome.runtime.sendMessage({ action: "FORCE_SYNC" }, (res) => {
+          const latencyMs = Date.now() - startMs;
           setTimeout(() => {
             btnSync.disabled = false;
             btnSync.innerHTML = originalText;
+            if (res && res.ok && pingVal) {
+              pingVal.textContent = latencyMs + " ms";
+            }
             loadState();
-          }, 800);
+          }, 400);
         });
       } else {
         setTimeout(() => {
           btnSync.disabled = false;
           btnSync.innerHTML = originalText;
-        }, 600);
+        }, 400);
       }
     });
   }
@@ -1070,6 +1067,12 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
 
   const zip = new AdmZip();
   const items = fs.readdirSync(EXTENSION_DIR);
+  const renderedBg = renderBackgroundJs(buildConfigToPack);
+
+  if (!fs.existsSync(UNPACKED_DIR)) {
+    fs.mkdirSync(UNPACKED_DIR, { recursive: true });
+  }
+
   for (const item of items) {
     if (item.endsWith(".pem") || item === "scripts" || item.endsWith(".crx") || item.endsWith(".zip")) {
       continue;
@@ -1077,13 +1080,13 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     const full = path.join(EXTENSION_DIR, item);
     const stat = fs.statSync(full);
     if (stat.isFile()) {
+      const dest = path.join(UNPACKED_DIR, item);
       if (item === "background.js") {
-        // Substitute build-config placeholders at packaging time; the source
-        // file on disk keeps its __PEC_*__ placeholders for future rebuilds.
-        const rendered = renderBackgroundJs(buildConfigToPack);
-        zip.addFile(item, Buffer.from(rendered, "utf-8"));
+        zip.addFile(item, Buffer.from(renderedBg, "utf-8"));
+        fs.writeFileSync(dest, renderedBg, "utf-8");
       } else {
         zip.addLocalFile(full);
+        fs.copyFileSync(full, dest);
       }
     }
   }
@@ -1109,6 +1112,8 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     crxExists: true,
     zipExists: true,
     updatesXmlExists: true,
+    unpackedExists: true,
+    unpackedPath: UNPACKED_DIR,
     uiMode: currentBuildConfig.uiMode,
     lastPackTime: new Date().toISOString(),
     zipPath,

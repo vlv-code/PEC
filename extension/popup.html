@@ -167,9 +167,9 @@
       <div class="brand-icon">🛡️</div>
       <span>PEC Corp</span>
     </div>
-    <div class="status-badge" id="badge">
+    <div class="status-badge offline" id="badge">
       <span class="dot"></span>
-      <span id="statusText">Активен</span>
+      <span id="statusText">Отключен</span>
     </div>
   </header>
 
@@ -185,19 +185,19 @@
     <div class="card">
       <div class="row">
         <span class="label">Режим прокси</span>
-        <span class="val" id="modeVal">HTTP / SOCKS5</span>
+        <span class="val" id="modeVal">—</span>
       </div>
       <div class="row">
         <span class="label">Прокси-сервер</span>
-        <span class="val" id="serverVal">proxy.corp.internal</span>
+        <span class="val" id="serverVal">—</span>
       </div>
       <div class="row">
         <span class="label">Профиль правил</span>
-        <span class="val" id="profileVal">Selective (PAC)</span>
+        <span class="val" id="profileVal">—</span>
       </div>
       <div class="row">
         <span class="label">Задержка (Пинг)</span>
-        <span class="val" id="pingVal" style="color: var(--success);">28 ms</span>
+        <span class="val" id="pingVal">—</span>
       </div>
     </div>
 
@@ -217,27 +217,11 @@
     <div class="card">
       <div class="row" style="margin-bottom: 6px;">
         <span class="label">По умолчанию</span>
-        <span class="tag">DIRECT</span>
+        <span class="tag" id="tabRulesDefaultPolicy">DIRECT</span>
       </div>
-      <div class="rule-item">
-        <span>🤖 Модели AI и LLM</span>
-        <span class="tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16,185,129,0.3);">PROXY</span>
+      <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-top: 8px;">
+        Правила маршрутизации и обхода определяются активным PAC-профилем с сервера PEC.
       </div>
-      <div class="rule-item">
-        <span>🏢 Корпоративная сеть RFC1918</span>
-        <span class="tag">DIRECT</span>
-      </div>
-      <div class="rule-item">
-        <span>🛡️ Реклама и телеметрия</span>
-        <span class="tag" style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border-color: rgba(239,68,68,0.3);">SINKHOLE</span>
-      </div>
-      <div class="rule-item">
-        <span>🌐 Медиа и соцсети</span>
-        <span class="tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16,185,129,0.3);">PROXY</span>
-      </div>
-    </div>
-    <div style="font-size: 11px; color: var(--text-muted);">
-      Правила управляются централизованно через сервер /proxy.pac.
     </div>
   </div>
 

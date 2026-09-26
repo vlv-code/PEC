@@ -37,10 +37,10 @@ window.applyPopupState = function(response) {
       badge.className = "status-badge";
     }
   }
-  if (modeVal && response.protocol) modeVal.textContent = response.protocol.toUpperCase();
-  if (serverVal) serverVal.textContent = response.host ? (response.host + ":" + response.port) : "Direct";
+  if (modeVal) modeVal.textContent = response.protocol ? response.protocol.toUpperCase() : "—";
+  if (serverVal) serverVal.textContent = (response.online && response.host) ? (response.host + ":" + response.port) : (response.online ? "Direct" : "Отключен");
   if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
-  if (pingVal && response.ping) pingVal.textContent = response.ping;
+  if (pingVal) pingVal.textContent = (response.online && response.ping) ? response.ping : "—";
   if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
   // Remember the management server origin (reported by the service worker)
   // so the diagnostics tab can call it with an absolute URL - a relative
@@ -63,6 +63,7 @@ function initPopup() {
   const modeVal = document.getElementById("modeVal");
   const serverVal = document.getElementById("serverVal");
   const profileVal = document.getElementById("profileVal");
+  const pingVal = document.getElementById("pingVal");
   const exitIpVal = document.getElementById("exitIpVal");
   const btnSync = document.getElementById("btnSync");
   const btnToggle = document.getElementById("btnToggleBypass");
@@ -81,7 +82,11 @@ function initPopup() {
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ action: "GET_STATUS" }, (response) => {
         if (chrome.runtime.lastError || !response) {
-          if (statusText) statusText.textContent = "Активен";
+          if (statusText) statusText.textContent = "Ошибка связи";
+          if (badge) badge.className = "status-badge offline";
+          if (serverVal) serverVal.textContent = "Сервер PEC недоступен";
+          if (modeVal) modeVal.textContent = "—";
+          if (pingVal) pingVal.textContent = "—";
           return;
         }
         window.applyPopupState(response);
@@ -94,19 +99,24 @@ function initPopup() {
       btnSync.disabled = true;
       const originalText = btnSync.innerHTML;
       btnSync.innerHTML = "<span>Синхронизация...</span>";
+      const startMs = Date.now();
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ action: "FORCE_SYNC" }, () => {
+        chrome.runtime.sendMessage({ action: "FORCE_SYNC" }, (res) => {
+          const latencyMs = Date.now() - startMs;
           setTimeout(() => {
             btnSync.disabled = false;
             btnSync.innerHTML = originalText;
+            if (res && res.ok && pingVal) {
+              pingVal.textContent = latencyMs + " ms";
+            }
             loadState();
-          }, 800);
+          }, 400);
         });
       } else {
         setTimeout(() => {
           btnSync.disabled = false;
           btnSync.innerHTML = originalText;
-        }, 600);
+        }, 400);
       }
     });
   }

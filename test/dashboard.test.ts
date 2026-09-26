@@ -249,3 +249,18 @@ test("dashboard render & assets: Proxy Settings tab, multi-proxy table, modals a
   assert.ok(dashboardJs.includes("titleProxyRegistry: 'Реестр прокси-серверов'"), "RU translation for titleProxyRegistry");
 });
 
+test("dashboard: SOCKS5 auth limitation warning is rendered in proxy modals and table indicators", () => {
+  const html = render(false);
+
+  // 1. Warning banner element in modalProxyForm
+  assert.ok(html.includes('id="proxyFormSocksWarning"'), "modalProxyForm must render proxyFormSocksWarning element");
+  assert.ok(html.includes('data-i18n="warnChromiumSocks5Auth"'), "must have data-i18n for warnChromiumSocks5Auth");
+
+  // 2. Default manual protocol option should be HTTP
+  assert.match(html, /<option value="http"[^>]*>HTTP<\/option>/, "HTTP option must be present in protocol select");
+
+  // 3. Client JS handles SOCKS5 warning check & table indicator
+  assert.ok(dashboardJs.includes("warnChromiumSocks5Auth:"), "EN translation for warnChromiumSocks5Auth");
+  assert.ok(dashboardJs.includes("checkSocksAuthWarning"), "dashboard.js must include checkSocksAuthWarning handler");
+});
+

@@ -133,8 +133,13 @@ export interface ExtensionBuildInfo {
   crxExists: boolean;
   zipExists: boolean;
   updatesXmlExists: boolean;
+  unpackedExists?: boolean;
+  unpackedPath?: string;
   lastPackTime?: string;
   uiMode?: "stealth" | "popup";
+  zipPath?: string;
+  crxPath?: string;
+  xmlPath?: string;
 }
 
 export interface ProxyNode {

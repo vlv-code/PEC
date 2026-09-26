@@ -600,6 +600,8 @@
         toastProxySynced: 'Proxy synchronized!',
         toastProxyDeleted: 'Proxy deleted',
         toastProxySaved: 'Proxy saved!',
+        warnChromiumSocks5Auth: '⚠️ Chromium (Chrome, Edge, Brave, Yandex) does not support SOCKS5 authentication. If credentials are set, Chrome will reject the connection or bypass the proxy. Use HTTP protocol for authenticated corporate proxies or use SOCKS5 without username/password (e.g. IP whitelist).',
+        warnSocksAuthTable: 'Chromium browsers do not support SOCKS5 authentication. Use HTTP or IP-whitelisted SOCKS5.',
         title3xuiCreds: '3x-ui API Credentials & Timing Scheduler',
         lbl3xuiPanelUrl: '3x-ui Panel URL',
         phRotPanelUrl: 'https://3xui-host:2053/basepath',
@@ -897,6 +899,8 @@
         toastProxySynced: 'Прокси синхронизирован!',
         toastProxyDeleted: 'Прокси удален',
         toastProxySaved: 'Прокси сохранен!',
+        warnChromiumSocks5Auth: '⚠️ Браузеры на базе Chromium (Chrome, Edge, Brave, Яндекс) не поддерживают авторизацию (логин/пароль) для SOCKS5. При наличии логина Chrome не сможет подключиться к прокси. Используйте протокол HTTP для авторизованных корпоративных прокси либо SOCKS5 без логина/пароля (по IP-фильтру).',
+        warnSocksAuthTable: 'Браузеры Chromium не поддерживают авторизацию для SOCKS5. Используйте HTTP или SOCKS5 без авторизации.',
         title3xuiCreds: 'Учетные данные 3x-ui API и планировщик',
         lbl3xuiPanelUrl: 'URL панели 3x-ui',
         phRotPanelUrl: 'https://3xui-host:2053/basepath',
@@ -2187,11 +2191,15 @@
               ? '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 3px 6px;" onclick="syncProxy(\'' + esc(px.id) + '\')" title="' + esc(t('btnSyncProxy', 'Sync & Rotate')) + '">🔄</button>'
               : '';
 
+            const socksAuthWarn = (px.protocol === 'socks5' && px.username)
+              ? ' <span title="' + esc(t('warnSocksAuthTable', 'Chromium browsers do not support SOCKS5 with authentication. Use HTTP or IP-whitelisted SOCKS5.')) + '" style="cursor: help; color: #f59e0b;" class="socks-auth-warn">⚠️</span>'
+              : '';
+
             return '<tr>' +
               '<td style="text-align: center;">' + activeCell + '</td>' +
               '<td><div><strong>' + esc(px.tag) + '</strong></div>' + nameHtml + '</td>' +
               '<td><span class="badge ' + esc(typeBadge) + '">' + esc(px.type) + '</span></td>' +
-              '<td><code style="font-size: 11px; text-transform: uppercase;">' + esc(px.protocol) + '</code></td>' +
+              '<td><code style="font-size: 11px; text-transform: uppercase;">' + esc(px.protocol) + '</code>' + socksAuthWarn + '</td>' +
               '<td><code>' + esc(px.host) + ':' + esc(px.port) + '</code></td>' +
               '<td><span>' + esc(px.username || '—') + '</span></td>' +
               '<td><span class="badge ' + esc(statusBadge) + '" title="' + esc(px.errorMessage || '') + '">' + esc(px.status || 'IDLE') + '</span>' + syncTime + '</td>' +
@@ -2328,10 +2336,17 @@
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok && data.inbound) {
           const ib = data.inbound;
+          let warnHtml = '';
+          if ((ib.protocol === 'socks' || ib.protocol === 'socks5') && (ib.username || ib.hasPassword)) {
+            warnHtml = '<div style="margin-top: 8px; padding: 6px 10px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 4px; color: #fbbf24; font-size: 11px;">' +
+              esc(t('warnChromiumSocks5Auth', '⚠️ Chromium (Chrome, Edge, Brave, Yandex) does not support SOCKS5 authentication. If credentials are set, Chrome will reject the connection or bypass the proxy. Use HTTP protocol for authenticated corporate proxies or use SOCKS5 without username/password (e.g. IP whitelist).')) +
+              '</div>';
+          }
           if (previewEl) {
             previewEl.innerHTML = '<div style="color: var(--success); font-weight: 600; margin-bottom: 4px;">Inbound Found:</div>' +
               '<div><strong>Protocol:</strong> ' + esc(ib.protocol) + ' &bull; <strong>Port:</strong> ' + esc(ib.port) + '</div>' +
-              '<div><strong>Username:</strong> ' + esc(ib.username || 'none') + ' &bull; <strong>Password:</strong> ' + (ib.hasPassword ? 'Present' : 'None') + '</div>';
+              '<div><strong>Username:</strong> ' + esc(ib.username || 'none') + ' &bull; <strong>Password:</strong> ' + (ib.hasPassword ? 'Present' : 'None') + '</div>' +
+              warnHtml;
           }
           const nameEl = document.getElementById('add3xuiName');
           if (nameEl && !nameEl.value.trim()) {
@@ -2389,6 +2404,20 @@
       }
     }
 
+    function checkSocksAuthWarning() {
+      const protoEl = document.getElementById('proxyFormProtocol');
+      const userEl = document.getElementById('proxyFormUser');
+      const warnEl = document.getElementById('proxyFormSocksWarning');
+      if (!warnEl) return;
+      const isSocks = protoEl && (protoEl.value === 'socks5' || protoEl.value === 'socks');
+      const hasAuth = userEl && userEl.value.trim().length > 0;
+      if (isSocks && hasAuth) {
+        warnEl.style.display = 'block';
+      } else {
+        warnEl.style.display = 'none';
+      }
+    }
+
     function openAddManualModal() {
       const idEl = document.getElementById('proxyFormId');
       const titleEl = document.getElementById('proxyFormTitle');
@@ -2406,13 +2435,14 @@
       if (titleEl) titleEl.textContent = t('titleAddManualProxy', 'Add Manual Proxy Node');
       if (tagEl) { tagEl.value = ''; tagEl.disabled = false; }
       if (nameEl) nameEl.value = '';
-      if (protoEl) { protoEl.value = 'socks5'; protoEl.disabled = false; }
+      if (protoEl) { protoEl.value = 'http'; protoEl.disabled = false; }
       if (hostEl) hostEl.value = '';
-      if (portEl) { portEl.value = '10808'; portEl.disabled = false; }
+      if (portEl) { portEl.value = '10809'; portEl.disabled = false; }
       if (userEl) userEl.value = '';
       if (passEl) { passEl.value = ''; passEl.placeholder = '••••••••'; }
       if (activeEl) activeEl.checked = true;
       if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+      checkSocksAuthWarning();
 
       const modal = document.getElementById('modalProxyForm');
       if (modal) modal.style.display = 'flex';
@@ -2439,13 +2469,14 @@
       if (titleEl) titleEl.textContent = t('titleEditProxy', 'Edit Proxy Node') + ': ' + px.tag;
       if (tagEl) { tagEl.value = px.tag; tagEl.disabled = (px.type === '3x-ui'); }
       if (nameEl) nameEl.value = px.name || '';
-      if (protoEl) { protoEl.value = px.protocol || 'socks5'; protoEl.disabled = (px.type === '3x-ui'); }
+      if (protoEl) { protoEl.value = px.protocol || 'http'; protoEl.disabled = (px.type === '3x-ui'); }
       if (hostEl) hostEl.value = px.host || '';
       if (portEl) { portEl.value = String(px.port || ''); portEl.disabled = (px.type === '3x-ui'); }
       if (userEl) userEl.value = px.username || '';
       if (passEl) { passEl.value = ''; passEl.placeholder = '•••••••• (leave empty to keep unchanged)'; }
       if (activeEl) activeEl.checked = Boolean(px.isActive);
       if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+      checkSocksAuthWarning();
 
       const modal = document.getElementById('modalProxyForm');
       if (modal) modal.style.display = 'flex';
@@ -2658,6 +2689,22 @@ ${JSON.stringify(json, null, 2)}`;
       if (credSubmit) credSubmit.addEventListener('click', submitCredsChange);
       if (credCancel) credCancel.addEventListener('click', closeCredsModal);
       if (credPass) credPass.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitCredsChange(); });
+
+      // Proxy form interactive validation
+      const protoInput = document.getElementById('proxyFormProtocol');
+      const userInput = document.getElementById('proxyFormUser');
+      if (protoInput) {
+        protoInput.addEventListener('change', function() {
+          const portEl = document.getElementById('proxyFormPort');
+          if (portEl && (portEl.value === '10808' || portEl.value === '10809')) {
+            portEl.value = protoInput.value === 'http' ? '10809' : '10808';
+          }
+          checkSocksAuthWarning();
+        });
+      }
+      if (userInput) {
+        userInput.addEventListener('input', checkSocksAuthWarning);
+      }
 
       // First entry: ask the server whether a valid session already exists.
       try {

@@ -891,8 +891,8 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         <div>
           <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyProtocol">Protocol</label>
           <select id="proxyFormProtocol" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
-            <option value="socks5">SOCKS5</option>
             <option value="http">HTTP</option>
+            <option value="socks5">SOCKS5</option>
             <option value="https">HTTPS</option>
           </select>
         </div>
@@ -902,11 +902,11 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         </div>
         <div>
           <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyPort">Port</label>
-          <input type="number" id="proxyFormPort" placeholder="1080" data-i18n-ph="phProxyPort" min="1" max="65535" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+          <input type="number" id="proxyFormPort" placeholder="10809" data-i18n-ph="phProxyPort" min="1" max="65535" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
         <div>
           <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyUser">Username</label>
           <input type="text" id="proxyFormUser" placeholder="proxyuser" data-i18n-ph="phProxyUser" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
@@ -915,6 +915,10 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyPass">Password</label>
           <input type="password" id="proxyFormPass" placeholder="••••••••" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
+      </div>
+
+      <div id="proxyFormSocksWarning" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; font-size: 11px; color: #f59e0b; line-height: 1.4;">
+        <span data-i18n="warnChromiumSocks5Auth">⚠️ Warning: Chromium browsers (Chrome, Edge, Yandex) do not support username/password authentication for SOCKS5. For Chrome with auth, use HTTP protocol.</span>
       </div>
 
       <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">

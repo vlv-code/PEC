@@ -80,6 +80,35 @@ test("purity: extension sources are syntactically valid JavaScript", () => {
   }
 });
 
+test("purity: extension/background.js evaluates top-level scope without ReferenceError or unresolved tokens", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+  const vmScript = `
+    const chrome = {
+      storage: { local: { get: () => Promise.resolve({}), set: () => Promise.resolve() }, managed: { get: () => Promise.resolve({}) } },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: { settings: { set: () => Promise.resolve() } },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: { getManifest: () => ({ version: "1.0.0" }), id: "test-id", onMessage: { addListener: () => {} } }
+    };
+    ${src}
+  `;
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: () => Promise.resolve({ ok: false }),
+    AbortSignal,
+    Map,
+  });
+  vm.runInContext(vmScript, ctx);
+});
+
 test("purity: the rendered background.js (placeholders substituted) parses as JavaScript", async () => {
   const { packageExtension } = await import("../src/packager.js");
   packageExtension("https://purity-render.example.corp");
@@ -123,4 +152,38 @@ test("purity: extension html files must not contain inline event handlers (MV3 C
     !inlineEventRegex.test(packagedHtml),
     "Packaged popup.html must not contain inline event handlers (e.g. onclick=) which violate MV3 CSP"
   );
+});
+
+test("purity: packageExtension generates a ready-to-load unpacked directory without placeholders", async () => {
+  const { packageExtension } = await import("../src/packager.js");
+  const res = packageExtension("https://unpacked-test.example.corp");
+  assert.ok(res.unpackedPath, "packageExtension result must include unpackedPath");
+  assert.ok(fs.existsSync(res.unpackedPath), "unpacked extension directory must exist on disk");
+
+  const manifestFile = path.join(res.unpackedPath, "manifest.json");
+  const bgFile = path.join(res.unpackedPath, "background.js");
+  const popupHtmlFile = path.join(res.unpackedPath, "popup.html");
+  assert.ok(fs.existsSync(manifestFile), "unpacked manifest.json must exist");
+  assert.ok(fs.existsSync(bgFile), "unpacked background.js must exist");
+  assert.ok(fs.existsSync(popupHtmlFile), "unpacked popup.html must exist");
+
+  const bgContent = fs.readFileSync(bgFile, "utf-8");
+  assert.ok(!bgContent.includes("__PEC_"), "unpacked background.js must have all placeholders resolved");
+  assert.ok(bgContent.includes("https://unpacked-test.example.corp"), "unpacked background.js must contain effective server URL");
+});
+
+test("purity: popup HTML and JS do not fake active status or dummy metrics", async () => {
+  const popupHtmlPath = path.join(REPO_ROOT, "extension", "popup.html");
+  const popupJsPath = path.join(REPO_ROOT, "extension", "popup.js");
+  const html = fs.readFileSync(popupHtmlPath, "utf-8");
+  const js = fs.readFileSync(popupJsPath, "utf-8");
+
+  // 1. Initial HTML must not claim Active or 28ms before connecting
+  assert.ok(!html.includes(">28 ms<"), "popup.html must not hardcode fake 28 ms latency");
+  assert.ok(!html.includes(">proxy.corp.internal<"), "popup.html must not hardcode fake proxy endpoint");
+  assert.ok(html.includes("status-badge offline"), "popup.html must default to offline/inactive state initially");
+
+  // 2. popup.js must NOT set status to 'Active' when runtime.lastError occurs
+  assert.ok(!js.includes('statusText.textContent = "Активен";\n          return;'), "popup.js must not fake active status on runtime error");
+  assert.ok(!js.includes('statusText.textContent = "Активен";\r\n          return;'), "popup.js must not fake active status on runtime error");
 });
