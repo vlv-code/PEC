@@ -1,12 +1,36 @@
 import "./loadEnv.js";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { domainToASCII } from "node:url";
 import { GeoPreset, RoutingProfile, RoutingRule, ProxyConfiguration } from "./types.js";
 import { writeJsonAtomic } from "./jsonStore.js";
 import { getRoutingProfilesPath } from "./storage.js";
 import { getActiveProxy } from "./proxies.js";
 
 const PROFILES_FILE = getRoutingProfilesPath();
+
+/**
+ * Convert any internationalized (IDN) domain to Punycode ASCII (e.g. *.рф -> *.xn--p1ai).
+ * Chrome's pacScript.data strictly enforces 7-bit ASCII and rejects any non-ASCII characters.
+ */
+export function toPunycodeDomain(domain: string): string {
+  if (!domain || /^[\x00-\x7F]*$/.test(domain)) {
+    return domain;
+  }
+  try {
+    if (domain.startsWith("*.")) {
+      const ascii = domainToASCII(domain.slice(2));
+      return ascii ? `*.${ascii}` : domain;
+    }
+    if (domain.startsWith(".")) {
+      const ascii = domainToASCII(domain.slice(1));
+      return ascii ? `.${ascii}` : domain;
+    }
+    return domainToASCII(domain) || domain;
+  } catch {
+    return domain;
+  }
+}
 
 export const GEO_PRESETS: GeoPreset[] = [
   {
@@ -81,7 +105,7 @@ export const GEO_PRESETS: GeoPreset[] = [
     domains: [
       "*.ru",
       "*.su",
-      "*.рф",
+      "*.xn--p1ai",
       "*.yandex.ru",
       "*.ya.ru",
       "*.vk.com",
@@ -317,7 +341,11 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
   const blockDirective = "PROXY 127.0.0.1:0";
   const defaultDirective = profile.defaultPolicy === "proxy" ? proxyDirective : "DIRECT";
 
-  const safeProfileName = String(profile.name || "Default").replace(/[\r\n]/g, " ");
+  const toAsciiComment = (str: string): string => {
+    return str.replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, " ").trim();
+  };
+
+  const safeProfileName = toAsciiComment(String(profile.name || "Default")) || "Default";
   const codeLines: string[] = [];
   codeLines.push(`// Profile: ${safeProfileName} (Policy: Default ${profile.defaultPolicy.toUpperCase()})`);
   codeLines.push(`// Generated: ${new Date().toISOString()}`);
@@ -333,7 +361,7 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
 
     // Security: rule names are emitted as PAC comments and must never be able
     // to break out of the comment (newline) or inject PAC directives.
-    const safeRuleName = String(rule.name || "Rule").replace(/[\r\n"'\\;]/g, " ").slice(0, 100);
+    const safeRuleName = toAsciiComment(String(rule.name || "Rule").replace(/[\r\n"'\\;]/g, " ")).slice(0, 100) || "Rule";
     const actionDirective =
       rule.action === "proxy" ? proxyDirective : rule.action === "block" ? blockDirective : "DIRECT";
 
@@ -345,8 +373,11 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
     const cidrChecks: string[] = [];
     for (const rawDomain of domains) {
       // Security: Strip dangerous characters to prevent script injection in PAC
-      const d = rawDomain.replace(/["'\\\r\n;]/g, "").trim().toLowerCase();
+      let d = rawDomain.replace(/["'\\\r\n;]/g, "").trim().toLowerCase();
       if (!d) continue;
+
+      // Convert any IDN/Cyrillic domain to Punycode ASCII
+      d = toPunycodeDomain(d);
 
       if (d.includes("/")) {
         // CIDR subnet
@@ -388,7 +419,8 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
   codeLines.push(`  return "${defaultDirective}";`);
   codeLines.push(`}`);
 
-  return codeLines.join("\n") + "\n";
+  // Guarantee that the generated PAC script is 100% 7-bit ASCII (Chrome pacScript.data requirement)
+  return (codeLines.join("\n") + "\n").replace(/[^\x00-\x7F]/g, "");
 }
 
 function maskToSubnet(bits: number): string {

@@ -430,4 +430,72 @@ test("purity: popup.html and popup.js render diagnostics log terminal with copy 
   assert.ok(js.includes("CLEAR_LOGS"), "popup.js must support CLEAR_LOGS");
 });
 
+test("purity: background.js handles non-ASCII PAC scripts safely and falls back to URL mode if inline set fails", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  // A PAC script with non-ASCII Russian comment
+  const rawPacScript = '// Профиль: Корпоративный\nfunction FindProxyForURL(url, host) { return "DIRECT"; }\n';
+
+  let appliedSettings: any = null;
+  const vmScript = `
+    const chrome = {
+      storage: {
+        local: { get: () => Promise.resolve({}), set: () => Promise.resolve() },
+        managed: { get: () => Promise.resolve({}) }
+      },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: {
+        settings: {
+          set: (cfg) => {
+            appliedSettings = cfg;
+            // Simulate Chrome's exact C++ validation error when pacScript.data contains non-ASCII:
+            if (cfg.value?.pacScript?.data && /[^\x00-\x7F]/.test(cfg.value.pacScript.data)) {
+              throw new Error("'pacScript.data' supports only ASCII code(encode URLs in Punycode format).");
+            }
+            return Promise.resolve();
+          },
+          get: () => Promise.resolve({ value: { mode: "pac_script" }, levelOfControl: "controlled_by_this_extension" })
+        },
+        onProxyError: { addListener: () => {} }
+      },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: { getManifest: () => ({ version: "1.0.0" }), id: "test-id", onMessage: { addListener: () => {} } }
+    };
+    ${src}
+    globalThis.testApplyProxyConfig = applyProxyConfig;
+  `;
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: () => Promise.resolve({ ok: true, text: () => Promise.resolve(rawPacScript) }),
+    AbortSignal,
+    Map,
+    parseInt,
+    appliedSettings: null,
+  });
+  vm.runInContext(vmScript, ctx);
+
+  await (ctx as any).testApplyProxyConfig({
+    protocol: "pac",
+    pacUrl: "https://example.corp/proxy.pac",
+  });
+
+  // Verify that proxy was applied without error and either sanitized data to ASCII or fell back to url
+  assert.strictEqual((ctx as any).appliedSettings?.value?.mode, "pac_script");
+  const pac = (ctx as any).appliedSettings?.value?.pacScript;
+  assert.ok(pac, "pacScript configuration must be set");
+  if (pac.data) {
+    assert.ok(/^[\x00-\x7F]+$/.test(pac.data), "pacScript.data must be 100% 7-bit ASCII");
+  } else {
+    assert.strictEqual(pac.url, "https://example.corp/proxy.pac");
+  }
+});
+
 

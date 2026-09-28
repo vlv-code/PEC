@@ -391,3 +391,39 @@ test("Fleet sync: /api/sync and /proxy.pac return active proxy configuration", a
   clearProxiesStore();
 });
 
+test("PAC: generatePacScript produces 100% 7-bit ASCII output for Chrome compatibility (Punycode conversion)", () => {
+  const ruPreset = GEO_PRESETS.find((p) => p.id === "preset:geosite_ru");
+  assert.ok(ruPreset, "geosite_ru preset must exist");
+
+  const profile = makeProfile({
+    name: "Корпоративный профиль (Тест)",
+    rules: [
+      {
+        id: "r_ru",
+        name: "Правило для РФ сайтов",
+        targetType: "preset",
+        pattern: "preset:geosite_ru",
+        action: "direct",
+        enabled: true,
+      },
+      {
+        id: "r_custom",
+        name: "Кастомные домены с кириллицей",
+        targetType: "domain",
+        pattern: "*.яндекс.рф, искра.рф",
+        action: "proxy",
+        enabled: true,
+      },
+    ],
+  });
+
+  const pac = generatePacScript(profile, PROXY_CFG);
+
+  // Chrome's pacScript.data API fails with:
+  // "Error: 'pacScript.data' supports only ASCII code(encode URLs in Punycode format)."
+  // The PAC script MUST strictly contain only 7-bit ASCII characters (code <= 127).
+  assert.ok(/^[\x00-\x7F]+$/.test(pac), "PAC script must contain ONLY 7-bit ASCII characters");
+  assert.ok(pac.includes("xn--p1ai"), "Cyrillic .рф domains must be encoded as Punycode xn--p1ai");
+  assert.ok(pac.includes("xn--d1acpjx3f.xn--p1ai"), "яндекс.рф must be encoded as Punycode");
+});
+

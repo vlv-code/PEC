@@ -257,6 +257,74 @@ async function applyPacScript(pacUrl) {
     logEvent("warn", "PAC download error (" + (err && err.message ? err.message : err) + ") - falling back to URL mode");
   }
 
+  // Chrome's pacScript.data API strictly requires 7-bit ASCII code.
+  // If pacText contains any non-ASCII characters (e.g. Cyrillic comments or IDN domains),
+  // sanitize them to ASCII (Punycode domains, ASCII comments) to avoid Chrome throwing:
+  // "Error: 'pacScript.data' supports only ASCII code(encode URLs in Punycode format)".
+  if (pacText !== null) {
+    let hasNonAscii = false;
+    for (let i = 0; i < pacText.length; i++) {
+      if (pacText.charCodeAt(i) > 127) {
+        hasNonAscii = true;
+        break;
+      }
+    }
+
+    if (hasNonAscii) {
+      const lines = pacText.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const commentIdx = lines[i].indexOf("//");
+        if (commentIdx !== -1) {
+          let cleanComment = "";
+          for (let c = commentIdx; c < lines[i].length; c++) {
+            if (lines[i].charCodeAt(c) <= 127) cleanComment += lines[i][c];
+          }
+          lines[i] = lines[i].slice(0, commentIdx) + cleanComment;
+        }
+      }
+      let sanitized = lines.join("\n");
+
+      sanitized = sanitized.replace(/"([^"]*)"/g, (match, content) => {
+        let contentNonAscii = false;
+        for (let j = 0; j < content.length; j++) {
+          if (content.charCodeAt(j) > 127) {
+            contentNonAscii = true;
+            break;
+          }
+        }
+        if (contentNonAscii) {
+          try {
+            const isWild = content.startsWith("*.");
+            const isDot = !isWild && content.startsWith(".");
+            const raw = isWild ? content.slice(2) : isDot ? content.slice(1) : content;
+            const host = new URL("http://" + raw).hostname;
+            return '"' + (isWild ? "*." + host : isDot ? "." + host : host) + '"';
+          } catch {
+            let clean = "";
+            for (let k = 0; k < content.length; k++) {
+              if (content.charCodeAt(k) <= 127) clean += content[k];
+            }
+            return '"' + clean + '"';
+          }
+        }
+        return match;
+      });
+
+      let finalClean = "";
+      for (let m = 0; m < sanitized.length; m++) {
+        if (sanitized.charCodeAt(m) <= 127) finalClean += sanitized[m];
+      }
+
+      if (finalClean.indexOf("FindProxyForURL") !== -1) {
+        logEvent("info", "Sanitized non-ASCII characters from PAC script for Chrome ASCII compliance");
+        pacText = finalClean;
+      } else {
+        logEvent("warn", "PAC script contained non-ASCII characters that could not be sanitized, falling back to URL mode");
+        pacText = null;
+      }
+    }
+  }
+
   const useInline = pacText !== null;
   const pacRev = useInline ? pacRevisionOf(pacText) : null;
   console.log("[corp-proxy] Applying PAC " + (useInline
@@ -266,15 +334,31 @@ async function applyPacScript(pacUrl) {
     ? "(inline, " + pacText.length + " bytes, rev " + pacRev + ")"
     : "(URL mode fallback)") + " from " + pacUrl);
 
-  await chrome.proxy.settings.set({
-    value: {
-      mode: "pac_script",
-      pacScript: useInline
-        ? { data: pacText, mandatory: false }
-        : { url: pacUrl, mandatory: false },
-    },
-    scope: "regular",
-  });
+  try {
+    await chrome.proxy.settings.set({
+      value: {
+        mode: "pac_script",
+        pacScript: useInline
+          ? { data: pacText, mandatory: false }
+          : { url: pacUrl, mandatory: false },
+      },
+      scope: "regular",
+    });
+  } catch (setErr) {
+    if (useInline) {
+      console.warn("[corp-proxy] Inline PAC installation failed (" + (setErr && setErr.message ? setErr.message : setErr) + "), falling back to URL mode:", pacUrl);
+      logEvent("warn", "Inline PAC installation failed, falling back to URL mode: " + (setErr && setErr.message ? setErr.message : setErr));
+      await chrome.proxy.settings.set({
+        value: {
+          mode: "pac_script",
+          pacScript: { url: pacUrl, mandatory: false },
+        },
+        scope: "regular",
+      });
+    } else {
+      throw setErr;
+    }
+  }
   updateBadge("PAC", "#0284c7");
   await verifyAppliedProxySettings("pac_script");
 }
