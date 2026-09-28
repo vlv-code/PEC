@@ -51,6 +51,7 @@ export interface ProxyConfiguration {
   syncIntervalMs: number;
   killSwitch: boolean;
   activeProfileId?: string;
+  routingMode?: "pac" | "fixed";
   updatedAt: string;
 }
 

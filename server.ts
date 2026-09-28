@@ -110,8 +110,9 @@ initDefaultProxyIfNeeded();
 // Ensure RSA private/public key and base extension distribution package exist
 try {
   ensureKeyExists();
-  packageExtension(`http://localhost:${PORT}`);
-  console.log("[pec-server] Initial Chrome Extension package generated.");
+  const initialBaseUrl = (process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, "");
+  packageExtension(initialBaseUrl);
+  console.log(`[pec-server] Initial Chrome Extension package generated for ${initialBaseUrl}`);
 } catch (err) {
   console.warn("[pec-server] Initial packaging notice:", err);
 }

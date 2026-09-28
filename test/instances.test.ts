@@ -50,3 +50,29 @@ test("LRU eviction is order-based and drops the least recently synced instance",
   assert.ok(!active.some((i) => i.instanceId === first), "oldest entry must be evicted");
   assert.ok(active.some((i) => i.instanceId === "inst_lru_bulk_2499"), "newest entry must survive");
 });
+
+test("routingMode defaults to 'pac', can be updated to 'fixed', and validates input", async () => {
+  const { getProxyConfig, updateProxyConfig } = await import("../src/instances.js");
+  const cfg = getProxyConfig();
+  assert.strictEqual(cfg.routingMode, "pac");
+
+  const updated = updateProxyConfig({ routingMode: "fixed" });
+  assert.strictEqual(updated.routingMode, "fixed");
+  assert.strictEqual(getProxyConfig().routingMode, "fixed");
+
+  // Extension background logic check:
+  // const usePac = (config.protocol === "pac" || (config.pacUrl && config.routingMode !== "fixed"));
+  const fixedConfig = getProxyConfig();
+  const usePacWithFixed = (fixedConfig.protocol === "pac" || (Boolean(fixedConfig.pacUrl) && fixedConfig.routingMode !== "fixed"));
+  assert.strictEqual(usePacWithFixed, false, "when routingMode is fixed, usePac must evaluate to false (fixed_servers)");
+
+  assert.throws(() => updateProxyConfig({ routingMode: "invalid" as any }), /Invalid routingMode/);
+
+  // revert back to pac
+  updateProxyConfig({ routingMode: "pac" });
+  assert.strictEqual(getProxyConfig().routingMode, "pac");
+  const pacConfig = getProxyConfig();
+  const usePacWithPac = (pacConfig.protocol === "pac" || (Boolean(pacConfig.pacUrl) && pacConfig.routingMode !== "fixed"));
+  assert.strictEqual(usePacWithPac, true, "when routingMode is pac, usePac must evaluate to true (pac_script)");
+});
+

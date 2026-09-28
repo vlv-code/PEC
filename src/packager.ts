@@ -1069,12 +1069,32 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   const items = fs.readdirSync(EXTENSION_DIR);
   const renderedBg = renderBackgroundJs(buildConfigToPack);
 
+  function isExcludedFromPackage(fileName: string): boolean {
+    const lower = fileName.toLowerCase();
+    return (
+      fileName.startsWith(".") ||
+      fileName.endsWith(".pem") ||
+      fileName === "scripts" ||
+      fileName.endsWith(".crx") ||
+      fileName.endsWith(".zip") ||
+      lower === "readme.md" ||
+      fileName.endsWith(".example") ||
+      fileName.endsWith(".svg")
+    );
+  }
+
   if (!fs.existsSync(UNPACKED_DIR)) {
     fs.mkdirSync(UNPACKED_DIR, { recursive: true });
+  } else {
+    for (const f of fs.readdirSync(UNPACKED_DIR)) {
+      if (isExcludedFromPackage(f)) {
+        try { fs.rmSync(path.join(UNPACKED_DIR, f), { recursive: true, force: true }); } catch {}
+      }
+    }
   }
 
   for (const item of items) {
-    if (item.endsWith(".pem") || item === "scripts" || item.endsWith(".crx") || item.endsWith(".zip")) {
+    if (isExcludedFromPackage(item)) {
       continue;
     }
     const full = path.join(EXTENSION_DIR, item);
@@ -1195,4 +1215,28 @@ export function updateManifestVersion(newVersion: string, newName?: string) {
   currentBuildConfig.version = newVersion;
   if (newName) currentBuildConfig.name = newName;
   saveBuildConfig(currentBuildConfig);
+}
+
+export function isPackageStale(): boolean {
+  const zipPath = path.join(UPDATES_DIR, "extension.zip");
+  if (!fs.existsSync(zipPath)) {
+    return true;
+  }
+  const zipMtime = fs.statSync(zipPath).mtimeMs;
+  if (fs.existsSync(BUILD_CONFIG_PATH) && fs.statSync(BUILD_CONFIG_PATH).mtimeMs > zipMtime) {
+    return true;
+  }
+  if (fs.existsSync(EXTENSION_DIR)) {
+    try {
+      const items = fs.readdirSync(EXTENSION_DIR);
+      for (const item of items) {
+        if (item.endsWith(".crx") || item.endsWith(".zip") || item.endsWith(".pem")) continue;
+        const p = path.join(EXTENSION_DIR, item);
+        if (fs.existsSync(p) && fs.statSync(p).mtimeMs > zipMtime) {
+          return true;
+        }
+      }
+    } catch {}
+  }
+  return false;
 }

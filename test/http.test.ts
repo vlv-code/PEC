@@ -152,3 +152,46 @@ test("HTTP: e2e - sync as a group worker, then receive that group's PAC", async 
     assert.strictEqual(inst!.appliedProfileName, "E2E QA Group Profile");
   });
 });
+
+test("HTTP: e2e - routingMode can be toggled via /api/config and delivers fixed_servers mode to /api/sync", async () => {
+  await withServer(async (base) => {
+    // 1. GET /api/config shows default "pac"
+    const getRes = await fetch(`${base}/api/config`, { headers: { "X-Admin-Token": TEST_ADMIN_TOKEN } });
+    assert.strictEqual(getRes.status, 200);
+    const initCfg = await getRes.json() as { routingMode?: string };
+    assert.strictEqual(initCfg.routingMode, "pac");
+
+    // 2. Switch routingMode to "fixed" via POST /api/config
+    const postRes = await fetch(`${base}/api/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": TEST_ADMIN_TOKEN },
+      body: JSON.stringify({ routingMode: "fixed" }),
+    });
+    assert.strictEqual(postRes.status, 200);
+    const updatedCfg = await postRes.json() as { routingMode?: string };
+    assert.strictEqual(updatedCfg.routingMode, "fixed");
+
+    // 3. /api/sync delivers routingMode: "fixed"
+    const syncRes = await fetch(`${base}/api/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Ext-Token": TEST_TOKEN },
+      body: JSON.stringify({ instanceId: "inst_mode_test", version: "1.3.0" }),
+    });
+    assert.strictEqual(syncRes.status, 200);
+    const sync = await syncRes.json() as { config: { routingMode: string; protocol: string; pacUrl: string } };
+    assert.strictEqual(sync.config.routingMode, "fixed");
+
+    // 4. Verify extension worker decision logic for "fixed":
+    // background.js: const usePac = (config.protocol === "pac" || (config.pacUrl && config.routingMode !== "fixed"));
+    const usePac = (sync.config.protocol === "pac" || (Boolean(sync.config.pacUrl) && sync.config.routingMode !== "fixed"));
+    assert.strictEqual(usePac, false, "extension must bypass pac and use fixed_servers when routingMode === 'fixed'");
+
+    // 5. Restore to "pac"
+    await fetch(`${base}/api/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": TEST_ADMIN_TOKEN },
+      body: JSON.stringify({ routingMode: "pac" }),
+    });
+  });
+});
+

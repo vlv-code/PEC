@@ -10,6 +10,7 @@ import {
   packageExtension,
   getBuildInfo,
   generateGpoConfig,
+  isPackageStale,
 } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 
@@ -93,7 +94,7 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
   router.get("/api/extension/download-zip", (req: Request, res: Response) => {
     const updatesDir = path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
     const zipPath = path.join(updatesDir, "extension.zip");
-    if (!fs.existsSync(zipPath)) {
+    if (!fs.existsSync(zipPath) || isPackageStale()) {
       packageExtension(getBaseUrl(req));
     }
     res.download(zipPath, "corp-proxy-extension.zip");

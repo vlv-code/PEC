@@ -6,6 +6,12 @@
 
 ---
 
+> [!IMPORTANT]
+> **ВНИМАНИЕ РАЗРАБОТЧИКАМ:** Каталог `extension/` является **исходным шаблоном сборки (build template)**, а не готовым к использованию расширением. В файлах каталога содержатся плейсхолдеры конфигурации (`DEFAULT_SERVER_BASE`, токены и интервалы синхронизации).
+> **НЕ загружайте каталог `extension/` напрямую в Chrome!** Для загрузки распакованного расширения используйте сгенерированный каталог `dist/unpacked/`.
+
+---
+
 ## Особенности реализации
 
 - **Разрешение `webRequestAuthProvider`**: использует официальный enterprise API Manifest V3 для асинхронной авторизации в прокси без блокировки основного веб-трафика.
@@ -16,49 +22,61 @@
 
 ---
 
-## Шаблонизация background.js
+## Шаблонизация и сборка
 
-`background.js` в этом каталоге — **исходный шаблон**. При сборке пакета (кнопка Build в Studio или `packageExtension`) упаковщик подставляет вместо плейсхолдеров значения из конфигурации сборки:
+`background.js` в этом каталоге — **исходный шаблон**. При сборке пакета (через веб-конструктор Extension Studio, при старте сервера или через `npm run build`) упаковщик подставляет вместо плейсхолдеров актуальные значения конфигурации сборки и генерирует готовую к работе папку **`dist/unpacked/`**, а также артефакты `dist/updates/extension.zip` и `dist/updates/extension.crx`:
 
-| Плейсхолдер | Поле конфигурации | Значение по умолчанию |
+| Плейсхолдер | Поле конфигурации | Описание |
 | :--- | :--- | :--- |
-| `__PEC_SERVER_BASE__` | `defaultServerUrl` | `https://mini-server.ic.local` |
-| `__PEC_DEFAULT_TOKEN__` | `defaultToken` | `corp-proxy-secret-token-change-me` |
-| `__PEC_SYNC_INTERVAL_MIN__` | `syncIntervalMinutes` | `15` |
-| `__PEC_BYPASS_TIMEOUT_MIN__` | `bypassAutoTimeoutMinutes` | `15` |
-| `__PEC_BADGE_ENABLED__` | `badgeIndicator` | `true` |
-| `__PEC_TARGET_GROUP__` | — | `Default Fleet` |
+| `DEFAULT_SERVER_BASE` | `defaultServerUrl` | Базовый URL сервера синхронизации PEC |
+| `DEFAULT_EXT_TOKEN` | `defaultToken` | Общий токен доступа расширений к `/api/sync` |
+| `SYNC_INTERVAL_MIN` | `syncIntervalMinutes` | Периодичность проверки обновлений (минуты) |
+| `BYPASS_TIMEOUT_MIN` | `bypassAutoTimeoutMinutes` | Таймаут ручного обхода (минуты) |
+| `BADGE_ENABLED` | `badgeIndicator` | Индикатор состояния на иконке |
+| `TARGET_GROUP` | `targetGroup` | Целевая группа флота по умолчанию |
 
-Файл на диске всегда сохраняет плейсхолдеры — подстановка происходит только внутри собираемого ZIP. Значения, доставленные через GPO managed storage (`extToken`, `credsUrl`, `syncUrl`, `targetGroup`), имеют приоритет над зашитыми при сборке.
+Файлы в `extension/` всегда сохраняют шаблонный вид. Значения, доставленные через GPO managed storage (`extToken`, `credsUrl`, `syncUrl`, `targetGroup`), имеют наивысший приоритет над зашитыми при сборке.
 
-Ручные правки файлов в Studio (кнопка Save в редакторе кода) защищены: повторная генерация не перезаписывает их, пока не нажата кнопка «Regenerate templates».
+Ручные правки файлов в Studio (кнопка Save в редакторе кода) сохраняются в конфигурации и применяются при повторной сборке.
 
 ---
 
 ## Структура каталога
 
 ```text
-extension/
-├── background.js         # Service Worker расширения
+extension/                 # Исходные шаблоны для сборщика
+├── background.js         # Service Worker (шаблон)
 ├── managed_schema.json   # Схема Managed Storage для доставки настроек через GPO
 ├── manifest.json         # Манифест Manifest V3
+├── popup.html            # Шаблон интерфейса всплывающего окна
+├── popup.js              # Логика всплывающего окна
+├── icon.png              # Иконка расширения (PNG, требование Chrome MV3)
+├── icon.svg              # Векторный исходник иконки (не попадает в пакет)
 ├── updates.xml.example   # Пример манифеста обновлений для веб-сервера
 ├── scripts/
 │   └── pack.py           # Скрипт сборки .crx и генерации updates.xml
-└── README.md             # Данное руководство
+└── README.md             # Данное руководство для разработчиков
+
+dist/                      # Результаты сборки (генерируются автоматически)
+├── unpacked/             # ГОТОВОЕ распакованное расширение для загрузки в Chrome
+└── updates/              # Готовые пакеты extension.crx, extension.zip, updates.xml
 ```
 
 ---
 
-## Локальное тестирование
+## Локальное тестирование в браузере
 
-1. Откройте Google Chrome и перейдите на страницу `chrome://extensions`.
-2. Включите **Режим разработчика** (Developer mode) в правом верхнем углу.
-3. Нажмите кнопку **Загрузить распакованное расширение** (Load unpacked) и выберите каталог `extension/`.
-4. Для задания тестового токена и URL мини-сервера создайте ключ в реестре Windows:
+1. Соберите проект:
+   - Либо запустите сервер (`npm start` или `npm run dev`) и нажмите кнопку **«Собрать .CRX»** или **«Скачать .ZIP»** в Extension Studio,
+   - Либо выполните сборку через консоль.
+   - В результате появится каталог `dist/unpacked/` с подставленными значениями конфигурации.
+2. Откройте Google Chrome и перейдите на страницу `chrome://extensions`.
+3. Включите **Режим разработчика** (Developer mode) в правом верхнем углу.
+4. Нажмите кнопку **Загрузить распакованное расширение** (Load unpacked) и выберите каталог **`dist/unpacked/`** (НЕ `extension/`!).
+5. Для задания тестового токена и URL мини-сервера через GPO/реестр Windows:
    - Ветка: `HKCU\Software\Policies\Google\Chrome\3rdparty\extensions\<extension_id>\policy`
-   - Строковый параметр `extToken`: ваш тестовый токен.
-   - Строковый параметр `credsUrl`: `https://mini-server.ic.local/creds`.
+   - Строковый параметр `extToken`: ваш токен расширения
+   - Строковый параметр `syncUrl`: URL эндпоинта `/api/sync`
 
 ---
 
@@ -71,7 +89,7 @@ extension/
 Запустите утилиту сборки из корня репозитория:
 
 ```bash
-python extension/scripts/pack.py --base-url https://mini-server.ic.local/updates
+python extension/scripts/pack.py --base-url https://mini-server.example.corp/updates
 ```
 
 **Что делает утилита:**
@@ -93,16 +111,16 @@ python extension/scripts/pack.py --base-url https://mini-server.ic.local/updates
 4. Настройте политики:
    - **Configure the list of force-installed apps and extensions** (`ExtensionInstallForcelist`):
      ```text
-     <extension_id>;https://mini-server.ic.local/updates/updates.xml
+     <extension_id>;https://mini-server.example.corp/updates/updates.xml
      ```
    - **Extension management settings** (`ExtensionSettings`) — задайте JSON:
      ```json
      {
        "<extension_id>": {
          "installation_mode": "force_installed",
-         "update_url": "https://mini-server.ic.local/updates/updates.xml",
+         "update_url": "https://mini-server.example.corp/updates/updates.xml",
          "extToken": "YOUR_EXT_SHARED_TOKEN_HERE",
-         "credsUrl": "https://mini-server.ic.local/creds"
+         "credsUrl": "https://mini-server.example.corp/creds"
        }
      }
      ```

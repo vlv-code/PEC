@@ -19,6 +19,7 @@ const DEFAULT_CONFIG: ProxyConfiguration = {
   pacUrl: "/proxy.pac",
   syncIntervalMs: 5 * 60 * 1000, // 5 minutes
   killSwitch: false,
+  routingMode: "pac",
   updatedAt: new Date().toISOString(),
 };
 
@@ -29,6 +30,9 @@ try {
   if (fs.existsSync(CONFIG_PATH)) {
     const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
     currentConfig = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    if (!currentConfig.routingMode) {
+      currentConfig.routingMode = "pac";
+    }
   }
 } catch (e) {
   console.warn("[instances] Failed to read proxy_config.json, using defaults:", e);
@@ -52,6 +56,12 @@ export function getProxyConfig(): ProxyConfiguration {
 }
 
 export function updateProxyConfig(updates: Partial<ProxyConfiguration>): ProxyConfiguration {
+  if (updates.routingMode !== undefined) {
+    if (updates.routingMode !== "pac" && updates.routingMode !== "fixed") {
+      throw new Error("Invalid routingMode: must be 'pac' or 'fixed'");
+    }
+  }
+
   if (updates.host !== undefined) {
     const cleanHost = String(updates.host).trim();
     if (!/^[a-zA-Z0-9.-]+$/.test(cleanHost)) {

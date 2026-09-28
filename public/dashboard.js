@@ -546,6 +546,15 @@
         btnDownloadReg: 'Download Windows .REG Policy File',
 
         // Tab 5: Proxy Settings & 3x-ui
+        warnNoActiveProxyTitle: 'No active upstream proxy.',
+        warnNoActiveProxyDesc: 'Extensions are receiving placeholder 10.0.0.1:10809 and traffic will not flow. Add a proxy via "+ Add Manual Proxy" or "+ Add from 3x-ui" and click "Activate".',
+        titleRoutingMode: 'Client Traffic Routing Mode',
+        subRoutingMode: 'Choose how Chrome extensions route browser traffic through upstream nodes.',
+        optRoutingModePac: 'Selective Routing via Profiles (PAC)',
+        descRoutingModePac: 'Browser uses PAC rules to selectively proxy designated domains/subnets; all other traffic goes direct.',
+        optRoutingModeFixed: 'Full Tunnel (All Traffic via Active Proxy)',
+        descRoutingModeFixed: 'All browser traffic is forcibly tunneled through the currently active upstream proxy (fixed_servers mode).',
+        toastRoutingModeSaved: 'Routing mode updated! Extensions will receive it on next sync.',
         titleProxyRegistry: 'Proxy Registry',
         subProxyRegistry: 'Manage upstream corporate proxy servers, tag-based sync with 3x-ui inbounds, and manual nodes.',
         btnAdd3xui: '+ Add from 3x-ui by Tag',
@@ -845,6 +854,15 @@
         btnDownloadReg: 'Скачать файл реестра Windows (.REG)',
 
         // Tab 5: Proxy Settings & 3x-ui
+        warnNoActiveProxyTitle: 'Нет активного upstream-прокси.',
+        warnNoActiveProxyDesc: 'Расширения получают плейсхолдер 10.0.0.1:10809 и трафик не пойдёт. Добавьте прокси через кнопку «+ Add Manual Proxy» или «+ Add from 3x-ui» и нажмите «Activate».',
+        titleRoutingMode: 'Режим маршрутизации трафика клиентов',
+        subRoutingMode: 'Выберите, как расширения Chrome направляют трафик браузера через вышестоящие прокси.',
+        optRoutingModePac: 'Выборочная маршрутизация по профилям (PAC)',
+        descRoutingModePac: 'Браузер использует PAC-правила для выборочного проксирования указанных доменов/сетей; остальной трафик идет напрямую.',
+        optRoutingModeFixed: 'Полный туннель (Весь трафик через активный прокси)',
+        descRoutingModeFixed: 'Весь трафик браузера принудительно направляется через текущий активный upstream-прокси (режим fixed_servers).',
+        toastRoutingModeSaved: 'Режим маршрутизации обновлен! Расширения получат его при следующей синхронизации.',
         titleProxyRegistry: 'Реестр прокси-серверов',
         subProxyRegistry: 'Управление вышестоящими корпоративными прокси, синхронизация с 3x-ui по тегам и ручные узлы.',
         btnAdd3xui: '+ Добавить по тегу из 3x-ui',
@@ -1870,6 +1888,19 @@
       }
     }
 
+    async function downloadExtensionPackage(type) {
+      toast(currentLang === 'ru' ? 'Сборка пакета перед скачиванием...' : 'Building package before download...', 'info');
+      await buildAndPackExtension();
+      const url = type === 'crx' ? '/updates/extension.crx' : '/api/extension/download-zip';
+      const a = document.createElement('a');
+      a.href = url;
+      if (type === 'zip') a.download = 'corp-proxy-extension.zip';
+      else a.download = 'extension.crx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
     // ----------------- Fleet & Instances -----------------
     async function fetchFleet() {
       try {
@@ -2235,6 +2266,50 @@
           activeBadge.textContent = t('badgeNoActiveProxy', 'No Active Proxy');
           activeBadge.className = 'badge badge-offline';
         }
+      }
+
+      // 0. Warning banner for placeholder 10.0.0.1 (shown when no proxy is active)
+      const warnBanner = document.getElementById('noActiveProxyWarning');
+      if (warnBanner) {
+        warnBanner.style.display = active ? 'none' : 'flex';
+      }
+    }
+
+    async function fetchProxyConfig() {
+      try {
+        const res = await adminFetch('/api/config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+        const mode = cfg.routingMode || 'pac';
+        const pacRadio = document.getElementById('routingModePac');
+        const fixedRadio = document.getElementById('routingModeFixed');
+        if (pacRadio && fixedRadio) {
+          if (mode === 'fixed') {
+            fixedRadio.checked = true;
+          } else {
+            pacRadio.checked = true;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch proxy config:', err);
+      }
+    }
+
+    async function onRoutingModeChanged(mode) {
+      try {
+        const res = await adminFetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ routingMode: mode })
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || ('HTTP ' + res.status));
+        }
+        toast(t('toastRoutingModeSaved', 'Routing mode updated! Extensions will receive it on next sync.'), 'success');
+      } catch (e) {
+        toast('Failed to update routing mode: ' + e, 'error');
+        fetchProxyConfig();
       }
     }
 
@@ -2668,6 +2743,7 @@ ${JSON.stringify(json, null, 2)}`;
       fetchExtensionInfo();
       fetchRotationConfig();
       fetchProxies();
+      fetchProxyConfig();
     }
 
     (async function initAuth() {

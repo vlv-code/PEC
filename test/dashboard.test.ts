@@ -264,3 +264,25 @@ test("dashboard: SOCKS5 auth limitation warning is rendered in proxy modals and 
   assert.ok(dashboardJs.includes("checkSocksAuthWarning"), "dashboard.js must include checkSocksAuthWarning handler");
 });
 
+test("dashboard: placeholder warning banner and routingMode selector are present", () => {
+  const html = render(false);
+
+  // 1. Placeholder warning banner (#noActiveProxyWarning)
+  assert.ok(html.includes('id="noActiveProxyWarning"'), "dashboard must contain noActiveProxyWarning banner");
+  assert.ok(html.includes('data-i18n="warnNoActiveProxyTitle"'), "must have data-i18n for warnNoActiveProxyTitle");
+  assert.ok(html.includes('data-i18n="warnNoActiveProxyDesc"'), "must have data-i18n for warnNoActiveProxyDesc");
+
+  // 2. Routing mode radios
+  assert.ok(html.includes('id="routingModePac"'), "must have routingModePac radio");
+  assert.ok(html.includes('id="routingModeFixed"'), "must have routingModeFixed radio");
+  assert.ok(html.includes('name="proxyRoutingMode"'), "radios must share group proxyRoutingMode");
+
+  // 3. Client JS functions
+  assert.ok(dashboardJs.includes("function fetchProxyConfig("), "must declare fetchProxyConfig");
+  assert.ok(dashboardJs.includes("function onRoutingModeChanged("), "must declare onRoutingModeChanged");
+  assert.ok(dashboardJs.includes("warnNoActiveProxyTitle:"), "EN translation for warnNoActiveProxyTitle");
+  assert.ok(dashboardJs.includes("optRoutingModePac:"), "EN translation for optRoutingModePac");
+  assert.ok(dashboardJs.includes("optRoutingModeFixed:"), "EN translation for optRoutingModeFixed");
+});
+
+

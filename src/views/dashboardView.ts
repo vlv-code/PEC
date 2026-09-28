@@ -537,8 +537,8 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
           <span id="codeStatus" style="font-size: 12px; color: var(--text-muted);" data-i18n="lblCodeReady">Ready</span>
           <div style="display: flex; gap: 8px;">
             <button onclick="saveCurrentCodeFile()" class="btn-secondary" style="font-size: 12px;" data-i18n="btnSaveCode">Save File Edits & Apply</button>
-            <a href="/updates/extension.crx" class="btn" style="font-size: 12px;" data-i18n="btnDownloadCrx">Download .CRX</a>
-            <a href="/api/extension/download-zip" download="corp-proxy-extension.zip" class="btn-secondary" style="font-size: 12px;" data-i18n="btnDownloadZip">Download .ZIP</a>
+            <button onclick="downloadExtensionPackage('crx')" class="btn" style="font-size: 12px;" data-i18n="btnDownloadCrx">Download .CRX</button>
+            <button onclick="downloadExtensionPackage('zip')" class="btn-secondary" style="font-size: 12px;" data-i18n="btnDownloadZip">Download .ZIP</button>
           </div>
         </div>
       </div>
@@ -599,8 +599,8 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
             <span class="stat-value"><a href="/updates/updates.xml" target="_blank" style="color: var(--primary);">/updates/updates.xml</a></span>
           </div>
           <div style="margin-top: 16px;">
-            <a href="/updates/extension.crx" class="btn" style="font-size: 13px;" data-i18n="btnDownloadCrxPkg">Download .CRX Package</a>
-            <a href="/api/extension/download-zip" download="corp-proxy-extension.zip" class="btn-secondary" style="font-size: 13px; margin-left: 8px;" data-i18n="btnDownloadZipPkg">Download .ZIP</a>
+            <button onclick="downloadExtensionPackage('crx')" class="btn" style="font-size: 13px;" data-i18n="btnDownloadCrxPkg">Download .CRX Package</button>
+            <button onclick="downloadExtensionPackage('zip')" class="btn-secondary" style="font-size: 13px; margin-left: 8px;" data-i18n="btnDownloadZipPkg">Download .ZIP</button>
           </div>
         </div>
 
@@ -621,7 +621,44 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
 
     <!-- ==================== TAB 5: PROXY SETTINGS & 3X-UI ==================== -->
     <div id="tab-proxy-settings" class="tab-pane">
-      <!-- 1. Upstream Proxy Nodes Registry Card -->
+      <!-- 0. Warning Banner for placeholder 10.0.0.1 (shown when no proxy is active) -->
+      <div id="noActiveProxyWarning" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.4); border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; display: none; align-items: flex-start; gap: 10px; font-size: 13px;">
+        <span style="font-size: 18px; line-height: 1;">⚠️</span>
+        <div>
+          <strong data-i18n="warnNoActiveProxyTitle">No active upstream proxy.</strong>
+          <div data-i18n="warnNoActiveProxyDesc" style="margin-top: 2px;">Extensions are receiving placeholder <code>10.0.0.1:10809</code> and traffic will not flow. Add a proxy via "+ Add Manual Proxy" or "+ Add from 3x-ui" and click "Activate".</div>
+        </div>
+      </div>
+
+      <!-- 1. Client Traffic Routing Mode Card -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h2 data-i18n="titleRoutingMode">Client Traffic Routing Mode</h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;" data-i18n="subRoutingMode">
+          Choose how Chrome extensions route browser traffic through upstream nodes.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; text-transform: none; font-weight: normal; margin-bottom: 0;">
+            <input type="radio" name="proxyRoutingMode" id="routingModePac" value="pac" checked style="width: auto; margin-top: 3px;" onchange="onRoutingModeChanged('pac')" />
+            <div>
+              <strong data-i18n="optRoutingModePac">Selective Routing via Profiles (PAC)</strong>
+              <div style="font-size: 12px; color: var(--text-muted);" data-i18n="descRoutingModePac">
+                Browser uses PAC rules to selectively proxy designated domains/subnets; all other traffic goes direct.
+              </div>
+            </div>
+          </label>
+          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; text-transform: none; font-weight: normal; margin-bottom: 0;">
+            <input type="radio" name="proxyRoutingMode" id="routingModeFixed" value="fixed" style="width: auto; margin-top: 3px;" onchange="onRoutingModeChanged('fixed')" />
+            <div>
+              <strong data-i18n="optRoutingModeFixed">Full Tunnel (All Traffic via Active Proxy)</strong>
+              <div style="font-size: 12px; color: var(--text-muted);" data-i18n="descRoutingModeFixed">
+                All browser traffic is forcibly tunneled through the currently active upstream proxy (fixed_servers mode).
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- 2. Upstream Proxy Nodes Registry Card -->
       <div class="card" style="margin-bottom: 16px;">
         <h2>
           <span data-i18n="titleProxyRegistry">Proxy Registry</span>
