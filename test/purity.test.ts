@@ -335,3 +335,99 @@ test("purity: background.js installs the PAC script INLINE (pacScript.data) when
   assert.strictEqual(pac.mandatory, false, "fail-open semantics are preserved (mandatory=false)");
 });
 
+test("purity: background.js maintains ring-buffer logs and handles GET_LOGS and CLEAR_LOGS", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  let capturedMessageListener: any = null;
+  const storageData: Record<string, any> = {};
+
+  const vmScript = `
+    const chrome = {
+      storage: {
+        local: {
+          get: (keys, cb) => {
+            const res = typeof keys === "string" ? { [keys]: storageData[keys] } : storageData;
+            if (cb) cb(res);
+            return Promise.resolve(res);
+          },
+          set: (obj, cb) => {
+            Object.assign(storageData, obj);
+            if (cb) cb();
+            return Promise.resolve();
+          }
+        },
+        managed: { get: () => Promise.resolve({}) }
+      },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: {
+        settings: {
+          set: () => Promise.resolve(),
+          get: () => Promise.resolve({ value: { mode: "pac_script" }, levelOfControl: "controlled_by_this_extension" })
+        },
+        onProxyError: { addListener: () => {} }
+      },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: {
+        getManifest: () => ({ version: "1.0.0" }),
+        id: "test-id",
+        onMessage: {
+          addListener: (fn) => { capturedMessageListener = fn; }
+        }
+      }
+    };
+    ${src}
+    globalThis.testLogEvent = typeof logEvent !== "undefined" ? logEvent : undefined;
+    globalThis.testMessageListener = capturedMessageListener;
+  `;
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: () => Promise.resolve({ ok: false }),
+    AbortSignal,
+    Map,
+    parseInt,
+    storageData,
+    capturedMessageListener: null,
+  });
+  vm.runInContext(vmScript, ctx);
+
+  // 1. logEvent exists and records entries
+  assert.strictEqual(typeof (ctx as any).testLogEvent, "function", "logEvent must be defined");
+  (ctx as any).testLogEvent("info", "Test event 1");
+  (ctx as any).testLogEvent("warn", "Test event 2");
+
+  // 2. GET_LOGS returns the entries
+  let logsResponse: any = null;
+  (ctx as any).testMessageListener({ action: "GET_LOGS" }, {}, (res: any) => { logsResponse = res; });
+  assert.ok(logsResponse && Array.isArray(logsResponse.logs), "GET_LOGS must return logs array");
+  assert.ok(logsResponse.logs.some((l: any) => l.message && l.message.includes("Test event 1")), "logs must contain Test event 1");
+
+  // 3. CLEAR_LOGS empties the ring buffer
+  (ctx as any).testMessageListener({ action: "CLEAR_LOGS" }, {}, (_res: any) => {});
+  let clearedLogs: any = null;
+  (ctx as any).testMessageListener({ action: "GET_LOGS" }, {}, (res: any) => { clearedLogs = res; });
+  assert.strictEqual(clearedLogs.logs.length, 0, "logs must be empty after CLEAR_LOGS");
+});
+
+test("purity: popup.html and popup.js render diagnostics log terminal with copy and refresh actions", () => {
+  const htmlPath = path.join(REPO_ROOT, "extension", "popup.html");
+  const jsPath = path.join(REPO_ROOT, "extension", "popup.js");
+  const html = fs.readFileSync(htmlPath, "utf-8");
+  const js = fs.readFileSync(jsPath, "utf-8");
+
+  assert.ok(html.includes('id="logContainer"'), "popup.html must contain logContainer element");
+  assert.ok(html.includes('id="btnCopyLogs"'), "popup.html must contain btnCopyLogs button");
+  assert.ok(html.includes('id="btnClearLogs"'), "popup.html must contain btnClearLogs button");
+
+  assert.ok(js.includes("GET_LOGS"), "popup.js must request GET_LOGS from background worker");
+  assert.ok(js.includes("CLEAR_LOGS"), "popup.js must support CLEAR_LOGS");
+});
+
+

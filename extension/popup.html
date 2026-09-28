@@ -246,6 +246,22 @@
     <button id="btnCheckIp" class="btn-sec">
       Проверить Egress IP и Гео
     </button>
+
+    <div class="card" style="margin-top: 10px;">
+      <div class="row" style="margin-bottom: 6px;">
+        <span class="label" style="font-weight: 600;">Журнал событий</span>
+        <span class="tag" id="logCountTag" style="font-size: 10px;">0 записей</span>
+      </div>
+      <pre id="logContainer" style="background: #050914; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; color: #94a3b8; max-height: 150px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin: 4px 0 8px 0;"></pre>
+      <div style="display: flex; gap: 6px;">
+        <button id="btnCopyLogs" class="btn-sec" style="margin-top: 0; flex: 1; padding: 5px 8px; font-size: 11px;">
+          Скопировать логи
+        </button>
+        <button id="btnClearLogs" class="btn-sec" style="margin-top: 0; flex: 1; padding: 5px 8px; font-size: 11px;">
+          Очистить
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- TAB 4: Support -->

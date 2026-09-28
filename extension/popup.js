@@ -9,6 +9,9 @@ window.switchPopupTab = function(tabId) {
   if (activeBtn) activeBtn.classList.add("active");
   const target = document.getElementById(tabId);
   if (target) target.classList.add("active");
+  if (tabId === "tab-diag" && typeof window.__pecLoadLogs === "function") {
+    window.__pecLoadLogs();
+  }
 };
 
 // Global state applier - reactive to simulator and chrome.runtime
@@ -157,7 +160,80 @@ function initPopup() {
     });
   }
 
+  // Diagnostics log viewer
+  const logContainer = document.getElementById("logContainer");
+  const btnCopyLogs = document.getElementById("btnCopyLogs");
+  const btnClearLogs = document.getElementById("btnClearLogs");
+  const logCountTag = document.getElementById("logCountTag");
+
+  function formatTime(isoStr) {
+    try {
+      const d = new Date(isoStr);
+      return d.toTimeString().split(" ")[0] + "." + String(d.getMilliseconds()).padStart(3, "0");
+    } catch {
+      return isoStr || "";
+    }
+  }
+
+  function renderLogs(logs) {
+    if (!logContainer) return;
+    if (!Array.isArray(logs) || logs.length === 0) {
+      logContainer.textContent = "Журнал пуст. Нет зарегистрированных событий.";
+      if (logCountTag) logCountTag.textContent = "0 записей";
+      return;
+    }
+    if (logCountTag) logCountTag.textContent = logs.length + " зап.";
+    const lines = logs.map((l) => {
+      const time = formatTime(l.timestamp);
+      const lvl = (l.level || "INFO").toUpperCase().padEnd(5);
+      const msg = l.message || "";
+      const extra = l.data ? " " + (typeof l.data === "object" ? JSON.stringify(l.data) : l.data) : "";
+      return `[${time}] [${lvl}] ${msg}${extra}`;
+    });
+    logContainer.textContent = lines.join("\n");
+    logContainer.scrollTop = logContainer.scrollHeight;
+  }
+
+  function loadLogs() {
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ action: "GET_LOGS" }, (res) => {
+        if (!chrome.runtime.lastError && res && Array.isArray(res.logs)) {
+          renderLogs(res.logs);
+        }
+      });
+    }
+  }
+
+  window.__pecLoadLogs = loadLogs;
+
+  if (btnCopyLogs) {
+    btnCopyLogs.addEventListener("click", () => {
+      if (!logContainer) return;
+      const text = logContainer.textContent || "";
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          const orig = btnCopyLogs.textContent;
+          btnCopyLogs.textContent = "Скопировано!";
+          setTimeout(() => { btnCopyLogs.textContent = orig; }, 1200);
+        }).catch(() => {});
+      }
+    });
+  }
+
+  if (btnClearLogs) {
+    btnClearLogs.addEventListener("click", () => {
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ action: "CLEAR_LOGS" }, () => {
+          renderLogs([]);
+        });
+      } else {
+        renderLogs([]);
+      }
+    });
+  }
+
   loadState();
+  loadLogs();
 }
 
 if (document.readyState === "loading") {

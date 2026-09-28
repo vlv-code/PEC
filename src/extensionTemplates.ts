@@ -61,6 +61,47 @@ let currentProxyState = {
   lastSync: 0,
 };
 
+// Diagnostics ring-buffer log (last 100 events) persisted to local storage
+const MAX_LOGS = 100;
+let recentLogs = [];
+
+try {
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+    chrome.storage.local.get(["pecLogs"], (res) => {
+      if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
+        recentLogs = res.pecLogs.slice(-MAX_LOGS);
+      }
+    });
+  }
+} catch (e) {}
+
+function logEvent(level, message, data) {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    level: level || "info",
+    message: String(message),
+    data: data !== undefined ? data : null,
+  };
+  recentLogs.push(entry);
+  if (recentLogs.length > MAX_LOGS) {
+    recentLogs.shift();
+  }
+  const prefix = "[corp-proxy][" + entry.level.toUpperCase() + "]";
+  if (entry.level === "error") {
+    console.error(prefix, message, data !== undefined ? data : "");
+  } else if (entry.level === "warn") {
+    console.warn(prefix, message, data !== undefined ? data : "");
+  } else {
+    console.log(prefix, message, data !== undefined ? data : "");
+  }
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+      chrome.storage.local.set({ pecLogs: recentLogs });
+    }
+  } catch (e) {}
+  return entry;
+}
+
 // Persistent instance identity: the MV3 service worker is killed after ~30s
 // of idle time and re-executes this script on wake, so a module-level random
 // ID would change on every wake and flood the server's instance registry.
@@ -141,8 +182,10 @@ async function applyWebRtcProtection() {
         scope: "regular",
       });
       console.log("[corp-proxy] WebRTC IP leak protection enforced.");
+      logEvent("info", "WebRTC IP leak protection enforced (disable_non_proxied_udp)");
     } catch (e) {
       console.warn("[corp-proxy] Could not set WebRTC IP handling policy:", e);
+      logEvent("warn", "Could not set WebRTC IP handling policy: " + (e && e.message ? e.message : e));
     }
   }
 }
@@ -176,16 +219,20 @@ async function verifyAppliedProxySettings(expectedMode) {
     const control = details && details.levelOfControl ? details.levelOfControl : "(unknown)";
     if (mode === expectedMode && control === "controlled_by_this_extension") {
       console.log("[corp-proxy] Proxy verified: mode=" + mode + ", control=" + control + " - config is LIVE in the browser.");
+      logEvent("info", "Proxy verified: mode=" + mode + ", control=" + control + " (active)");
     } else if (control === "controlled_by_other_extensions" || control === "not_controllable") {
       console.warn("[corp-proxy] Proxy NOT in effect: mode=" + mode + ", control=" + control +
         " - the proxy setting is owned by " +
         (control === "not_controllable" ? "an enterprise policy" : "another extension") +
         ", our config is ignored.");
+      logEvent("error", "Proxy NOT active: owned by " + (control === "not_controllable" ? "enterprise policy" : "another extension") + " (" + control + ")");
     } else {
       console.warn("[corp-proxy] Proxy NOT verified: mode=" + mode + ", control=" + control);
+      logEvent("warn", "Proxy NOT verified: mode=" + mode + ", control=" + control);
     }
   } catch (err) {
     console.warn("[corp-proxy] Verification read failed:", err && err.message ? err.message : err);
+    logEvent("warn", "Verification read failed: " + (err && err.message ? err.message : err));
   }
 }
 
@@ -201,6 +248,7 @@ async function verifyAppliedProxySettings(expectedMode) {
 //     with no feedback anywhere.
 async function applyPacScript(pacUrl) {
   let pacText = null;
+  logEvent("info", "Fetching PAC script from " + pacUrl);
   try {
     const res = await fetch(pacUrl, {
       cache: "no-store",
@@ -212,18 +260,25 @@ async function applyPacScript(pacUrl) {
         pacText = text;
       } else {
         console.warn("[corp-proxy] PAC endpoint returned an invalid script (no FindProxyForURL).");
+        logEvent("warn", "PAC endpoint returned invalid script (no FindProxyForURL), falling back to URL mode");
       }
     } else {
       console.warn("[corp-proxy] PAC download failed: HTTP " + res.status + " - falling back to URL mode.");
+      logEvent("warn", "PAC download failed: HTTP " + res.status + " - falling back to URL mode");
     }
   } catch (err) {
     console.warn("[corp-proxy] PAC download error - falling back to URL mode:", err && err.message ? err.message : err);
+    logEvent("warn", "PAC download error (" + (err && err.message ? err.message : err) + ") - falling back to URL mode");
   }
 
   const useInline = pacText !== null;
+  const pacRev = useInline ? pacRevisionOf(pacText) : null;
   console.log("[corp-proxy] Applying PAC " + (useInline
-    ? "(inline, " + pacText.length + " bytes, generated " + pacRevisionOf(pacText) + ") from " + pacUrl
+    ? "(inline, " + pacText.length + " bytes, generated " + pacRev + ") from " + pacUrl
     : "(URL fallback - browser fetches it) " + pacUrl));
+  logEvent("info", "Applying PAC " + (useInline
+    ? "(inline, " + pacText.length + " bytes, rev " + pacRev + ")"
+    : "(URL mode fallback)") + " from " + pacUrl);
 
   await chrome.proxy.settings.set({
     value: {
@@ -245,6 +300,7 @@ async function applyProxyConfig(config) {
   try {
     if (currentProxyState.bypassActive || config.killSwitch || config.enabled === false || config.protocol === "direct") {
       console.log("[corp-proxy] Routing set to DIRECT.");
+      logEvent("info", "Proxy set to DIRECT (bypass=" + currentProxyState.bypassActive + ", enabled=" + config.enabled + ")");
       await chrome.proxy.settings.set({
         value: { mode: "direct" },
         scope: "regular",
@@ -270,6 +326,7 @@ async function applyProxyConfig(config) {
     const bypassList = Array.isArray(config.bypassList) ? config.bypassList : ["<local>"];
 
     console.log("[corp-proxy] Applying " + scheme.toUpperCase() + " Proxy: " + config.host + ":" + config.port);
+    logEvent("info", "Applying " + scheme.toUpperCase() + " Proxy: " + config.host + ":" + config.port);
     await chrome.proxy.settings.set({
       value: {
         mode: "fixed_servers",
@@ -288,6 +345,7 @@ async function applyProxyConfig(config) {
     await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
     console.error("[corp-proxy] Error applying proxy settings:", err);
+    logEvent("error", "Error applying proxy settings: " + (err && err.message ? err.message : err));
     updateBadge("ERR", "#ef4444");
   }
 }
@@ -296,19 +354,22 @@ async function applyProxyConfig(config) {
 // lines). Without this listener such failures are completely invisible.
 if (chrome.proxy && chrome.proxy.onProxyError && chrome.proxy.onProxyError.addListener) {
   chrome.proxy.onProxyError.addListener((details) => {
-    console.warn("[corp-proxy] onProxyError:",
-      details && details.error ? details.error : "?",
-      details && details.fatal ? "(FATAL - request failed)" : "(recovered)");
+    const errDesc = details && details.error ? details.error : "unknown";
+    const fatal = details && details.fatal;
+    console.warn("[corp-proxy] onProxyError:", errDesc, fatal ? "(FATAL - request failed)" : "(recovered)");
+    logEvent("error", "Proxy network/PAC error: " + errDesc + (fatal ? " (FATAL - request failed)" : " (recovered)"), details);
   });
 }
 
 // Re-enable proxy after the temporary bypass window elapsed
 async function expireBypass() {
   console.log("[corp-proxy] Bypass window elapsed - re-enabling proxy.");
+  logEvent("info", "Temporary bypass window expired - re-enabling proxy");
   currentProxyState.bypassActive = false;
   currentProxyState.bypassExpiresAt = null;
   syncWithServer(true).catch(function (e) {
     console.warn("[corp-proxy] Re-sync after bypass expiry failed:", e);
+    logEvent("warn", "Re-sync after bypass expiry failed: " + (e && e.message ? e.message : e));
   });
 }
 
@@ -351,6 +412,7 @@ async function syncWithServer(forceRefresh = false) {
       if (token) headers["X-Ext-Token"] = token;
 
       let syncSuccessful = false;
+      logEvent("info", "Starting sync with server: " + syncUrl);
 
       try {
         const res = await fetch(syncUrl, {
@@ -390,6 +452,8 @@ async function syncWithServer(forceRefresh = false) {
               lastSync: Date.now(),
             };
 
+            logEvent("info", "Sync successful: profile=" + currentProxyState.profileName + ", mode=" + currentProxyState.protocol + ", host=" + (currentProxyState.host || "pac"));
+
             if (autoConfigureProxy) {
               await applyProxyConfig(payload.config);
             }
@@ -397,6 +461,7 @@ async function syncWithServer(forceRefresh = false) {
         }
       } catch (err) {
         console.warn("[corp-proxy] Sync endpoint error, trying fallback /creds:", err);
+        logEvent("warn", "Sync endpoint error, trying fallback /creds: " + (err && err.message ? err.message : err));
       }
 
       // Fallback to /creds
@@ -408,11 +473,13 @@ async function syncWithServer(forceRefresh = false) {
 
         if (!resFallback.ok) {
           currentProxyState.online = false;
+          logEvent("error", "Creds fetch failed: HTTP " + resFallback.status);
           throw new Error("Creds fetch failed: HTTP " + resFallback.status);
         }
 
         const data = await resFallback.json();
         if (!data.user || !data.pass) {
+          logEvent("error", "Invalid creds payload from server");
           throw new Error("Invalid creds payload from server");
         }
 
@@ -423,6 +490,7 @@ async function syncWithServer(forceRefresh = false) {
         };
         currentProxyState.online = true;
         currentProxyState.lastSync = Date.now();
+        logEvent("info", "Creds fallback successful for user " + data.user);
       }
 
       return memoryCredsCache;
@@ -442,12 +510,15 @@ chrome.webRequest.onAuthRequired.addListener(
       return;
     }
 
+    logEvent("info", "Proxy auth challenge (407) for " + (details.url ? details.url.slice(0, 80) : "requestId=" + details.requestId));
+
     if (seenRequests.size > 1000) seenRequests.clear();
     const attempts = (seenRequests.get(details.requestId) || 0) + 1;
     seenRequests.set(details.requestId, attempts);
 
     if (attempts > MAX_AUTH_ATTEMPTS) {
       console.warn("[corp-proxy] Max auth attempts exceeded for requestId=" + details.requestId);
+      logEvent("warn", "Max auth attempts exceeded for requestId=" + details.requestId);
       seenRequests.delete(details.requestId);
       asyncCallback({ cancel: true });
       return;
@@ -459,10 +530,12 @@ chrome.webRequest.onAuthRequired.addListener(
         if (!creds || !creds.user || !creds.pass) {
           throw new Error("No valid credentials returned");
         }
+        logEvent("info", "Supplied proxy auth credentials for requestId=" + details.requestId);
         asyncCallback({ authCredentials: { username: creds.user, password: creds.pass } });
       })
       .catch((err) => {
         console.error("[corp-proxy] onAuthRequired error:", err);
+        logEvent("error", "onAuthRequired error: " + (err && err.message ? err.message : err));
         seenRequests.delete(details.requestId);
         asyncCallback({});
       });
@@ -488,6 +561,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ...currentProxyState });
     return true;
   }
+  if (msg.action === "GET_LOGS") {
+    sendResponse({ logs: [...recentLogs] });
+    return true;
+  }
+  if (msg.action === "CLEAR_LOGS") {
+    recentLogs = [];
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.remove) {
+        chrome.storage.local.remove(["pecLogs"]);
+      }
+    } catch (e) {}
+    sendResponse({ ok: true, logs: [] });
+    return true;
+  }
   if (msg.action === "FORCE_SYNC") {
     syncWithServer(true).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
     return true;
@@ -503,6 +590,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       currentProxyState.bypassExpiresAt = null;
       chrome.alarms.clear(ALARM_BYPASS_EXPIRE);
     }
+    logEvent("info", "Proxy bypass toggled: " + (currentProxyState.bypassActive ? "ON (expires in " + BYPASS_TIMEOUT_MIN + "m)" : "OFF"));
     syncWithServer(true)
       .then(() => sendResponse({ ok: true, bypassActive: currentProxyState.bypassActive }))
       .catch(() => sendResponse({ ok: false, bypassActive: currentProxyState.bypassActive }));
