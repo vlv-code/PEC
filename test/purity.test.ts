@@ -262,3 +262,76 @@ test("purity: background.js applyProxyConfig applies pac_script mode when pacUrl
     "proxy.corp.example"
   );
 });
+
+test("purity: background.js installs the PAC script INLINE (pacScript.data) when the PAC endpoint is reachable", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  // A realistic split-profile PAC as served by GET /proxy.pac
+  const pacScript = [
+    "// Profile: Direct by Default (Selective Proxy) (Policy: Default DIRECT)",
+    "// Generated: 2026-09-28T04:54:36.837Z",
+    "function FindProxyForURL(url, host) {",
+    '  host = ("" + host).toLowerCase();',
+    '  if (dnsDomainIs(host, "chatgpt.com")) { return "PROXY proxy.example.corp:10810; DIRECT"; }',
+    '  return "DIRECT";',
+    "}",
+    "",
+  ].join("\n");
+
+  const vmScript = `
+    const chrome = {
+      storage: { local: { get: () => Promise.resolve({}), set: () => Promise.resolve() }, managed: { get: () => Promise.resolve({}) } },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: {
+        settings: {
+          set: (val) => {
+            appliedProxySettings = val;
+            return Promise.resolve();
+          },
+          get: (_q) => Promise.resolve({ value: { mode: "pac_script" }, levelOfControl: "controlled_by_this_extension" })
+        },
+        onProxyError: { addListener: () => {} }
+      },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: { getManifest: () => ({ version: "1.0.0" }), id: "test-id", onMessage: { addListener: () => {} } }
+    };
+    ${src}
+    globalThis.testApplyProxyConfig = applyProxyConfig;
+  `;
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: () => Promise.resolve({ ok: true, text: () => Promise.resolve(pacScript) }),
+    AbortSignal,
+    Map,
+    parseInt,
+    appliedProxySettings: null,
+  });
+  vm.runInContext(vmScript, ctx);
+
+  await (ctx as any).testApplyProxyConfig({
+    protocol: "http",
+    host: "proxy.example.corp",
+    port: 10810,
+    pacUrl: "https://pac.example.corp/proxy.pac?profileId=profile_default_split",
+  });
+
+  assert.strictEqual(
+    (ctx as any).appliedProxySettings?.value?.mode,
+    "pac_script",
+    "PAC profile configs must be applied in pac_script mode"
+  );
+  const pac = (ctx as any).appliedProxySettings?.value?.pacScript;
+  assert.ok(pac?.data, "when the PAC endpoint is reachable the script must be installed inline via pacScript.data");
+  assert.ok(String(pac.data).includes("FindProxyForURL"), "inline PAC must contain the entry point function");
+  assert.strictEqual(pac.url, undefined, "url-mode is a fallback only and must not be set when data is available");
+  assert.strictEqual(pac.mandatory, false, "fail-open semantics are preserved (mandatory=false)");
+});
+

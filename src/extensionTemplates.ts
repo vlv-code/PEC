@@ -147,6 +147,97 @@ async function applyWebRtcProtection() {
   }
 }
 
+// Extract the "// Generated: <timestamp>" stamp from a PAC script so the
+// applied routing revision is visible in the service worker console.
+function pacRevisionOf(pacText) {
+  const marker = "// Generated:";
+  const idx = pacText.indexOf(marker);
+  if (idx === -1) return "unknown rev";
+  let end = idx + marker.length;
+  const limit = Math.min(pacText.length, end + 48);
+  while (end < limit && pacText.charCodeAt(end) !== 10 && pacText.charCodeAt(end) !== 13) {
+    end++;
+  }
+  return pacText.slice(idx + marker.length, end).trim() || "unknown rev";
+}
+
+// Read the effective proxy setting back and log who controls it. This is the
+// ground truth for "did the browser actually accept our config":
+//   mode=<expected> + levelOfControl=controlled_by_this_extension -> LIVE
+//   controlled_by_other_extensions -> another extension owns the setting
+//   not_controllable               -> enterprise policy enforces proxy
+// chrome://net-internals can mislead here: its "Original" block reflects
+// OS-level settings, so a working extension PAC can still look "default".
+async function verifyAppliedProxySettings(expectedMode) {
+  try {
+    if (!chrome.proxy.settings.get) return;
+    const details = await chrome.proxy.settings.get({});
+    const mode = details && details.value ? details.value.mode : "(unset)";
+    const control = details && details.levelOfControl ? details.levelOfControl : "(unknown)";
+    if (mode === expectedMode && control === "controlled_by_this_extension") {
+      console.log("[corp-proxy] Proxy verified: mode=" + mode + ", control=" + control + " - config is LIVE in the browser.");
+    } else if (control === "controlled_by_other_extensions" || control === "not_controllable") {
+      console.warn("[corp-proxy] Proxy NOT in effect: mode=" + mode + ", control=" + control +
+        " - the proxy setting is owned by " +
+        (control === "not_controllable" ? "an enterprise policy" : "another extension") +
+        ", our config is ignored.");
+    } else {
+      console.warn("[corp-proxy] Proxy NOT verified: mode=" + mode + ", control=" + control);
+    }
+  } catch (err) {
+    console.warn("[corp-proxy] Verification read failed:", err && err.message ? err.message : err);
+  }
+}
+
+// Apply a PAC script. Two strategies:
+//  1) INLINE (preferred): the worker downloads the PAC text itself and
+//     installs it via pacScript.data. Atomic and deterministic - the exact
+//     script we fetched is the script in effect, and every sync installs a
+//     fresh revision. This is how SwitchyOmega-class extensions do it.
+//  2) URL fallback: if the worker cannot fetch the script, fall back to
+//     pacScript.url and let the browser process download it. CAUTION: in
+//     url-mode, while that browser-side download is pending - or when it
+//     fails - Chrome silently routes everything DIRECT (mandatory:false),
+//     with no feedback anywhere.
+async function applyPacScript(pacUrl) {
+  let pacText = null;
+  try {
+    const res = await fetch(pacUrl, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.indexOf("FindProxyForURL") !== -1) {
+        pacText = text;
+      } else {
+        console.warn("[corp-proxy] PAC endpoint returned an invalid script (no FindProxyForURL).");
+      }
+    } else {
+      console.warn("[corp-proxy] PAC download failed: HTTP " + res.status + " - falling back to URL mode.");
+    }
+  } catch (err) {
+    console.warn("[corp-proxy] PAC download error - falling back to URL mode:", err && err.message ? err.message : err);
+  }
+
+  const useInline = pacText !== null;
+  console.log("[corp-proxy] Applying PAC " + (useInline
+    ? "(inline, " + pacText.length + " bytes, generated " + pacRevisionOf(pacText) + ") from " + pacUrl
+    : "(URL fallback - browser fetches it) " + pacUrl));
+
+  await chrome.proxy.settings.set({
+    value: {
+      mode: "pac_script",
+      pacScript: useInline
+        ? { data: pacText, mandatory: false }
+        : { url: pacUrl, mandatory: false },
+    },
+    scope: "regular",
+  });
+  updateBadge("PAC", "#0284c7");
+  await verifyAppliedProxySettings("pac_script");
+}
+
 // Apply proxy settings to browser network stack
 async function applyProxyConfig(config) {
   if (!chrome.proxy || !chrome.proxy.settings) return;
@@ -159,23 +250,13 @@ async function applyProxyConfig(config) {
         scope: "regular",
       });
       updateBadge("DIR", "#f59e0b");
+      await verifyAppliedProxySettings("direct");
       return;
     }
 
     const usePac = (config.protocol === "pac" || (config.pacUrl && config.routingMode !== "fixed"));
     if (usePac && config.pacUrl) {
-      console.log("[corp-proxy] Applying PAC URL:", config.pacUrl);
-      await chrome.proxy.settings.set({
-        value: {
-          mode: "pac_script",
-          pacScript: {
-            url: config.pacUrl,
-            mandatory: false,
-          },
-        },
-        scope: "regular",
-      });
-      updateBadge("PAC", "#0284c7");
+      await applyPacScript(config.pacUrl);
       return;
     }
 
@@ -204,10 +285,21 @@ async function applyProxyConfig(config) {
       scope: "regular",
     });
     updateBadge(scheme === "socks5" ? "S5" : "PRX", "#10b981");
+    await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
     console.error("[corp-proxy] Error applying proxy settings:", err);
     updateBadge("ERR", "#ef4444");
   }
+}
+
+// Surface PAC/proxy runtime failures (script errors, unreachable PROXY
+// lines). Without this listener such failures are completely invisible.
+if (chrome.proxy && chrome.proxy.onProxyError && chrome.proxy.onProxyError.addListener) {
+  chrome.proxy.onProxyError.addListener((details) => {
+    console.warn("[corp-proxy] onProxyError:",
+      details && details.error ? details.error : "?",
+      details && details.fatal ? "(FATAL - request failed)" : "(recovered)");
+  });
 }
 
 // Re-enable proxy after the temporary bypass window elapsed
