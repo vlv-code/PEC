@@ -19,9 +19,9 @@ const DEFAULT_SERVER_BASE = "__PEC_SERVER_BASE__";
 const DEFAULT_CREDS_URL = DEFAULT_SERVER_BASE + "/creds";
 const DEFAULT_SYNC_URL = DEFAULT_SERVER_BASE + "/api/sync";
 const FALLBACK_TOKEN = "__PEC_DEFAULT_TOKEN__";
-const SYNC_INTERVAL_MIN = __PEC_SYNC_INTERVAL_MIN__;
-const BYPASS_TIMEOUT_MIN = __PEC_BYPASS_TIMEOUT_MIN__;
-const BADGE_ENABLED = __PEC_BADGE_ENABLED__;
+const SYNC_INTERVAL_MIN = 5;
+const BYPASS_TIMEOUT_MIN = 15;
+const BADGE_ENABLED = true;
 const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
 
 const ALARM_SYNC = "corp_proxy_sync";
@@ -138,7 +138,7 @@ async function applyProxyConfig(config) {
   if (!chrome.proxy || !chrome.proxy.settings) return;
 
   try {
-    if (currentProxyState.bypassActive || config.killSwitch || !config.enabled || config.protocol === "direct") {
+    if (currentProxyState.bypassActive || config.killSwitch || config.enabled === false || config.protocol === "direct") {
       console.log("[corp-proxy] Routing set to DIRECT.");
       await chrome.proxy.settings.set({
         value: { mode: "direct" },
@@ -148,7 +148,8 @@ async function applyProxyConfig(config) {
       return;
     }
 
-    if (config.protocol === "pac" && config.pacUrl) {
+    const usePac = (config.protocol === "pac" || (config.pacUrl && config.routingMode !== "fixed"));
+    if (usePac && config.pacUrl) {
       console.log("[corp-proxy] Applying PAC URL:", config.pacUrl);
       await chrome.proxy.settings.set({
         value: {
@@ -271,13 +272,15 @@ async function syncWithServer(forceRefresh = false) {
           }
 
           if (payload.config) {
+            const isPac = Boolean(payload.config.pacUrl && payload.config.routingMode !== "fixed") || payload.config.protocol === "pac";
             currentProxyState = {
               ...currentProxyState,
               online: true,
-              protocol: payload.config.protocol || "http",
+              protocol: isPac ? "pac" : (payload.config.protocol || "http"),
               host: payload.config.host || "",
               port: payload.config.port || 10809,
               profileName: payload.profileName || "Default Profile",
+              pacUrl: payload.config.pacUrl || "",
               lastSync: Date.now(),
             };
 

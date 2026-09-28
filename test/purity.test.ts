@@ -187,3 +187,78 @@ test("purity: popup HTML and JS do not fake active status or dummy metrics", asy
   assert.ok(!js.includes('statusText.textContent = "Активен";\n          return;'), "popup.js must not fake active status on runtime error");
   assert.ok(!js.includes('statusText.textContent = "Активен";\r\n          return;'), "popup.js must not fake active status on runtime error");
 });
+
+test("purity: background.js applyProxyConfig applies pac_script mode when pacUrl is present even with protocol http/socks5", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  const vmScript = `
+    const chrome = {
+      storage: { local: { get: () => Promise.resolve({}), set: () => Promise.resolve() }, managed: { get: () => Promise.resolve({}) } },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: {
+        settings: {
+          set: (val) => {
+            appliedProxySettings = val;
+            return Promise.resolve();
+          }
+        }
+      },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: { getManifest: () => ({ version: "1.0.0" }), id: "test-id", onMessage: { addListener: () => {} } }
+    };
+    ${src}
+    globalThis.testApplyProxyConfig = applyProxyConfig;
+  `;
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: () => Promise.resolve({ ok: false }),
+    AbortSignal,
+    Map,
+    parseInt,
+    appliedProxySettings: null,
+  });
+  vm.runInContext(vmScript, ctx);
+
+  // 1. HTTP proxy config with pacUrl present (standard server response with routing profile)
+  await (ctx as any).testApplyProxyConfig({
+    protocol: "http",
+    host: "proxy.corp.example",
+    port: 10809,
+    pacUrl: "https://mini-server.corp.example/proxy.pac?profileId=profile_default_split",
+  });
+  assert.strictEqual(
+    (ctx as any).appliedProxySettings?.value?.mode,
+    "pac_script",
+    "must use pac_script mode when pacUrl is provided by server"
+  );
+  assert.strictEqual(
+    (ctx as any).appliedProxySettings?.value?.pacScript?.url,
+    "https://mini-server.corp.example/proxy.pac?profileId=profile_default_split"
+  );
+
+  // 2. Fixed servers mode when routingMode: "fixed"
+  await (ctx as any).testApplyProxyConfig({
+    protocol: "http",
+    host: "proxy.corp.example",
+    port: 10809,
+    routingMode: "fixed",
+    pacUrl: "https://mini-server.corp.example/proxy.pac?profileId=profile_default_split",
+  });
+  assert.strictEqual(
+    (ctx as any).appliedProxySettings?.value?.mode,
+    "fixed_servers",
+    "must use fixed_servers mode when routingMode is fixed"
+  );
+  assert.strictEqual(
+    (ctx as any).appliedProxySettings?.value?.rules?.singleProxy?.host,
+    "proxy.corp.example"
+  );
+});
