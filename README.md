@@ -140,7 +140,9 @@ nano .env   # set your EXT_SHARED_TOKEN and ADMIN_TOKEN
 npm run dev
 
 # Or build and run production bundle
-npm run build
+npm run build            # Builds server bundle (alias for build:server)
+npm run build:server     # Build production server bundle (dist/server.cjs)
+npm run build:extension  # Build and package Chrome extension (e.g. npm run build:extension -- https://proxy.corp.example)
 npm start
 ```
 

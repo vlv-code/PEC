@@ -868,6 +868,15 @@ test("purity: background.js sets ERR badge and logs warning when proxyReachable 
   assert.ok(warnLog, "must record warning log about unreachable proxy");
 });
 
+test("purity: package.json provides distinct build:server and build:extension scripts", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf-8"));
+  assert.ok(pkg.scripts["build:server"], "package.json must define build:server");
+  assert.ok(pkg.scripts["build:extension"], "package.json must define build:extension");
+  assert.match(pkg.scripts["build:server"], /esbuild server\.ts/);
+  assert.match(pkg.scripts["build:extension"], /pack-extension\.ts/);
+});
+
+
 
 
 

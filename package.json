@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs",
-    "pack:extension": "tsx scripts/pack-extension.ts",
+    "build": "npm run build:server",
+    "build:server": "esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs",
+    "build:extension": "tsx scripts/pack-extension.ts",
+    "pack:extension": "npm run build:extension",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 test/*.test.ts",
