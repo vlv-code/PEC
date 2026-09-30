@@ -2,9 +2,10 @@ import "./loadEnv.js";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { domainToASCII } from "node:url";
-import { GeoPreset, RoutingProfile, RoutingRule, ProxyConfiguration } from "./types.js";
+import { GeoPreset, RoutingPresetItem, RoutingProfile, RoutingRule, ProxyConfiguration } from "./types.js";
 import { writeJsonAtomic } from "./jsonStore.js";
-import { getRoutingProfilesPath } from "./storage.js";
+import { getRoutingProfilesPath, getRoutingPresets } from "./storage.js";
+
 import { getActiveProxy } from "./proxies.js";
 
 const PROFILES_FILE = getRoutingProfilesPath();
@@ -303,16 +304,29 @@ export function resolveProfileForInstance(instanceId?: string, group?: string): 
 }
 
 // Expand preset domains into actual matchers
-function expandRuleDomains(rule: RoutingRule): string[] {
+export function expandRuleDomains(rule: RoutingRule): string[] {
   if (rule.targetType === "preset" && rule.pattern.startsWith("preset:")) {
-    const preset = GEO_PRESETS.find((p) => p.id === rule.pattern);
-    return preset ? preset.domains : [];
+    let presets: RoutingPresetItem[] = [];
+    try {
+      presets = getRoutingPresets();
+    } catch {
+      // fallback
+    }
+    const preset =
+      presets.find((p) => p.id === rule.pattern) ||
+      (GEO_PRESETS ? GEO_PRESETS.find((p) => p.id === rule.pattern) : undefined);
+    if (!preset) return [];
+    if ("entries" in preset && Array.isArray(preset.entries) && preset.entries.length > 0) {
+      return preset.entries;
+    }
+    return preset.domains || [];
   }
   return rule.pattern
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 }
+
 
 // Generate PAC script for a given routing profile and proxy server config
 export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyConfiguration): string {

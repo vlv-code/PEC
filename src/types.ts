@@ -27,6 +27,21 @@ export interface GeoPreset {
   domains: string[];
 }
 
+export interface RoutingPresetItem {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  type: "domain" | "cidr";
+  source: "builtin" | "remote" | "file";
+  sourceUrl?: string;
+  sourceTag?: string;
+  lastUpdated?: string;
+  domains?: string[];
+  entries: string[];
+}
+
+
 export interface RoutingProfile {
   id: string;
   name: string;

@@ -14,7 +14,9 @@ import {
   getRotationHistoryPath,
   getDashboardAuthPath,
   getBuilderConfigPath,
+  getRoutingPresetsPath,
 } from "../src/storage.js";
+
 
 test("getDataDir returns resolved DATA_DIR and ensures directory exists", () => {
   const originalDataDir = process.env.DATA_DIR;
@@ -68,6 +70,7 @@ test("store path helpers return default paths inside getDataDir when env vars ar
     delete process.env.ROTATION_HISTORY_PATH;
     delete process.env.DASHBOARD_AUTH_PATH;
     delete process.env.BUILDER_CONFIG;
+    delete process.env.ROUTING_PRESETS_PATH;
 
     const dataDir = getDataDir();
     assert.strictEqual(getProxiesStorePath(), path.join(dataDir, "proxies.json"));
@@ -79,6 +82,7 @@ test("store path helpers return default paths inside getDataDir when env vars ar
     assert.strictEqual(getRotationHistoryPath(), path.join(dataDir, "rotation_history.json"));
     assert.strictEqual(getDashboardAuthPath(), path.join(dataDir, "dashboard_auth.json"));
     assert.strictEqual(getBuilderConfigPath(), path.join(dataDir, "extension_build_config.json"));
+    assert.strictEqual(getRoutingPresetsPath(), path.join(dataDir, "routing_presets.json"));
   } finally {
     process.env = originalEnv;
     if (fs.existsSync(tempDir)) {
@@ -102,6 +106,7 @@ test("store path helpers honor explicit environment variable overrides", () => {
     process.env.ROTATION_HISTORY_PATH = path.join(tempDir, "custom-history.json");
     process.env.DASHBOARD_AUTH_PATH = path.join(tempDir, "custom-auth.json");
     process.env.BUILDER_CONFIG = path.join(tempDir, "custom-builder.json");
+    process.env.ROUTING_PRESETS_PATH = path.join(tempDir, "custom-presets.json");
 
     assert.strictEqual(getProxiesStorePath(), path.resolve(process.env.PROXIES_STORE_PATH));
     assert.strictEqual(getCredsStorePath(), path.resolve(process.env.CREDS_STORE));
@@ -112,6 +117,8 @@ test("store path helpers honor explicit environment variable overrides", () => {
     assert.strictEqual(getRotationHistoryPath(), path.resolve(process.env.ROTATION_HISTORY_PATH));
     assert.strictEqual(getDashboardAuthPath(), path.resolve(process.env.DASHBOARD_AUTH_PATH));
     assert.strictEqual(getBuilderConfigPath(), path.resolve(process.env.BUILDER_CONFIG));
+    assert.strictEqual(getRoutingPresetsPath(), path.resolve(process.env.ROUTING_PRESETS_PATH));
+
   } finally {
     process.env = originalEnv;
     if (fs.existsSync(tempDir)) {
