@@ -438,10 +438,14 @@
         phTargetGroup: 'e.g. SEC-Proxy-VPN-VIP or Dev-Team',
         lblFailClosed: 'Fail-Closed: Prevent direct fallback (DIRECT) if proxy drops (avoids IP leak)',
         profDescDefault: 'Routing policy applied to matching browser instances.',
+        lblUnsavedChanges: 'Unsaved Changes',
         btnSaveProfile: 'Save Routing Profile',
         btnDeleteProfile: 'Delete Profile',
         btnPacPreview: 'View PAC Script',
         titleGeoPresets: 'Quick Add GeoBase & Domain Bundles',
+        btnImportPresets: '📥 + Import Presets (.dat / .txt)',
+        titleImportPresets: 'Import GeoData & Presets',
+        subImportPresets: 'Import geosite.dat, geoip.dat or plaintext domain lists',
         titleCustomRule: 'Add Custom Domain / Subnet Rule',
         lblRuleName: 'Rule Name',
         phRuleName: 'My Custom Rule',
@@ -454,6 +458,7 @@
         btnAddRule: '+ Add Rule',
         titleActiveRules: 'Active Profile Rules Hierarchy (Evaluated Top-to-Bottom)',
         thStatus: 'Status',
+        thOrder: 'Order',
         thRuleName: 'Rule Name',
         thPattern: 'Pattern / Preset',
         thAction: 'Action',
@@ -752,10 +757,14 @@
         phTargetGroup: 'напр. SEC-Proxy-VPN-VIP или Dev-Team',
         lblFailClosed: 'Fail-Closed: запретить прямой доступ (DIRECT) при падении прокси (защита от утечки IP)',
         profDescDefault: 'Политика маршрутизации, применяемая к соответствующим браузерам.',
+        lblUnsavedChanges: 'Несохраненные изменения',
         btnSaveProfile: 'Сохранить профиль',
         btnDeleteProfile: 'Удалить профиль',
         btnPacPreview: 'Открыть PAC-скрипт',
         titleGeoPresets: 'Быстрое добавление гео-баз и наборов доменов',
+        btnImportPresets: '📥 + Импорт пресетов (.dat / .txt)',
+        titleImportPresets: 'Импорт гео-данных и пресетов',
+        subImportPresets: 'Импорт geosite.dat, geoip.dat или текстовых списков доменов',
         titleCustomRule: 'Добавить пользовательское правило для домена / подсети',
         lblRuleName: 'Название правила',
         phRuleName: 'Мое правило',
@@ -768,6 +777,7 @@
         btnAddRule: '+ Добавить правило',
         titleActiveRules: 'Иерархия правил профиля (Обработка сверху вниз)',
         thStatus: 'Статус',
+        thOrder: 'Порядок',
         thRuleName: 'Имя правила',
         thPattern: 'Шаблон / Пресет',
         thAction: 'Действие',
@@ -1113,26 +1123,77 @@
     }
 
     // ----------------- Routing & Profiles -----------------
+    let hasUnsavedRouting = false;
+
+    function setUnsavedRouting(dirty) {
+      hasUnsavedRouting = !!dirty;
+      const badge = document.getElementById('unsavedChangesBadge');
+      if (badge) {
+        badge.style.display = hasUnsavedRouting ? 'inline-flex' : 'none';
+      }
+    }
+
+    function initRoutingDirtyTracking() {
+      ['profName', 'profTargetGroup'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el._dirtyBound) {
+          el.addEventListener('input', () => setUnsavedRouting(true));
+          el._dirtyBound = true;
+        }
+      });
+      ['profDefaultPolicy', 'profTargetScope', 'profFailClosed'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el._dirtyBound) {
+          el.addEventListener('change', () => setUnsavedRouting(true));
+          el._dirtyBound = true;
+        }
+      });
+    }
+
     async function loadPresets() {
       try {
         const res = await adminFetch('/api/routing/presets');
         const presets = await res.json();
         const container = document.getElementById('presetsContainer');
+        if (!container) return;
         
         const isRu = currentLang === 'ru';
-        container.innerHTML = presets.map(p => `
+        container.innerHTML = presets.map(p => {
+          const entriesList = p.entries || p.domains || [];
+          const count = entriesList.length;
+
+          // Check if preset is already in currentProfile
+          const existingRule = (currentProfile && Array.isArray(currentProfile.rules))
+            ? currentProfile.rules.find(r => r.targetType === 'preset' && r.pattern === p.id)
+            : null;
+
+          let badgeHtml = '';
+          if (existingRule) {
+            const act = (existingRule.action || 'proxy').toLowerCase();
+            const actLabel = isRu
+              ? (act === 'proxy' ? 'ПРОКСИ' : act === 'direct' ? 'НАПРЯМУЮ' : 'БЛОК')
+              : act.toUpperCase();
+            badgeHtml = `<span class="preset-in-profile-badge action-${act}">${isRu ? 'В профиле: ' : 'In Profile: '}${actLabel}</span>`;
+          }
+
+          return `
           <div class="preset-card">
             <div>
-              <h4>${esc(p.name)}</h4>
-              <p>${esc(p.description)} (${p.domains.length} patterns)</p>
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; margin-bottom: 4px;">
+                <h4 style="margin: 0; font-size: 13px; font-weight: 600;">${esc(p.name)}</h4>
+                <button type="button" onclick="openGeobaseInspector('${esc(p.id)}')" class="btn-icon" title="${isRu ? 'Инспектор пресета' : 'Inspect Preset'}" style="font-size: 11px; padding: 2px 5px; line-height: 1;">🔍</button>
+              </div>
+              <p style="margin: 0 0 6px 0;">${esc(p.description)} (${count} ${isRu ? 'записей' : 'entries'})</p>
+              ${badgeHtml ? `<div style="margin-bottom: 6px;">${badgeHtml}</div>` : ''}
             </div>
             <div style="display: flex; gap: 6px; margin-top: 6px;">
-              <button onclick="addPresetRule('${esc(p.id)}', '${esc(p.name)}', 'proxy')" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;">+ ${isRu ? 'Прокси' : 'Proxy'}</button>
-              <button onclick="addPresetRule('${esc(p.id)}', '${esc(p.name)}', 'direct')" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;">+ ${isRu ? 'Напрямую' : 'Direct'}</button>
-              <button onclick="addPresetRule('${esc(p.id)}', '${esc(p.name)}', 'block')" class="btn-danger" style="font-size: 11px; padding: 4px 8px;">+ ${isRu ? 'Блок' : 'Block'}</button>
+              <button type="button" onclick="addPresetRule('${esc(p.id)}', '${esc(p.name)}', 'proxy')" class="btn-secondary" style="font-size: 11px; padding: 4px 8px; flex: 1;">+ ${isRu ? 'Прокси' : 'Proxy'}</button>
+              <button type="button" onclick="addPresetRule('${esc(p.id)}', '${esc(p.name)}', 'direct')" class="btn-secondary" style="font-size: 11px; padding: 4px 8px; flex: 1;">+ ${isRu ? 'Напрямую' : 'Direct'}</button>
+              <button type="button" onclick="addPresetRule('${esc(p.id)}', '${esc(p.name)}', 'block')" class="btn-danger" style="font-size: 11px; padding: 4px 8px; flex: 1;">+ ${isRu ? 'Блок' : 'Block'}</button>
             </div>
           </div>
-        `).join('');
+          `;
+        }).join('');
       } catch (e) {
         console.error(e);
       }
@@ -1179,18 +1240,22 @@
       groupRow.style.display = p.targetScope === 'group' ? 'block' : 'none';
 
       document.getElementById('btnPacPreview').href = '/proxy.pac?profileId=' + p.id;
+      setUnsavedRouting(false);
+      initRoutingDirtyTracking();
       renderRules(p.rules || []);
+      loadPresets();
     }
 
     document.getElementById('profTargetScope').addEventListener('change', (e) => {
       document.getElementById('groupTargetRow').style.display = e.target.value === 'group' ? 'block' : 'none';
+      setUnsavedRouting(true);
     });
 
     function renderRules(rules) {
       const tbody = document.getElementById('rulesTableBody');
       const isRu = currentLang === 'ru';
       if (!rules || !rules.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'В этом профиле нет правил. Используйте кнопки выше для добавления пресетов или кастомных правил.' : 'No rules defined for this profile. Use buttons above to add presets or custom rules.') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'В этом профиле нет правил. Используйте кнопки выше для добавления пресетов или кастомных правил.' : 'No rules defined for this profile. Use buttons above to add presets or custom rules.') + '</td></tr>';
         return;
       }
 
@@ -1204,19 +1269,46 @@
           <td>
             <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="toggleRuleEnabled(${idx})" style="margin: 0;" />
           </td>
+          <td>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <button type="button" class="btn-reorder-up" onclick="moveRuleUp(${idx})" ${idx === 0 ? 'disabled' : ''} title="${isRu ? 'Выше' : 'Move Up'}">▲</button>
+              <button type="button" class="btn-reorder-down" onclick="moveRuleDown(${idx})" ${idx === rules.length - 1 ? 'disabled' : ''} title="${isRu ? 'Ниже' : 'Move Down'}">▼</button>
+            </div>
+          </td>
           <td><strong>${esc(r.name)}</strong></td>
           <td><code>${esc(r.pattern)}</code></td>
           <td><span class="badge ${badge}">${actionLabel}</span></td>
           <td>
-            <button onclick="removeRule(${idx})" class="btn-danger" style="font-size: 11px; padding: 3px 8px;">${isRu ? 'Удалить' : 'Delete'}</button>
+            <button type="button" onclick="removeRule(${idx})" class="btn-danger" style="font-size: 11px; padding: 3px 8px;">${isRu ? 'Удалить' : 'Delete'}</button>
           </td>
         </tr>`;
       }).join('');
     }
 
+    function moveRuleUp(index) {
+      if (!currentProfile || !Array.isArray(currentProfile.rules)) return;
+      if (index <= 0 || index >= currentProfile.rules.length) return;
+      const temp = currentProfile.rules[index];
+      currentProfile.rules[index] = currentProfile.rules[index - 1];
+      currentProfile.rules[index - 1] = temp;
+      setUnsavedRouting(true);
+      renderRules(currentProfile.rules);
+    }
+
+    function moveRuleDown(index) {
+      if (!currentProfile || !Array.isArray(currentProfile.rules)) return;
+      if (index < 0 || index >= currentProfile.rules.length - 1) return;
+      const temp = currentProfile.rules[index];
+      currentProfile.rules[index] = currentProfile.rules[index + 1];
+      currentProfile.rules[index + 1] = temp;
+      setUnsavedRouting(true);
+      renderRules(currentProfile.rules);
+    }
+
     function toggleRuleEnabled(idx) {
       if (currentProfile && currentProfile.rules[idx]) {
         currentProfile.rules[idx].enabled = !currentProfile.rules[idx].enabled;
+        setUnsavedRouting(true);
         renderRules(currentProfile.rules);
       }
     }
@@ -1224,21 +1316,35 @@
     function removeRule(idx) {
       if (currentProfile && currentProfile.rules[idx]) {
         currentProfile.rules.splice(idx, 1);
+        setUnsavedRouting(true);
         renderRules(currentProfile.rules);
+        loadPresets();
       }
     }
 
     function addPresetRule(presetId, presetName, action) {
       if (!currentProfile) return;
-      currentProfile.rules.push({
-        id: 'r_' + Math.random().toString(36).substring(2, 8),
-        name: presetName,
-        targetType: 'preset',
-        pattern: presetId,
-        action: action,
-        enabled: true
-      });
+      if (!Array.isArray(currentProfile.rules)) currentProfile.rules = [];
+      const isRu = currentLang === 'ru';
+      const existing = currentProfile.rules.find(r => r.targetType === 'preset' && r.pattern === presetId);
+      if (existing) {
+        existing.action = action;
+        existing.enabled = true;
+        toast((isRu ? 'Обновлено действие пресета: ' : 'Preset action updated: ') + presetName + ' -> ' + action.toUpperCase(), 'info');
+      } else {
+        currentProfile.rules.push({
+          id: 'r_' + Math.random().toString(36).substring(2, 8),
+          name: presetName,
+          targetType: 'preset',
+          pattern: presetId,
+          action: action,
+          enabled: true
+        });
+        toast((isRu ? 'Пресет добавлен: ' : 'Preset added: ') + presetName, 'success');
+      }
+      setUnsavedRouting(true);
       renderRules(currentProfile.rules);
+      loadPresets();
     }
 
     function addCustomRule() {
@@ -1263,6 +1369,7 @@
 
       document.getElementById('newRuleName').value = '';
       document.getElementById('newRulePattern').value = '';
+      setUnsavedRouting(true);
       renderRules(currentProfile.rules);
     }
 
@@ -1282,6 +1389,7 @@
         });
         if (res.ok) {
           toast('Routing profile saved! Deployed to matching fleet instances.', 'success');
+          setUnsavedRouting(false);
           loadProfiles();
         } else {
           const data = await res.json().catch(() => ({}));
@@ -1289,6 +1397,317 @@
         }
       } catch (e) {
         toast('Error saving profile: ' + e, 'error');
+      }
+    }
+
+    // ==================== Geobase Inspector Modal Logic ====================
+    let currentInspectorPreset = null;
+    let inspectorEntries = [];
+    let inspectorFilteredEntries = [];
+    let inspectorSelectedSet = new Set();
+
+    async function openGeobaseInspector(presetId) {
+      const modal = document.getElementById('modalGeobaseInspector');
+      if (!modal) return;
+      modal.style.display = 'flex';
+      
+      const isRu = currentLang === 'ru';
+      document.getElementById('inspectorTitle').textContent = isRu ? 'Загрузка...' : 'Loading...';
+      document.getElementById('inspectorTableBody').innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'Загрузка содержимого пресета...' : 'Loading preset entries...') + '</td></tr>';
+      document.getElementById('inspectorSearch').value = '';
+      inspectorSelectedSet.clear();
+      updateInspectorCounters();
+
+      try {
+        const res = await adminFetch('/api/routing/presets/' + encodeURIComponent(presetId));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const preset = await res.json();
+        currentInspectorPreset = preset;
+
+        document.getElementById('inspectorTitle').textContent = preset.name || presetId;
+        const typeBadge = document.getElementById('inspectorTypeBadge');
+        if (typeBadge) {
+          typeBadge.textContent = (preset.type || 'domain').toUpperCase();
+        }
+        document.getElementById('inspectorSubtitle').textContent = preset.description || (preset.source ? 'Source: ' + preset.source : '');
+
+        inspectorEntries = preset.entries || preset.domains || [];
+        inspectorFilteredEntries = [...inspectorEntries];
+        renderInspectorTable();
+      } catch (err) {
+        document.getElementById('inspectorTableBody').innerHTML = '<tr><td colspan="3" style="text-align: center; color: #ef4444;">' + (isRu ? 'Ошибка загрузки пресета: ' : 'Failed to load preset: ') + esc(String(err)) + '</td></tr>';
+      }
+    }
+
+    function closeGeobaseInspector() {
+      const modal = document.getElementById('modalGeobaseInspector');
+      if (modal) modal.style.display = 'none';
+      currentInspectorPreset = null;
+      inspectorEntries = [];
+      inspectorFilteredEntries = [];
+      inspectorSelectedSet.clear();
+    }
+
+    function filterInspectorEntries() {
+      const q = (document.getElementById('inspectorSearch').value || '').trim().toLowerCase();
+      if (!q) {
+        inspectorFilteredEntries = [...inspectorEntries];
+      } else {
+        inspectorFilteredEntries = inspectorEntries.filter(e => String(e).toLowerCase().includes(q));
+      }
+      renderInspectorTable();
+    }
+
+    function renderInspectorTable() {
+      const tbody = document.getElementById('inspectorTableBody');
+      const isRu = currentLang === 'ru';
+      if (!inspectorFilteredEntries.length) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'Нет совпадений' : 'No matching entries') + '</td></tr>';
+        updateInspectorCounters();
+        return;
+      }
+
+      const limit = 500;
+      const visible = inspectorFilteredEntries.slice(0, limit);
+      tbody.innerHTML = visible.map(entry => {
+        const checked = inspectorSelectedSet.has(entry) ? 'checked' : '';
+        const entryType = entry.includes('/') ? 'CIDR' : (entry.startsWith('*.') || entry.startsWith('.')) ? 'Wildcard' : 'Domain';
+        return `<tr>
+          <td>
+            <input type="checkbox" ${checked} onchange="toggleInspectorEntry('${esc(entry)}', this.checked)" style="margin: 0;" />
+          </td>
+          <td><code>${esc(entry)}</code></td>
+          <td><span class="badge" style="font-size: 10px; background: rgba(255,255,255,0.06);">${entryType}</span></td>
+        </tr>`;
+      }).join('');
+
+      if (inspectorFilteredEntries.length > limit) {
+        tbody.innerHTML += `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); font-size: 11px;">... ${isRu ? 'показано первых' : 'showing first'} ${limit} ${isRu ? 'из' : 'of'} ${inspectorFilteredEntries.length} (${isRu ? 'уточните поиск' : 'refine search'})</td></tr>`;
+      }
+
+      updateInspectorCounters();
+    }
+
+    function toggleInspectorEntry(entry, isChecked) {
+      if (isChecked) {
+        inspectorSelectedSet.add(entry);
+      } else {
+        inspectorSelectedSet.delete(entry);
+      }
+      updateInspectorCounters();
+    }
+
+    function selectInspectorAll(select) {
+      if (select) {
+        for (const e of inspectorFilteredEntries) {
+          inspectorSelectedSet.add(e);
+        }
+      } else {
+        for (const e of inspectorFilteredEntries) {
+          inspectorSelectedSet.delete(e);
+        }
+      }
+      renderInspectorTable();
+    }
+
+    function updateInspectorCounters() {
+      const isRu = currentLang === 'ru';
+      const selCount = document.getElementById('inspectorSelectedCount');
+      if (selCount) {
+        selCount.textContent = (isRu ? 'Выбрано: ' : 'Selected: ') + inspectorSelectedSet.size;
+      }
+      const totalCount = document.getElementById('inspectorTotalCount');
+      if (totalCount) {
+        totalCount.textContent = (isRu ? 'Всего записей: ' : 'Total entries: ') + inspectorEntries.length;
+      }
+      const allBox = document.getElementById('inspectorSelectAllBox');
+      if (allBox) {
+        allBox.checked = inspectorFilteredEntries.length > 0 && inspectorFilteredEntries.every(e => inspectorSelectedSet.has(e));
+      }
+    }
+
+    function addSelectedToProfile() {
+      const isRu = currentLang === 'ru';
+      if (!currentProfile) {
+        toast(isRu ? 'Профиль не выбран' : 'No active profile', 'error');
+        return;
+      }
+      if (inspectorSelectedSet.size === 0) {
+        toast(isRu ? 'Выберите хотя бы одну запись' : 'Select at least one entry', 'error');
+        return;
+      }
+
+      if (!Array.isArray(currentProfile.rules)) currentProfile.rules = [];
+      const selected = Array.from(inspectorSelectedSet);
+      const action = document.getElementById('inspectorActionSelect').value || 'proxy';
+      const presetName = currentInspectorPreset ? currentInspectorPreset.name : 'GeoBase';
+      const ruleName = `${presetName} (${isRu ? 'выбрано' : 'selected'} ${selected.length})`;
+      const pattern = selected.join(', ');
+
+      currentProfile.rules.push({
+        id: 'r_' + Math.random().toString(36).substring(2, 8),
+        name: ruleName,
+        targetType: pattern.includes('/') ? 'cidr' : 'wildcard',
+        pattern: pattern,
+        action: action,
+        enabled: true
+      });
+
+      setUnsavedRouting(true);
+      renderRules(currentProfile.rules);
+      closeGeobaseInspector();
+      toast((isRu ? 'Добавлено в профиль: ' : 'Added to profile: ') + selected.length + ' ' + (isRu ? 'записей' : 'entries'), 'success');
+    }
+
+    // ==================== Presets Import Modal Logic ====================
+    let currentImportTab = 'url';
+
+    function openImportPresetsModal() {
+      const modal = document.getElementById('modalImportPresets');
+      if (!modal) return;
+      modal.style.display = 'flex';
+      switchImportTab('url');
+      document.getElementById('importPresetUrl').value = '';
+      document.getElementById('importPresetFileInput').value = '';
+      document.getElementById('importPresetTag').value = '';
+      document.getElementById('importPresetName').value = '';
+      document.getElementById('importPresetCategory').value = 'custom';
+      document.getElementById('importPresetType').value = 'domain';
+      const errBox = document.getElementById('importPresetError');
+      if (errBox) {
+        errBox.style.display = 'none';
+        errBox.textContent = '';
+      }
+    }
+
+    function closeImportPresetsModal() {
+      const modal = document.getElementById('modalImportPresets');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function switchImportTab(tab) {
+      currentImportTab = tab;
+      const urlPanel = document.getElementById('panelImportUrl');
+      const filePanel = document.getElementById('panelImportFile');
+      const urlBtn = document.getElementById('tabImportUrlBtn');
+      const fileBtn = document.getElementById('tabImportFileBtn');
+
+      if (tab === 'url') {
+        if (urlPanel) urlPanel.style.display = 'block';
+        if (filePanel) filePanel.style.display = 'none';
+        if (urlBtn) urlBtn.classList.add('active');
+        if (fileBtn) fileBtn.classList.remove('active');
+      } else {
+        if (urlPanel) urlPanel.style.display = 'none';
+        if (filePanel) filePanel.style.display = 'block';
+        if (urlBtn) urlBtn.classList.remove('active');
+        if (fileBtn) fileBtn.classList.add('active');
+      }
+    }
+
+    async function submitImportPreset() {
+      const isRu = currentLang === 'ru';
+      const errBox = document.getElementById('importPresetError');
+      if (errBox) {
+        errBox.style.display = 'none';
+        errBox.textContent = '';
+      }
+
+      const tag = document.getElementById('importPresetTag').value.trim();
+      const name = document.getElementById('importPresetName').value.trim();
+      const category = document.getElementById('importPresetCategory').value;
+      const type = document.getElementById('importPresetType').value;
+      const submitBtn = document.getElementById('btnSubmitImportPreset');
+
+      if (currentImportTab === 'url') {
+        const url = document.getElementById('importPresetUrl').value.trim();
+        if (!url) {
+          if (errBox) {
+            errBox.textContent = isRu ? 'Укажите URL источника' : 'Specify source URL';
+            errBox.style.display = 'block';
+          }
+          return;
+        }
+
+        try {
+          if (submitBtn) submitBtn.disabled = true;
+          const res = await adminFetch('/api/routing/presets/import-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, tag, name, category, type })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error || ('HTTP ' + res.status));
+          }
+          toast((isRu ? 'Пресет успешно импортирован! Записей: ' : 'Preset successfully imported! Entries: ') + (data.preset ? data.preset.entriesCount : ''), 'success');
+          closeImportPresetsModal();
+          loadPresets();
+        } catch (e) {
+          if (errBox) {
+            errBox.textContent = (isRu ? 'Ошибка импорта: ' : 'Import error: ') + e.message;
+            errBox.style.display = 'block';
+          }
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      } else {
+        // File Upload
+        const fileInput = document.getElementById('importPresetFileInput');
+        if (!fileInput.files || !fileInput.files[0]) {
+          if (errBox) {
+            errBox.textContent = isRu ? 'Выберите файл для загрузки' : 'Select a file to upload';
+            errBox.style.display = 'block';
+          }
+          return;
+        }
+        const file = fileInput.files[0];
+
+        try {
+          if (submitBtn) submitBtn.disabled = true;
+          const reader = new FileReader();
+          const base64Data = await new Promise((resolve, reject) => {
+            reader.onload = () => {
+              const res = reader.result;
+              if (typeof res === 'string') {
+                const b64 = res.includes(',') ? res.split(',')[1] : res;
+                resolve(b64);
+              } else {
+                reject(new Error('Failed to read file'));
+              }
+            };
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          });
+
+          const res = await adminFetch('/api/routing/presets/import-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              content: base64Data,
+              encoding: 'base64',
+              tag,
+              name,
+              category,
+              type
+            })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error || ('HTTP ' + res.status));
+          }
+          toast((isRu ? 'Файл пресета импортирован! Записей: ' : 'Preset file imported! Entries: ') + (data.preset ? data.preset.entriesCount : ''), 'success');
+          closeImportPresetsModal();
+          loadPresets();
+        } catch (e) {
+          if (errBox) {
+            errBox.textContent = (isRu ? 'Ошибка импорта: ' : 'Import error: ') + e.message;
+            errBox.style.display = 'block';
+          }
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
       }
     }
 

@@ -688,6 +688,12 @@
       gap: 12px;
     }
 
+    .presets-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
     .preset-card {
       background: var(--card-inner);
       border: 1px solid var(--border);
@@ -699,6 +705,154 @@
     }
     .preset-card h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
     .preset-card p { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+
+    /* Preset in-profile indicator badge */
+    .preset-in-profile-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: var(--primary);
+    }
+    .preset-in-profile-badge.action-proxy {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+    }
+    .preset-in-profile-badge.action-direct {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
+    .preset-in-profile-badge.action-block {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
+    /* Rules Reorder Buttons */
+    .btn-reorder-up,
+    .btn-reorder-down {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 2px 6px;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      transition: all 0.15s ease;
+    }
+    .btn-reorder-up:hover:not(:disabled),
+    .btn-reorder-down:hover:not(:disabled) {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+    }
+    .btn-reorder-up:disabled,
+    .btn-reorder-down:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+    }
+
+    /* Unsaved changes indicator badge */
+    .unsaved-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #f59e0b;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      border-radius: 12px;
+      padding: 3px 10px;
+      animation: pulse-unsaved 2s infinite ease-in-out;
+    }
+    @keyframes pulse-unsaved {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.3);
+        border-color: rgba(245, 158, 11, 0.4);
+      }
+      50% {
+        box-shadow: 0 0 8px 2px rgba(245, 158, 11, 0.6);
+        border-color: rgba(245, 158, 11, 0.8);
+      }
+    }
+
+    /* Geobase Inspector & Import Modals */
+    .modal-geobase-inspector,
+    .modal-import-presets {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(3, 7, 18, 0.94);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-geobase-inspector-content,
+    .modal-import-presets-content {
+      max-width: 720px;
+      width: 90%;
+      max-height: 85vh;
+      background: #131d36;
+      border: 1px solid #22345c;
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+    .inspector-search-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 12px;
+      background: #0b1120;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .inspector-table-container {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 250px;
+      max-height: 420px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #0b1120;
+      margin-bottom: 16px;
+    }
+    .inspector-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .inspector-table th,
+    .inspector-table td {
+      padding: 8px 12px;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    .inspector-table th {
+      position: sticky;
+      top: 0;
+      background: #1e293b;
+      z-index: 10;
+    }
 
     /* Chrome Mockup & Live Extension Sandbox */
     .browser-mock {
