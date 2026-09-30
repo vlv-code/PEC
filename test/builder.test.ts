@@ -118,4 +118,40 @@ test("builder: packaged zip and unpacked dir exclude documentation and template 
   }
 });
 
+test("builder: pack-extension script requires explicit server URL and rejects empty target", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
+  const scriptPath = path.resolve("scripts/pack-extension.ts");
+
+  // Run without PEC_SERVER_URL or PUBLIC_BASE_URL
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.PEC_SERVER_URL;
+  delete cleanEnv.PUBLIC_BASE_URL;
+
+  const resFail = spawnSync(npxCmd, ["tsx", scriptPath], {
+    env: cleanEnv,
+    encoding: "utf-8",
+    shell: true,
+  });
+
+  assert.strictEqual(resFail.status, 1, "pack-extension must exit 1 when no server URL is provided");
+  assert.ok(
+    (resFail.stderr || "").includes("FATAL") && (resFail.stderr || "").includes("PEC_SERVER_URL"),
+    "stderr must show fatal message about missing server URL"
+  );
+
+  // Run with PEC_SERVER_URL
+  const resOk = spawnSync(npxCmd, ["tsx", scriptPath], {
+    env: { ...cleanEnv, PEC_SERVER_URL: "https://pec-test.example.corp" },
+    encoding: "utf-8",
+    shell: true,
+  });
+
+  assert.strictEqual(resOk.status, 0, "pack-extension must succeed when PEC_SERVER_URL is provided");
+  assert.ok(
+    (resOk.stdout || "").includes("https://pec-test.example.corp"),
+    "stdout must confirm target URL"
+  );
+});
+
 

@@ -26,7 +26,8 @@ jobs:
           npm run lint
           npm test
           npm run build
-          npm run pack:extension
+          # Evaluation/local install package pointing to localhost:3000
+          PEC_SERVER_URL=http://localhost:3000 npm run pack:extension
 
       - name: Package release artifacts
         run: |
@@ -34,11 +35,10 @@ jobs:
           mkdir -p release-assets
           # Prebuilt server bundle: node pec-server.cjs, no toolchain needed
           cp dist/server.cjs "release-assets/pec-server-v${VERSION}.cjs"
-          # Extension distribution package (placeholders intact - operators
-          # build their fleet-signed copy in the Studio; this one ships the
-          # documented default token and is for evaluation/local installs)
+          # Extension evaluation package (points to localhost:3000; production
+          # operators generate fleet packages via Extension Studio or with PEC_SERVER_URL)
           if [ -f dist/updates/extension.zip ]; then
-            cp dist/updates/extension.zip "release-assets/pec-extension-v${VERSION}.zip"
+            cp dist/updates/extension.zip "release-assets/pec-extension-LOCALHOST-EVAL-v${VERSION}.zip"
           fi
           # Checksums
           cd release-assets

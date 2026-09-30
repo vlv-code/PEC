@@ -222,6 +222,22 @@ npm run build
 
 ---
 
+## 🧩 Extension Packaging & Testing
+
+### Packaging via CLI
+To package the extension from the command line:
+```bash
+# Specify target server URL (mandatory)
+PEC_SERVER_URL=https://pec.example.corp npm run pack:extension
+```
+The packaged ZIP and CRX artifacts are generated in `dist/updates/`, and the ready-to-load unpacked directory is in `dist/unpacked/`.
+
+> [!WARNING]
+> Always load **`dist/unpacked/`** in `chrome://extensions` (Developer mode -> "Load unpacked").
+> **Never load the raw `extension/` directory directly**: it contains unsubstituted build placeholders (`__PEC_SERVER_BASE__`) and cannot connect to your server.
+
+---
+
 ## 📄 License
 
 Distributed under the MIT License. See [LICENSE](LICENSE) for details.
