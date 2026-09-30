@@ -64,13 +64,24 @@ let recentLogs = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
+      }
+      if (res && res.pecProxyState && typeof res.pecProxyState === "object") {
+        currentProxyState = { ...currentProxyState, ...res.pecProxyState };
       }
     });
   }
 } catch (e) {}
+
+function persistProxyState() {
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+      chrome.storage.local.set({ pecProxyState: currentProxyState });
+    }
+  } catch (e) {}
+}
 
 function logEvent(level, message, data) {
   const entry = {
@@ -544,6 +555,7 @@ async function syncWithServer(forceRefresh = false) {
               lastSync: Date.now(),
             };
 
+            persistProxyState();
             logEvent("info", "Sync successful: profile=" + currentProxyState.profileName + ", mode=" + currentProxyState.protocol + ", host=" + (currentProxyState.host || "pac"));
 
             if (!proxyReachable) {
@@ -573,6 +585,7 @@ async function syncWithServer(forceRefresh = false) {
 
         if (!resFallback.ok) {
           currentProxyState.online = false;
+          persistProxyState();
           logEvent("error", "Creds fetch failed: HTTP " + resFallback.status);
           throw new Error("Creds fetch failed: HTTP " + resFallback.status);
         }
@@ -590,6 +603,7 @@ async function syncWithServer(forceRefresh = false) {
         };
         currentProxyState.online = true;
         currentProxyState.lastSync = Date.now();
+        persistProxyState();
         logEvent("info", "Creds fallback successful for user " + data.user);
       }
 
@@ -657,15 +671,17 @@ chrome.webRequest.onErrorOccurred.addListener(
 
 // Listen for popup messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === "GET_STATUS") {
+  if (!msg) return false;
+  const action = msg.action || msg.type;
+  if (action === "GET_STATUS") {
     sendResponse({ ...currentProxyState });
     return true;
   }
-  if (msg.action === "GET_LOGS") {
+  if (action === "GET_LOGS") {
     sendResponse({ logs: [...recentLogs] });
     return true;
   }
-  if (msg.action === "CLEAR_LOGS") {
+  if (action === "CLEAR_LOGS") {
     recentLogs = [];
     try {
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.remove) {
@@ -675,11 +691,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true, logs: [] });
     return true;
   }
-  if (msg.action === "FORCE_SYNC") {
-    syncWithServer(true).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+  if (action === "FORCE_SYNC") {
+    syncWithServer(true)
+      .then(() => {
+        persistProxyState();
+        sendResponse({ ok: true, ...currentProxyState });
+      })
+      .catch(() => {
+        sendResponse({ ok: false, ...currentProxyState });
+      });
     return true;
   }
-  if (msg.action === "TOGGLE_BYPASS") {
+  if (action === "TOGGLE_BYPASS") {
     currentProxyState.bypassActive = !currentProxyState.bypassActive;
     if (currentProxyState.bypassActive) {
       // Schedule automatic re-enable - "temporary bypass" must actually be temporary.
@@ -691,9 +714,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       chrome.alarms.clear(ALARM_BYPASS_EXPIRE);
     }
     logEvent("info", "Proxy bypass toggled: " + (currentProxyState.bypassActive ? "ON (expires in " + BYPASS_TIMEOUT_MIN + "m)" : "OFF"));
+    persistProxyState();
     syncWithServer(true)
-      .then(() => sendResponse({ ok: true, bypassActive: currentProxyState.bypassActive }))
-      .catch(() => sendResponse({ ok: false, bypassActive: currentProxyState.bypassActive }));
+      .then(() => {
+        persistProxyState();
+        sendResponse({ ok: true, bypassActive: currentProxyState.bypassActive, ...currentProxyState });
+      })
+      .catch(() => {
+        sendResponse({ ok: false, bypassActive: currentProxyState.bypassActive, ...currentProxyState });
+      });
     return true;
   }
 });

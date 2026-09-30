@@ -104,14 +104,25 @@ function initPopup() {
   });
 
   async function loadState() {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+      try {
+        const stored = await chrome.storage.local.get(["pecProxyState"]);
+        if (stored && stored.pecProxyState && typeof stored.pecProxyState === "object") {
+          window.applyPopupState(stored.pecProxyState);
+        }
+      } catch (e) {}
+    }
+
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ action: "GET_STATUS" }, (response) => {
+      chrome.runtime.sendMessage({ action: "GET_STATUS", type: "GET_STATUS" }, (response) => {
         if (chrome.runtime.lastError || !response) {
-          if (statusText) statusText.textContent = "Ошибка связи";
-          if (badge) badge.className = "status-badge offline";
-          if (serverVal) serverVal.textContent = "Сервер PEC недоступен";
-          if (modeVal) modeVal.textContent = "—";
-          if (pingVal) pingVal.textContent = "—";
+          if (!serverVal || serverVal.textContent === "—") {
+            if (statusText) statusText.textContent = "Ошибка связи";
+            if (badge) badge.className = "status-badge offline";
+            if (serverVal) serverVal.textContent = "Сервер PEC недоступен";
+            if (modeVal) modeVal.textContent = "—";
+            if (pingVal) pingVal.textContent = "—";
+          }
           return;
         }
         window.applyPopupState(response);
@@ -126,7 +137,7 @@ function initPopup() {
       btnSync.innerHTML = "<span>Синхронизация...</span>";
       const startMs = Date.now();
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ action: "FORCE_SYNC" }, (res) => {
+        chrome.runtime.sendMessage({ action: "FORCE_SYNC", type: "FORCE_SYNC" }, (res) => {
           const latencyMs = Date.now() - startMs;
           setTimeout(() => {
             btnSync.disabled = false;
@@ -134,6 +145,7 @@ function initPopup() {
             if (res && res.ok && pingVal) {
               pingVal.textContent = latencyMs + " ms";
             }
+            if (res) window.applyPopupState(res);
             loadState();
           }, 400);
         });
@@ -149,7 +161,8 @@ function initPopup() {
   if (btnToggle) {
     btnToggle.addEventListener("click", () => {
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ action: "TOGGLE_BYPASS" }, () => {
+        chrome.runtime.sendMessage({ action: "TOGGLE_BYPASS", type: "TOGGLE_BYPASS" }, (res) => {
+          if (res) window.applyPopupState(res);
           loadState();
         });
       } else {
@@ -218,7 +231,7 @@ function initPopup() {
 
   function loadLogs() {
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ action: "GET_LOGS" }, (res) => {
+      chrome.runtime.sendMessage({ action: "GET_LOGS", type: "GET_LOGS" }, (res) => {
         if (!chrome.runtime.lastError && res && Array.isArray(res.logs)) {
           renderLogs(res.logs);
         }
@@ -245,11 +258,19 @@ function initPopup() {
   if (btnClearLogs) {
     btnClearLogs.addEventListener("click", () => {
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ action: "CLEAR_LOGS" }, () => {
+        chrome.runtime.sendMessage({ action: "CLEAR_LOGS", type: "CLEAR_LOGS" }, () => {
           renderLogs([]);
         });
       } else {
         renderLogs([]);
+      }
+    });
+  }
+
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.pecProxyState && changes.pecProxyState.newValue) {
+        window.applyPopupState(changes.pecProxyState.newValue);
       }
     });
   }

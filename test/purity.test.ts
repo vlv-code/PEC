@@ -890,6 +890,104 @@ test("purity: extension/popup.html uses russian lang attribute", () => {
   assert.match(html, /<html\s+lang="ru">/);
 });
 
+test("purity: background.js responds to both msg.action and msg.type with full proxy state", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  let messageListener: any = null;
+  const storageData: Record<string, any> = {};
+
+  const vmScript = `
+    const chrome = {
+      storage: {
+        local: {
+          get: (keys, cb) => {
+            const res = typeof keys === "string" ? { [keys]: storageData[keys] } : storageData;
+            if (cb) cb(res);
+            return Promise.resolve(res);
+          },
+          set: (obj, cb) => {
+            Object.assign(storageData, obj);
+            if (cb) cb();
+            return Promise.resolve();
+          }
+        },
+        managed: { get: () => Promise.resolve({}) }
+      },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} }, clear: () => {} },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: {
+        settings: {
+          set: () => Promise.resolve(),
+          get: () => Promise.resolve({ value: { mode: "pac_script" }, levelOfControl: "controlled_by_this_extension" })
+        },
+        onProxyError: { addListener: () => {} }
+      },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: {
+        getManifest: () => ({ version: "1.0.0" }),
+        id: "test-id",
+        onMessage: {
+          addListener: (fn) => { messageListener = fn; }
+        }
+      }
+    };
+    ${src}
+    globalThis.testMessageListener = messageListener;
+    globalThis.testSetProxyState = (st) => { Object.assign(currentProxyState, st); };
+  `;
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: () => Promise.resolve({ ok: false }),
+    AbortSignal,
+    Map,
+    parseInt,
+    storageData,
+    messageListener: null,
+  });
+  vm.runInContext(vmScript, ctx);
+
+  (ctx as any).testSetProxyState({
+    online: true,
+    protocol: "pac",
+    host: "proxy.example.com",
+    port: 10809,
+    profileName: "Corporate PAC",
+    profileDefaultPolicy: "direct",
+  });
+
+  // 1. GET_STATUS via { type: "GET_STATUS" } (as sent by popup.js)
+  let statusResp: any = null;
+  (ctx as any).testMessageListener({ type: "GET_STATUS" }, {}, (res: any) => { statusResp = res; });
+  assert.ok(statusResp, "GET_STATUS via { type: 'GET_STATUS' } must return response");
+  assert.strictEqual(statusResp.online, true);
+  assert.strictEqual(statusResp.protocol, "pac");
+  assert.strictEqual(statusResp.host, "proxy.example.com");
+
+  // 2. GET_STATUS via { action: "GET_STATUS" }
+  let statusResp2: any = null;
+  (ctx as any).testMessageListener({ action: "GET_STATUS" }, {}, (res: any) => { statusResp2 = res; });
+  assert.ok(statusResp2, "GET_STATUS via { action: 'GET_STATUS' } must return response");
+  assert.strictEqual(statusResp2.online, true);
+
+  // 3. GET_LOGS via { type: "GET_LOGS" }
+  let logsResp: any = null;
+  (ctx as any).testMessageListener({ type: "GET_LOGS" }, {}, (res: any) => { logsResp = res; });
+  assert.ok(logsResp && Array.isArray(logsResp.logs), "GET_LOGS via { type } must return logs array");
+
+  // 4. CLEAR_LOGS via { type: "CLEAR_LOGS" }
+  let clearResp: any = null;
+  (ctx as any).testMessageListener({ type: "CLEAR_LOGS" }, {}, (res: any) => { clearResp = res; });
+  assert.ok(clearResp && clearResp.ok === true, "CLEAR_LOGS via { type } must return ok: true");
+});
+
+
 
 
 
