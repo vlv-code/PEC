@@ -5,44 +5,126 @@ window.switchPopupTab = function(tabId) {
   tabs.forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
-  const activeBtn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+  let targetContentId = tabId;
+  if (!targetContentId.startsWith("tab-content-")) {
+    targetContentId = "tab-content-" + tabId.replace(/^tab-btn-/, "").replace(/^tab-/, "");
+  }
+  const activeBtn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]') ||
+                    document.querySelector('.tab-btn[data-tab="' + targetContentId + '"]') ||
+                    document.getElementById("tab-btn-" + tabId.replace(/^tab-content-/, "").replace(/^tab-/, "")) ||
+                    document.getElementById(tabId);
   if (activeBtn) activeBtn.classList.add("active");
-  const target = document.getElementById(tabId);
+  const target = document.getElementById(targetContentId) || document.getElementById(tabId);
   if (target) target.classList.add("active");
-  if (tabId === "tab-diag" && typeof window.__pecLoadLogs === "function") {
+
+  if ((targetContentId === "tab-content-diag" || tabId === "diag" || tabId === "tab-diag") && typeof window.__pecLoadLogs === "function") {
     window.__pecLoadLogs();
   }
 };
 
+let currentProxyState = { enabled: true, online: false, bypassActive: false };
+let bypassCountdownTimer = null;
+
+function updateBypassCountdown(expiresAt) {
+  const btnPauseLabel = document.getElementById("btnPauseLabel");
+  if (!btnPauseLabel) return;
+  if (!expiresAt || expiresAt <= Date.now()) {
+    btnPauseLabel.textContent = "Пауза 15м";
+    if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
+      clearInterval(bypassCountdownTimer);
+      bypassCountdownTimer = null;
+    }
+    return;
+  }
+  const remainingSec = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+  const m = Math.floor(remainingSec / 60);
+  const s = remainingSec % 60;
+  btnPauseLabel.textContent = "Пауза (" + m + ":" + (s < 10 ? "0" : "") + s + ")";
+}
+
 // Global state applier - reactive to simulator and chrome.runtime
 window.applyPopupState = function(response) {
   if (!response) return;
+  currentProxyState = Object.assign({}, currentProxyState, response);
+
   const statusText = document.getElementById("statusText");
-  const badge = document.getElementById("badge");
+  const heroStatusText = document.getElementById("heroStatusText");
+  const badge = document.getElementById("badge") || document.getElementById("statusPill");
+  const statusOrb = document.getElementById("statusOrb");
   const modeVal = document.getElementById("modeVal");
   const serverVal = document.getElementById("serverVal");
   const profileVal = document.getElementById("profileVal");
   const pingVal = document.getElementById("pingVal");
   const exitIpVal = document.getElementById("exitIpVal");
+  const tabRulesDefaultPolicy = document.getElementById("tabRulesDefaultPolicy");
   const btnToggle = document.getElementById("btnToggleBypass");
+  const btnPowerLabel = document.getElementById("btnPowerLabel");
+  const btnPauseLabel = document.getElementById("btnPauseLabel");
+  const btnPowerToggle = document.getElementById("btnPowerToggle");
 
-  if (statusText) {
-    if (response.bypassActive) statusText.textContent = "Обход";
-    else if (!response.online) statusText.textContent = "Отключен";
-    else statusText.textContent = "Активен";
+  const isBypass = Boolean(response.bypassActive);
+  const isOnline = Boolean(response.online);
+  const isEnabled = response.enabled !== false;
+
+  let stateStr = "Отключен";
+  let badgeCls = "status-badge offline";
+  let orbCls = "status-orb";
+
+  if (isBypass) {
+    stateStr = "Обход";
+    badgeCls = "status-badge bypass";
+    orbCls = "status-orb bypass";
+  } else if (!isEnabled || !isOnline) {
+    stateStr = "Отключен";
+    badgeCls = "status-badge offline";
+    orbCls = "status-orb";
+  } else {
+    stateStr = "Активен";
+    badgeCls = "status-badge";
+    orbCls = "status-orb active";
   }
-  if (badge) {
-    if (response.bypassActive) {
-      badge.className = "status-badge bypass";
-    } else if (!response.online) {
-      badge.className = "status-badge offline";
+
+  if (statusText) statusText.textContent = stateStr;
+  if (heroStatusText) heroStatusText.textContent = stateStr;
+  if (badge) badge.className = badgeCls;
+  if (statusOrb) statusOrb.className = orbCls;
+
+  if (btnPowerLabel) {
+    btnPowerLabel.textContent = isEnabled ? "Отключить" : "Включить";
+  }
+  if (btnPowerToggle) {
+    btnPowerToggle.style.opacity = isEnabled ? "1" : "0.7";
+  }
+
+  if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
+    clearInterval(bypassCountdownTimer);
+    bypassCountdownTimer = null;
+  }
+  if (btnPauseLabel) {
+    if (isBypass) {
+      if (response.bypassExpiresAt) {
+        updateBypassCountdown(response.bypassExpiresAt);
+        if (typeof setInterval !== "undefined") {
+          bypassCountdownTimer = setInterval(() => {
+            if (response.bypassExpiresAt && response.bypassExpiresAt > Date.now()) {
+              updateBypassCountdown(response.bypassExpiresAt);
+            } else {
+              if (typeof clearInterval !== "undefined") clearInterval(bypassCountdownTimer);
+              bypassCountdownTimer = null;
+              if (btnPauseLabel) btnPauseLabel.textContent = "Пауза 15м";
+            }
+          }, 1000);
+        }
+      } else {
+        btnPauseLabel.textContent = "Включить прокси";
+      }
     } else {
-      badge.className = "status-badge";
+      btnPauseLabel.textContent = "Пауза 15м";
     }
   }
-  const tabRulesDefaultPolicy = document.getElementById("tabRulesDefaultPolicy");
+
   if (modeVal) {
-    if (response.bypassActive) {
+    if (isBypass) {
       modeVal.textContent = "Обход (Bypass)";
       modeVal.title = "Прокси временно отключен пользователем";
     } else if (response.protocol === "pac") {
@@ -59,20 +141,22 @@ window.applyPopupState = function(response) {
       modeVal.title = "";
     }
   }
+
   if (tabRulesDefaultPolicy && response.profileDefaultPolicy) {
     const isTunnel = response.profileDefaultPolicy === "proxy";
     tabRulesDefaultPolicy.textContent = isTunnel ? "PROXY (туннель)" : "DIRECT (селективный)";
   }
-  if (serverVal) serverVal.textContent = (response.online && response.host) ? (response.host + ":" + response.port) : (response.online ? "Direct" : "Отключен");
+
+  if (serverVal) {
+    serverVal.textContent = (isOnline && response.host) ? (response.host + ":" + response.port) : (isOnline ? "Direct" : "Отключен");
+  }
   if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
-  if (pingVal) pingVal.textContent = (response.online && response.ping) ? response.ping : "—";
+  if (pingVal && response.ping) pingVal.textContent = response.ping;
   if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
-  // Remember the management server origin (reported by the service worker)
-  // so the diagnostics tab can call it with an absolute URL - a relative
-  // fetch() inside chrome-extension:// never reaches the server.
   if (response.serverBase) window.__pecServerBase = response.serverBase;
+
   if (btnToggle) {
-    btnToggle.textContent = response.bypassActive ? "Включить прокси" : "Временно отключить (15м)";
+    btnToggle.textContent = isBypass ? "Включить прокси" : "Временно отключить (15м)";
   }
 };
 
@@ -82,16 +166,32 @@ window.addEventListener("message", function(e) {
   }
 });
 
+function applyTheme(theme) {
+  const isLight = theme === "light";
+  if (typeof document !== "undefined" && document.body) {
+    document.body.setAttribute("data-theme", isLight ? "light" : "dark");
+  }
+  const btnThemeToggle = typeof document !== "undefined" && document.getElementById ? document.getElementById("btnThemeToggle") : null;
+  if (btnThemeToggle) {
+    btnThemeToggle.textContent = isLight ? "🌙" : "☀️";
+    btnThemeToggle.title = isLight ? "Переключить на темную тему" : "Переключить на светлую тему";
+  }
+}
+
 function initPopup() {
   const statusText = document.getElementById("statusText");
-  const badge = document.getElementById("badge");
+  const heroStatusText = document.getElementById("heroStatusText");
+  const badge = document.getElementById("badge") || document.getElementById("statusPill");
+  const statusOrb = document.getElementById("statusOrb");
   const modeVal = document.getElementById("modeVal");
   const serverVal = document.getElementById("serverVal");
-  const profileVal = document.getElementById("profileVal");
   const pingVal = document.getElementById("pingVal");
   const exitIpVal = document.getElementById("exitIpVal");
-  const btnSync = document.getElementById("btnSync");
-  const btnToggle = document.getElementById("btnToggleBypass");
+  const btnThemeToggle = document.getElementById("btnThemeToggle");
+  const btnSyncNow = document.getElementById("btnSyncNow") || document.getElementById("btnSync");
+  const btnPowerToggle = document.getElementById("btnPowerToggle");
+  const btnPauseToggle = document.getElementById("btnPauseToggle") || document.getElementById("btnToggleBypass");
+  const btnTestLatency = document.getElementById("btnTestLatency");
   const btnCheckIp = document.getElementById("btnCheckIp");
 
   // Tab switching listeners
@@ -99,16 +199,43 @@ function initPopup() {
   tabs.forEach(tab => {
     tab.addEventListener("click", (ev) => {
       ev.preventDefault();
-      window.switchPopupTab(tab.dataset.tab);
+      window.switchPopupTab(tab.dataset.tab || tab.id);
     });
   });
+
+  // Day/Night theme toggler
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+    try {
+      chrome.storage.local.get(["pecThemeMode"], (res) => {
+        if (res && res.pecThemeMode) {
+          applyTheme(res.pecThemeMode);
+        }
+      });
+    } catch (e) {}
+  }
+
+  if (btnThemeToggle) {
+    btnThemeToggle.addEventListener("click", () => {
+      const cur = (document.body && document.body.getAttribute("data-theme") === "light") ? "light" : "dark";
+      const next = cur === "light" ? "dark" : "light";
+      applyTheme(next);
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+        chrome.storage.local.set({ pecThemeMode: next });
+      }
+    });
+  }
 
   async function loadState() {
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
       try {
-        const stored = await chrome.storage.local.get(["pecProxyState"]);
-        if (stored && stored.pecProxyState && typeof stored.pecProxyState === "object") {
-          window.applyPopupState(stored.pecProxyState);
+        const stored = await chrome.storage.local.get(["pecProxyState", "pecThemeMode"]);
+        if (stored) {
+          if (stored.pecProxyState && typeof stored.pecProxyState === "object") {
+            window.applyPopupState(stored.pecProxyState);
+          }
+          if (stored.pecThemeMode) {
+            applyTheme(stored.pecThemeMode);
+          }
         }
       } catch (e) {}
     }
@@ -118,7 +245,9 @@ function initPopup() {
         if (chrome.runtime.lastError || !response) {
           if (!serverVal || serverVal.textContent === "—") {
             if (statusText) statusText.textContent = "Ошибка связи";
+            if (heroStatusText) heroStatusText.textContent = "Ошибка связи";
             if (badge) badge.className = "status-badge offline";
+            if (statusOrb) statusOrb.className = "status-orb";
             if (serverVal) serverVal.textContent = "Сервер PEC недоступен";
             if (modeVal) modeVal.textContent = "—";
             if (pingVal) pingVal.textContent = "—";
@@ -130,18 +259,19 @@ function initPopup() {
     }
   }
 
-  if (btnSync) {
-    btnSync.addEventListener("click", () => {
-      btnSync.disabled = true;
-      const originalText = btnSync.innerHTML;
-      btnSync.innerHTML = "<span>Синхронизация...</span>";
+  // 3 Action Buttons
+  if (btnSyncNow) {
+    btnSyncNow.addEventListener("click", () => {
+      btnSyncNow.disabled = true;
+      const syncIcon = btnSyncNow.querySelector(".sync-icon");
+      if (syncIcon) syncIcon.classList.add("spin");
       const startMs = Date.now();
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ action: "FORCE_SYNC", type: "FORCE_SYNC" }, (res) => {
+        chrome.runtime.sendMessage({ action: "SYNC_NOW", type: "SYNC_NOW" }, (res) => {
           const latencyMs = Date.now() - startMs;
           setTimeout(() => {
-            btnSync.disabled = false;
-            btnSync.innerHTML = originalText;
+            btnSyncNow.disabled = false;
+            if (syncIcon) syncIcon.classList.remove("spin");
             if (res && res.ok && pingVal) {
               pingVal.textContent = latencyMs + " ms";
             }
@@ -151,25 +281,43 @@ function initPopup() {
         });
       } else {
         setTimeout(() => {
-          btnSync.disabled = false;
-          btnSync.innerHTML = originalText;
+          btnSyncNow.disabled = false;
+          if (syncIcon) syncIcon.classList.remove("spin");
         }, 400);
       }
     });
   }
 
-  if (btnToggle) {
-    btnToggle.addEventListener("click", () => {
+  if (btnPowerToggle) {
+    btnPowerToggle.addEventListener("click", () => {
+      const nextEnabled = currentProxyState.enabled !== undefined ? !currentProxyState.enabled : false;
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ action: "TOGGLE_BYPASS", type: "TOGGLE_BYPASS" }, (res) => {
+        chrome.runtime.sendMessage({ action: "SET_ENABLED", type: "SET_ENABLED", enabled: nextEnabled }, (res) => {
+          if (res) {
+            currentProxyState.enabled = res.enabled !== undefined ? res.enabled : nextEnabled;
+            window.applyPopupState(currentProxyState);
+          }
+          loadState();
+        });
+      } else {
+        currentProxyState.enabled = nextEnabled;
+        window.applyPopupState(currentProxyState);
+      }
+    });
+  }
+
+  if (btnPauseToggle) {
+    btnPauseToggle.addEventListener("click", () => {
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ action: "BYPASS_TOGGLE", type: "BYPASS_TOGGLE" }, (res) => {
           if (res) window.applyPopupState(res);
           loadState();
         });
       } else {
-        const isBypassed = badge && badge.classList.contains("bypass");
-        if (badge) badge.className = isBypassed ? "status-badge" : "status-badge bypass";
-        if (statusText) statusText.textContent = isBypassed ? "Активен" : "Обход";
-        btnToggle.textContent = isBypassed ? "Временно отключить (15м)" : "Включить прокси";
+        const nextBypass = !currentProxyState.bypassActive;
+        currentProxyState.bypassActive = nextBypass;
+        currentProxyState.bypassExpiresAt = nextBypass ? Date.now() + 15 * 60 * 1000 : null;
+        window.applyPopupState(currentProxyState);
         if (window.parent && window.parent.postMessage) {
           window.parent.postMessage({ type: "SIM_TOGGLE_BYPASS" }, "*");
         }
@@ -177,21 +325,230 @@ function initPopup() {
     });
   }
 
+  // Active tab domain detection
+  let currentDomain = "";
+  if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime.lastError || !tabs || !tabs.length) return;
+        const tab = tabs[0];
+        if (tab && tab.url) {
+          try {
+            const u = new URL(tab.url);
+            if (u.hostname && !u.hostname.startsWith("chrome") && !u.hostname.startsWith("edge") && !u.hostname.startsWith("about")) {
+              currentDomain = u.hostname;
+              const btnAddCurrentSite = document.getElementById("btnAddCurrentSite");
+              if (btnAddCurrentSite) {
+                btnAddCurrentSite.textContent = "+ Добавить сайт: " + currentDomain;
+                btnAddCurrentSite.style.display = "block";
+              }
+            }
+          } catch (e) {}
+        }
+      });
+    } catch (e) {}
+  }
+
+  // User rules CRUD
+  let userRules = [];
+
+  function renderUserRules(rules) {
+    const listEl = document.getElementById("userRulesList");
+    if (!listEl) return;
+    if (!rules || !rules.length) {
+      listEl.innerHTML = '<div class="empty-rules">Нет пользовательских правил</div>';
+      return;
+    }
+    listEl.innerHTML = "";
+    rules.forEach((rule, idx) => {
+      const item = document.createElement("div");
+      item.className = "user-rule-item";
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.alignItems = "center";
+      left.style.gap = "6px";
+      left.style.minWidth = "0";
+
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.className = "rule-toggle";
+      chk.checked = Boolean(rule.enabled);
+      chk.title = rule.enabled ? "Отключить правило" : "Включить правило";
+      chk.addEventListener("change", () => {
+        userRules[idx].enabled = chk.checked;
+        saveUserRules(userRules);
+      });
+
+      const pat = document.createElement("span");
+      pat.className = "rule-pattern";
+      pat.textContent = rule.pattern;
+      pat.title = rule.pattern;
+      if (!rule.enabled) {
+        pat.style.textDecoration = "line-through";
+        pat.style.opacity = "0.6";
+      }
+
+      left.appendChild(chk);
+      left.appendChild(pat);
+
+      const meta = document.createElement("div");
+      meta.className = "rule-meta";
+
+      const badge = document.createElement("span");
+      const act = (rule.action || "PROXY").toUpperCase();
+      badge.className = "rule-badge " + act.toLowerCase();
+      badge.textContent = act;
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "rule-del-btn";
+      delBtn.textContent = "✕";
+      delBtn.title = "Удалить правило";
+      delBtn.addEventListener("click", () => {
+        userRules.splice(idx, 1);
+        saveUserRules(userRules);
+      });
+
+      meta.appendChild(badge);
+      meta.appendChild(delBtn);
+
+      item.appendChild(left);
+      item.appendChild(meta);
+      listEl.appendChild(item);
+    });
+  }
+
+  function saveUserRules(rules) {
+    userRules = rules;
+    renderUserRules(userRules);
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ action: "SAVE_USER_RULES", type: "SAVE_USER_RULES", rules: userRules });
+    } else if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+      chrome.storage.local.set({ pecUserRules: userRules });
+    }
+  }
+
+  function loadUserRules() {
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ action: "GET_USER_RULES", type: "GET_USER_RULES" }, (res) => {
+        if (!chrome.runtime.lastError && res && Array.isArray(res.userRules)) {
+          userRules = res.userRules;
+          renderUserRules(userRules);
+        }
+      });
+    } else if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+      chrome.storage.local.get(["pecUserRules"], (res) => {
+        if (res && Array.isArray(res.pecUserRules)) {
+          userRules = res.pecUserRules;
+          renderUserRules(userRules);
+        }
+      });
+    }
+  }
+
+  function addRule(pattern, action) {
+    const p = (pattern || "").trim();
+    if (!p) return;
+    const act = (action || "PROXY").toUpperCase();
+    const existing = userRules.find(r => r.pattern.toLowerCase() === p.toLowerCase());
+    if (existing) {
+      existing.action = act;
+      existing.enabled = true;
+    } else {
+      userRules.push({ pattern: p, action: act, enabled: true });
+    }
+    saveUserRules(userRules);
+  }
+
+  const inputPattern = document.getElementById("inputPattern");
+  const selectAction = document.getElementById("selectAction");
+  const btnAddRule = document.getElementById("btnAddRule");
+  const btnAddCurrentSite = document.getElementById("btnAddCurrentSite");
+
+  if (btnAddRule) {
+    btnAddRule.addEventListener("click", () => {
+      if (inputPattern && inputPattern.value.trim()) {
+        addRule(inputPattern.value.trim(), selectAction ? selectAction.value : "PROXY");
+        inputPattern.value = "";
+      }
+    });
+  }
+
+  if (inputPattern) {
+    inputPattern.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && inputPattern.value.trim()) {
+        addRule(inputPattern.value.trim(), selectAction ? selectAction.value : "PROXY");
+        inputPattern.value = "";
+      }
+    });
+  }
+
+  if (btnAddCurrentSite) {
+    btnAddCurrentSite.addEventListener("click", () => {
+      if (currentDomain) {
+        if (inputPattern) inputPattern.value = currentDomain;
+        addRule(currentDomain, (selectAction && selectAction.value) || "DIRECT");
+      }
+    });
+  }
+
+  // Diagnostics
+  if (btnTestLatency) {
+    btnTestLatency.addEventListener("click", async () => {
+      btnTestLatency.disabled = true;
+      const origText = btnTestLatency.textContent;
+      btnTestLatency.textContent = "...";
+      const startMs = Date.now();
+      const base = window.__pecServerBase || "";
+      try {
+        let res = await fetch(base + "/api/ip-echo").catch(() => null);
+        if (!res || !res.ok) {
+          res = await fetch(base + "/ip-echo").catch(() => null);
+        }
+        const latencyMs = Date.now() - startMs;
+        if (pingVal) {
+          pingVal.textContent = latencyMs + " ms";
+        }
+      } catch (e) {
+        if (pingVal) pingVal.textContent = "—";
+      } finally {
+        setTimeout(() => {
+          btnTestLatency.disabled = false;
+          btnTestLatency.textContent = origText;
+        }, 300);
+      }
+    });
+  }
+
   if (btnCheckIp) {
     btnCheckIp.addEventListener("click", async () => {
       btnCheckIp.disabled = true;
-      btnCheckIp.textContent = "Проверка IP...";
+      const origText = btnCheckIp.textContent;
+      btnCheckIp.textContent = "Проверка...";
+      if (exitIpVal) exitIpVal.textContent = "Проверка IP...";
+      const base = window.__pecServerBase || "";
+      let data = null;
       try {
-        const base = window.__pecServerBase || "";
-        const res = await fetch(base + "/api/ip-echo").then(r => r.json()).catch(() => null);
-        if (res && res.ip && exitIpVal) {
-          exitIpVal.textContent = res.ip;
+        let res = await fetch(base + "/api/ip-echo").catch(() => null);
+        if (res && res.ok) {
+          data = await res.json().catch(() => null);
+        } else {
+          let res2 = await fetch(base + "/ip-echo").catch(() => null);
+          if (res2 && res2.ok) {
+            data = await res2.json().catch(() => null);
+          }
         }
-      } catch {}
+      } catch (err) {}
+
+      if (data && data.ip && exitIpVal) {
+        exitIpVal.textContent = data.ip + (data.geo ? " (" + data.geo + ")" : "");
+      } else if (exitIpVal) {
+        exitIpVal.textContent = "Ошибка связи";
+      }
       setTimeout(() => {
         btnCheckIp.disabled = false;
-        btnCheckIp.textContent = "Проверить Egress IP и Гео";
-      }, 500);
+        btnCheckIp.textContent = origText;
+      }, 400);
     });
   }
 
@@ -204,9 +561,10 @@ function initPopup() {
   function formatTime(isoStr) {
     try {
       const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return "--:--:--";
       return d.toTimeString().split(" ")[0] + "." + String(d.getMilliseconds()).padStart(3, "0");
     } catch {
-      return isoStr || "";
+      return isoStr || "--:--:--";
     }
   }
 
@@ -219,7 +577,7 @@ function initPopup() {
     }
     if (logCountTag) logCountTag.textContent = logs.length + " зап.";
     const lines = logs.map((l) => {
-      const time = formatTime(l.timestamp);
+      const time = formatTime(l.timestamp || l.time);
       const lvl = (l.level || "INFO").toUpperCase().padEnd(5);
       const msg = l.message || "";
       const extra = l.data ? " " + (typeof l.data === "object" ? JSON.stringify(l.data) : l.data) : "";
@@ -269,18 +627,30 @@ function initPopup() {
 
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === "local" && changes.pecProxyState && changes.pecProxyState.newValue) {
-        window.applyPopupState(changes.pecProxyState.newValue);
+      if (area === "local") {
+        if (changes.pecProxyState && changes.pecProxyState.newValue) {
+          window.applyPopupState(changes.pecProxyState.newValue);
+        }
+        if (changes.pecUserRules && changes.pecUserRules.newValue) {
+          userRules = changes.pecUserRules.newValue;
+          renderUserRules(userRules);
+        }
+        if (changes.pecThemeMode && changes.pecThemeMode.newValue) {
+          applyTheme(changes.pecThemeMode.newValue);
+        }
       }
     });
   }
 
   loadState();
+  loadUserRules();
   loadLogs();
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initPopup);
-} else {
-  initPopup();
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initPopup);
+  } else {
+    initPopup();
+  }
 }
