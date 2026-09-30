@@ -5,27 +5,87 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PEC - Proxy Extension Corp</title>
   <style>
-    :root {
-      --primary: #0284c7;
+    :root, [data-theme="dark"] {
+      --primary: #38bdf8;
       --bg: #0b1120;
       --card: #131d36;
-      --border: #22345c;
+      --card-inner: #1e293b;
+      --border: #334155;
       --text: #f8fafc;
       --text-muted: #94a3b8;
+      --primary-rgb: 56, 189, 248;
       --success: #10b981;
       --danger: #ef4444;
       --warning: #f59e0b;
     }
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --card-inner: #f1f5f9;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+    }
+
+    /* 5 Color Palettes */
+    [data-palette="cyber"] { --primary: #38bdf8; --primary-rgb: 56, 189, 248; }
+    [data-palette="obsidian"] { --primary: #c084fc; --primary-rgb: 192, 132, 252; }
+    [data-palette="obsidian"]:not([data-theme="light"]), [data-palette="obsidian"][data-theme="dark"] {
+      --bg: #09090b; --card: #18181b; --card-inner: #27272a; --border: #3f3f46;
+    }
+    [data-palette="obsidian"][data-theme="light"] {
+      --bg: #faf5ff; --card: #ffffff; --card-inner: #f3e8ff; --border: #e9d5ff;
+    }
+    [data-palette="nord"] { --primary: #88c0d0; --primary-rgb: 136, 192, 208; }
+    [data-palette="nord"]:not([data-theme="light"]), [data-palette="nord"][data-theme="dark"] {
+      --bg: #242933; --card: #2e3440; --card-inner: #3b4252; --border: #4c566a;
+    }
+    [data-palette="nord"][data-theme="light"] {
+      --bg: #eceff4; --card: #ffffff; --card-inner: #e5e9f0; --border: #d8dee9;
+    }
+    [data-palette="emerald"] { --primary: #34d399; --primary-rgb: 52, 211, 153; }
+    [data-palette="emerald"]:not([data-theme="light"]), [data-palette="emerald"][data-theme="dark"] {
+      --bg: #061e14; --card: #0d3322; --card-inner: #134e35; --border: #1a6344;
+    }
+    [data-palette="emerald"][data-theme="light"] {
+      --bg: #f0fdf4; --card: #ffffff; --card-inner: #dcfce7; --border: #bbf7d0;
+    }
+    [data-palette="light"] { --primary: #2563eb; --primary-rgb: 37, 99, 235; }
+    [data-palette="light"]:not([data-theme="light"]), [data-palette="light"][data-theme="dark"] {
+      --bg: #0f172a; --card: #1e293b; --card-inner: #334155; --border: #475569;
+    }
+    [data-palette="light"][data-theme="light"] {
+      --bg: #f8fafc; --card: #ffffff; --card-inner: #f1f5f9; --border: #cbd5e1;
+    }
+
+    /* Layout Terminal */
+    [data-layout="terminal"] {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    [data-layout="terminal"] .card,
+    [data-layout="terminal"] .tab-btn,
+    [data-layout="terminal"] .btn-action,
+    [data-layout="terminal"] .form-input,
+    [data-layout="terminal"] .form-select,
+    [data-layout="terminal"] .btn-primary-sm,
+    [data-layout="terminal"] .btn-sec,
+    [data-layout="terminal"] .btn-sm,
+    [data-layout="terminal"] .btn-quick-add {
+      border-radius: 4px !important;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 340px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      width: 380px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
       padding: 14px;
       font-size: 13px;
       line-height: 1.4;
       user-select: none;
+      transition: background 0.2s, color 0.2s;
     }
     header {
       display: flex;
@@ -33,9 +93,19 @@
       justify-content: space-between;
       border-bottom: 1px solid var(--border);
       padding-bottom: 10px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
+      gap: 8px;
     }
-    .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
     .brand-icon {
       width: 24px;
       height: 24px;
@@ -44,7 +114,40 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
+      color: #0b1120;
+      flex-shrink: 0;
+    }
+    .version-tag {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--card-inner);
+      padding: 1px 5px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .btn-theme-toggle {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.15s;
+    }
+    .btn-theme-toggle:hover {
+      background: var(--border);
     }
     .status-badge {
       display: inline-flex;
@@ -58,7 +161,18 @@
       color: var(--success);
       border: 1px solid rgba(16, 185, 129, 0.3);
     }
-    .status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+    .status-badge.offline {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .status-badge.offline .dot { background: var(--danger); }
     .status-badge.bypass {
       background: rgba(245, 158, 11, 0.15);
       color: var(--warning);
@@ -66,10 +180,10 @@
     }
     .status-badge.bypass .dot { background: var(--warning); }
 
-    /* Nav Tabs */
+    /* Tabs */
     .tabs {
       display: flex;
-      gap: 4px;
+      gap: 6px;
       margin-bottom: 12px;
       border-bottom: 1px solid var(--border);
       padding-bottom: 6px;
@@ -77,213 +191,524 @@
     .tab-btn {
       flex: 1;
       background: transparent;
-      border: none;
+      border: 1px solid transparent;
       color: var(--text-muted);
       font-size: 11px;
       font-weight: 600;
-      padding: 6px 4px;
-      border-radius: 5px;
+      padding: 7px 4px;
+      border-radius: 6px;
       cursor: pointer;
       text-align: center;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+      background: var(--card-inner);
     }
     .tab-btn.active {
       background: var(--card);
       color: var(--primary);
-      border: 1px solid var(--border);
+      border-color: var(--border);
     }
 
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
+    /* Cards */
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
+      border-radius: 12px;
+      padding: 12px;
       margin-bottom: 10px;
     }
-    .row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; }
-    .label { color: var(--text-muted); font-size: 11px; }
-    .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; font-size: 12px; }
-    
-    .btn-primary {
-      width: 100%;
-      background: var(--primary);
-      color: #0b1120;
-      font-weight: 600;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      transition: opacity 0.15s;
-    }
-    .btn-primary:hover { opacity: 0.9; }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .btn-sec {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text);
-      border: 1px solid var(--border);
-      padding: 7px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      margin-top: 6px;
-      text-align: center;
-      transition: background 0.15s;
-    }
-    .btn-sec:hover { background: rgba(255, 255, 255, 0.1); }
-    .btn-sec.warning { border-color: rgba(245, 158, 11, 0.4); color: var(--warning); }
-
-    .tag {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: rgba(2, 132, 199, 0.15);
-      color: var(--primary);
-      border: 1px solid rgba(2, 132, 199, 0.3);
-    }
-    .rule-item {
+    .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 5px 0;
-      border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+      margin-bottom: 8px;
+    }
+    .card-title {
+      font-weight: 700;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--card-inner);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .tag.corp-tag {
+      color: var(--primary);
+      border-color: rgba(56, 189, 248, 0.3);
+      background: rgba(56, 189, 248, 0.1);
+    }
+    .tag.user-tag {
+      color: var(--warning);
+      border-color: rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.1);
+    }
+
+    /* Hero Card in Conn Tab */
+    .hero-card {
+      text-align: center;
+      padding: 14px 12px;
+    }
+    .hero-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .status-orb {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.2);
+      border: 2px solid var(--danger);
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+      transition: all 0.3s;
+    }
+    .status-orb.active {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--success);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+    }
+    .status-orb.bypass {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--warning);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+    }
+    .hero-status-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .hero-meta {
+      background: var(--card-inner);
+      border-radius: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
       font-size: 11px;
     }
-    .rule-item:last-child { border-bottom: none; }
-    .support-box { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-bottom: 8px; }
+    .meta-label { color: var(--text-muted); }
+    .meta-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 600;
+      color: var(--text);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 3 Action Buttons */
+    .action-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .btn-action {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 4px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .btn-action:hover {
+      background: var(--card-inner);
+      border-color: var(--primary);
+    }
+    .btn-action:active {
+      transform: scale(0.98);
+    }
+    .action-icon {
+      color: var(--primary);
+    }
+    .action-label {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    /* Rows */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .label { color: var(--text-muted); font-size: 11px; }
+    .val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .val.success-val { color: var(--success); }
+    .row-action {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Form and Inputs in Routing */
+    .rules-notice {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    .btn-quick-add {
+      width: 100%;
+      background: var(--card-inner);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      color: var(--primary);
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      margin-bottom: 8px;
+      transition: all 0.15s;
+    }
+    .btn-quick-add:hover {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.05);
+    }
+    .rule-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .form-input {
+      width: 100%;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      color: var(--text);
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      outline: none;
+    }
+    .form-input:focus {
+      border-color: var(--primary);
+    }
+    .rule-form-row {
+      display: flex;
+      gap: 6px;
+    }
+    .form-select {
+      flex: 1;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      color: var(--text);
+      font-size: 11px;
+      outline: none;
+    }
+    .btn-primary-sm {
+      background: var(--primary);
+      color: #0b1120;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary-sm:hover { opacity: 0.9; }
+
+    .user-rules-list {
+      max-height: 140px;
+      overflow-y: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+      margin-top: 4px;
+    }
+    .empty-rules {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 10px 0;
+    }
+    .user-rule-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 11px;
+      border-bottom: 1px dashed var(--border);
+    }
+    .user-rule-item:last-child { border-bottom: none; }
+    .rule-pattern {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .rule-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rule-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .rule-badge.proxy {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+    }
+    .rule-badge.direct {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+    .rule-del-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    .rule-del-btn:hover {
+      color: var(--danger);
+    }
+
+    /* Diagnostics & Terminal */
+    .btn-sm {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-sm:hover {
+      background: var(--border);
+    }
+    .log-terminal {
+      background: #050914;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      color: #94a3b8;
+      height: 120px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin: 4px 0 8px 0;
+    }
+    [data-theme="light"] .log-terminal {
+      background: #0f172a;
+      color: #cbd5e1;
+    }
+    .log-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-sec {
+      flex: 1;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-weight: 500;
+      padding: 5px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .btn-sec:hover { background: var(--border); }
   </style>
 </head>
-<body>
+<body data-palette="cyber" data-layout="console" data-theme="dark">
   <header>
     <div class="brand">
-      <div class="brand-icon">🛡️</div>
+      <div class="brand-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
       <span>PEC Corp</span>
+      <span class="version-tag">v1.4.0</span>
     </div>
-    <div class="status-badge offline" id="badge">
-      <span class="dot"></span>
-      <span id="statusText">Отключен</span>
+    <div class="header-actions">
+      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme">☀️</button>
+      <div class="status-badge offline" id="statusPill">
+        <span class="dot"></span>
+        <span id="statusText">Отключен</span>
+      </div>
     </div>
   </header>
 
+  <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-conn">Подключение</button>
-    <button class="tab-btn" data-tab="tab-rules">Маршрутизация</button>
-    <button class="tab-btn" data-tab="tab-diag">Диагностика</button>
-    <button class="tab-btn" data-tab="tab-help">Поддержка</button>
+    <button class="tab-btn active" id="tab-btn-conn" data-tab="tab-content-conn">⚡ Подключение</button>
+    <button class="tab-btn" id="tab-btn-routing" data-tab="tab-content-routing">🔀 Маршрутизация</button>
+    <button class="tab-btn" id="tab-btn-diag" data-tab="tab-content-diag">📊 Инфо и Диагностика</button>
   </div>
 
   <!-- TAB 1: Connection -->
-  <div class="tab-content active" id="tab-conn">
-    <div class="card">
-      <div class="row">
-        <span class="label">Режим прокси</span>
-        <span class="val" id="modeVal">—</span>
+  <div class="tab-content active" id="tab-content-conn">
+    <div class="card hero-card">
+      <div class="hero-header">
+        <div class="status-orb" id="statusOrb"></div>
+        <div class="hero-status-title" id="heroStatusText">Отключен</div>
       </div>
-      <div class="row">
-        <span class="label">Прокси-сервер</span>
-        <span class="val" id="serverVal">—</span>
-      </div>
-      <div class="row">
-        <span class="label">Профиль правил</span>
-        <span class="val" id="profileVal">—</span>
-      </div>
-      <div class="row">
-        <span class="label">Задержка (Пинг)</span>
-        <span class="val" id="pingVal">—</span>
+      <div class="hero-meta">
+        <div class="meta-row">
+          <span class="meta-label">Профиль правил</span>
+          <span class="meta-val" id="profileVal">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Прокси-сервер</span>
+          <span class="meta-val" id="serverVal">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Режим прокси</span>
+          <span class="meta-val" id="modeVal">—</span>
+        </div>
       </div>
     </div>
 
-    <button id="btnSync" class="btn-primary">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-      <span>Синхронизировать сейчас</span>
-    </button>
-
-    
-    <button id="btnToggleBypass" class="btn-sec warning">
-      Временно отключить (15м)
-    </button>
+    <!-- 3 Action Buttons -->
+    <div class="action-bar">
+      <button id="btnSyncNow" class="btn-action" title="Синхронизировать сейчас">
+        <svg class="action-icon sync-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        <span class="action-label">Синхронизация</span>
+      </button>
+      <button id="btnPowerToggle" class="btn-action" title="Включить / Выключить">
+        <svg class="action-icon power-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
+        <span class="action-label" id="btnPowerLabel">Вкл / Выкл</span>
+      </button>
+      <button id="btnPauseToggle" class="btn-action" title="Пауза 15 минут">
+        <svg class="action-icon pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        <span class="action-label" id="btnPauseLabel">Пауза 15м</span>
+      </button>
+    </div>
   </div>
 
   <!-- TAB 2: Routing -->
-  <div class="tab-content" id="tab-rules">
+  <div class="tab-content" id="tab-content-routing">
     <div class="card">
-      <div class="row" style="margin-bottom: 6px;">
+      <div class="card-header">
+        <span class="card-title">Корпоративные правила</span>
+        <span class="tag corp-tag">От сервера</span>
+      </div>
+      <div class="row" style="margin-top: 6px;">
         <span class="label">По умолчанию</span>
         <span class="tag" id="tabRulesDefaultPolicy">DIRECT</span>
       </div>
-      <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-top: 8px;">
-        Правила маршрутизации и обхода определяются активным PAC-профилем с сервера PEC.
+      <div class="rules-notice" style="margin-top: 8px;">
+        Правила маршрутизации и обхода определяются активным PAC-профилем с сервера PEC. Ваши локальные исключения ниже имеют приоритет.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Мои исключения</span>
+        <span class="tag user-tag">Локально</span>
+      </div>
+      <button id="btnAddCurrentSite" class="btn-quick-add" style="display: none;">
+        + Добавить текущий сайт
+      </button>
+      <div class="rule-form">
+        <input type="text" id="inputPattern" placeholder="*.example.com или домен" class="form-input" autocomplete="off" spellcheck="false">
+        <div class="rule-form-row">
+          <select id="selectAction" class="form-select">
+            <option value="PROXY">PROXY (через прокси)</option>
+            <option value="DIRECT">DIRECT (напрямую)</option>
+          </select>
+          <button id="btnAddRule" class="btn-primary-sm">+ Добавить</button>
+        </div>
+      </div>
+      <div id="userRulesList" class="user-rules-list">
+        <div class="empty-rules">Нет пользовательских правил</div>
       </div>
     </div>
   </div>
 
-  <!-- TAB 3: Diagnostics -->
-  <div class="tab-content" id="tab-diag">
+  <!-- TAB 3: Diagnostics & Info -->
+  <div class="tab-content" id="tab-content-diag">
     <div class="card">
+      <div class="card-header">
+        <span class="card-title">Параметры соединения</span>
+      </div>
       <div class="row">
         <span class="label">Защита WebRTC IP</span>
-        <span class="val" style="color: var(--success);">Защищено (без утечки UDP)</span>
+        <span class="val success-val" id="webrtcVal">Защищено (без утечки UDP)</span>
       </div>
       <div class="row">
         <span class="label">Защита от подмены DNS</span>
-        <span class="val" style="color: var(--success);">Включена</span>
+        <span class="val success-val" id="dnsVal">Включена</span>
+      </div>
+      <div class="row">
+        <span class="label">Задержка (Пинг)</span>
+        <div class="row-action">
+          <span class="val" id="pingVal">—</span>
+          <button id="btnTestLatency" class="btn-sm">Тест</button>
+        </div>
       </div>
       <div class="row">
         <span class="label">Текущий внешний IP</span>
-        <span class="val" id="exitIpVal">198.51.100.42</span>
+        <div class="row-action">
+          <span class="val" id="exitIpVal">—</span>
+          <button id="btnCheckIp" class="btn-sm">Проверить</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--border);">
+        <span class="label">Техподдержка</span>
+        <span class="val" style="font-size: 11px;"><a href="mailto:it-support@corp.local" target="_blank" style="color: var(--primary); text-decoration: none;">it-support@corp.local</a></span>
       </div>
     </div>
 
-    
-    <button id="btnCheckIp" class="btn-sec">
-      Проверить Egress IP и Гео
-    </button>
-
-    <div class="card" style="margin-top: 10px;">
+    <div class="card">
       <div class="row" style="margin-bottom: 6px;">
         <span class="label" style="font-weight: 600;">Журнал событий</span>
         <span class="tag" id="logCountTag" style="font-size: 10px;">0 записей</span>
       </div>
-      <pre id="logContainer" style="background: #050914; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; color: #94a3b8; max-height: 150px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin: 4px 0 8px 0;"></pre>
-      <div style="display: flex; gap: 6px;">
-        <button id="btnCopyLogs" class="btn-sec" style="margin-top: 0; flex: 1; padding: 5px 8px; font-size: 11px;">
-          Скопировать логи
-        </button>
-        <button id="btnClearLogs" class="btn-sec" style="margin-top: 0; flex: 1; padding: 5px 8px; font-size: 11px;">
-          Очистить
-        </button>
+      <pre id="logContainer" class="log-terminal"></pre>
+      <div class="log-actions">
+        <button id="btnCopyLogs" class="btn-sec">Скопировать логи</button>
+        <button id="btnClearLogs" class="btn-sec">Очистить</button>
       </div>
     </div>
-  </div>
-
-  <!-- TAB 4: Support -->
-  <div class="tab-content" id="tab-help">
-    <div class="card">
-      <div class="support-box">
-        При возникновении проблем с доступом или для запроса новых политик обратитесь в службу поддержки:
-      </div>
-      <div class="row">
-        <span class="label">Техподдержка</span>
-        <span class="val">mailto:it-support@corp.local</span>
-      </div>
-      <div class="row">
-        <span class="label">Версия сборки</span>
-        <span class="val">v1.4.0</span>
-      </div>
-    </div>
-
-    
-    <a href="mailto:it-support@corp.local" target="_blank" class="btn-sec" style="text-decoration: none; display: block;">
-      Написать в службу поддержки
-    </a>
   </div>
 
   <script src="popup.js"></script>
