@@ -885,6 +885,12 @@ test("purity: extension/README.md references actual npm/tsx build script and not
   );
 });
 
+test("purity: extension/popup.html uses russian lang attribute", () => {
+  const html = fs.readFileSync(path.join(REPO_ROOT, "extension", "popup.html"), "utf-8");
+  assert.match(html, /<html\s+lang="ru">/);
+});
+
+
 
 
 

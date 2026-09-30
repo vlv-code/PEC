@@ -73,7 +73,7 @@ export function createProxiesRouter(): Router {
           type: "3x-ui",
           protocol: syncResult.protocol || "socks5",
           host: finalHost,
-          port: syncResult.port || 10808,
+          port: syncResult.port || 10809,
           username: syncResult.username,
           password: syncResult.password,
           isActive: isActive !== undefined ? Boolean(isActive) : undefined,

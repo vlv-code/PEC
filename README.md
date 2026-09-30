@@ -69,8 +69,11 @@ The backend has a modular, maintainable structure:
 │   ├── rotate.ts              # Atomic credential storage, 3x-ui integration, SSRF validator
 │   ├── routing.ts             # Smart PAC generator, presets, domain expansion
 │   ├── scheduler.ts           # Cron rotation scheduler
-│   └── types.ts               # Shared TypeScript data models
-└── extension/                 # Chrome Manifest V3 extension source template
+├── extension/                 # Chrome Manifest V3 extension source template (не загружать напрямую!)
+└── dist/
+    ├── unpacked/              # Сгенерированное готовое расширение (Load unpacked в Chrome)
+    ├── updates/               # Собранные пакеты extension.crx, extension.zip, updates.xml
+    └── server.cjs             # Скомпилированный production-бандл сервера
 ```
 
 ---

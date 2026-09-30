@@ -123,6 +123,7 @@ export interface ExtensionBuildConfig {
   defaultToken: string;
   targetProfileId: string;
   autoConfigureProxy: boolean;
+  targetGroup?: string;
   /** Source files manually edited in the Studio; regeneration never clobbers them. */
   overriddenFiles?: string[];
 }

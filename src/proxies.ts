@@ -233,7 +233,7 @@ export function initDefaultProxyIfNeeded(): void {
     type: "manual",
     protocol,
     host: cfg.host || "127.0.0.1",
-    port: cfg.port || 10808,
+    port: cfg.port || 10809,
     username,
     password,
     isActive: true,
