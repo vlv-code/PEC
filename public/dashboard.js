@@ -1353,14 +1353,14 @@
       const pattern = document.getElementById('newRulePattern').value.trim();
       const action = document.getElementById('newRuleAction').value;
 
-      if (!name || !pattern) {
-        toast('Please specify rule name and pattern', 'error');
+      if (!pattern) {
+        toast('Please specify a rule pattern', 'error');
         return;
       }
 
       currentProfile.rules.push({
         id: 'r_' + Math.random().toString(36).substring(2, 8),
-        name: name,
+        name: name || pattern,
         targetType: pattern.includes('/') ? 'cidr' : 'wildcard',
         pattern: pattern,
         action: action,
