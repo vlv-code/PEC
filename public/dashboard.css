@@ -810,3 +810,76 @@
       border-radius: 50%;
       display: inline-block;
     }
+
+    /* Extension Studio Constructor: Layout & Mode buttons */
+    .studio-layout-btn {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+    .studio-layout-btn:hover {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .studio-layout-btn.active {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.18);
+      color: var(--primary);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+    }
+
+    .studio-mode-btn {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+    .studio-mode-btn:hover {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .studio-mode-btn.active {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.18);
+      color: var(--primary);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+    }
+
+    /* Light theme overrides */
+    body[data-theme="light"] .studio-layout-btn.active,
+    body[data-theme="light"] .studio-mode-btn.active {
+      background: rgba(37, 99, 235, 0.12);
+      border-color: #2563eb;
+      color: #2563eb;
+      box-shadow: 0 1px 3px rgba(37, 99, 235, 0.15);
+    }
+
+    /* Terminal & Console layout variants */
+    body[data-layout="terminal"] .studio-layout-btn,
+    body[data-layout="terminal"] .studio-mode-btn {
+      border-radius: 0px !important;
+      font-family: var(--mono);
+    }
+    body[data-layout="console"] .studio-layout-btn,
+    body[data-layout="console"] .studio-mode-btn {
+      border-radius: 4px;
+    }
+

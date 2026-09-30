@@ -307,30 +307,65 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
             </p>
           </div>
 
-          <!-- 2. Theme & Visual Style Presets -->
+          <!-- 2. UI Layout & Color Palette -->
           <div style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px;">
-            <label style="margin-bottom: 8px;" data-i18n="lblThemePalettes">2. Theme & Color Palettes</label>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="preset-chip active" id="chip-style-cyber-blue" onclick="applyStylePreset('cyber-blue')">
-                <span class="color-swatch" style="background: #0284c7;"></span>
-                <span>Cyber Blue</span>
-              </button>
-              <button type="button" class="preset-chip" id="chip-style-dark-obsidian" onclick="applyStylePreset('dark-obsidian')">
-                <span class="color-swatch" style="background: #a855f7;"></span>
-                <span>Dark Obsidian</span>
-              </button>
-              <button type="button" class="preset-chip" id="chip-style-emerald-sentinel" onclick="applyStylePreset('emerald-sentinel')">
-                <span class="color-swatch" style="background: #10b981;"></span>
-                <span>Emerald Sentinel</span>
-              </button>
-              <button type="button" class="preset-chip" id="chip-style-sunset-amber" onclick="applyStylePreset('sunset-amber')">
-                <span class="color-swatch" style="background: #f59e0b;"></span>
-                <span>Sunset Amber</span>
-              </button>
-              <button type="button" class="preset-chip" id="chip-style-minimal-light" onclick="applyStylePreset('minimal-light')">
-                <span class="color-swatch" style="background: #2563eb;"></span>
-                <span>Minimal Light</span>
-              </button>
+            <label style="margin-bottom: 8px;" data-i18n="lblThemePalettes">2. Макет и цветовая палитра</label>
+
+            <!-- Layout selector: Console vs Terminal -->
+            <div style="margin-bottom: 12px;">
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblStudioLayout">Макет интерфейса:</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <button type="button" class="studio-layout-btn active" id="btnStudioLayoutConsole" onclick="setStudioLayout('console')">
+                  <span style="font-size: 12px; font-weight: 600;">Console</span>
+                  <span style="font-size: 10px; color: var(--text-muted);">(rounded, soft)</span>
+                </button>
+                <button type="button" class="studio-layout-btn" id="btnStudioLayoutTerminal" onclick="setStudioLayout('terminal')">
+                  <span style="font-size: 12px; font-weight: 600; font-family: monospace;">Terminal</span>
+                  <span style="font-size: 10px; color: var(--text-muted);">(monospace, sharp)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Color Palettes: Cyber Blue, Dark Obsidian, Nordic Arctic, Emerald SecOps, Enterprise Light -->
+            <div style="margin-bottom: 12px;">
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblStudioPalette">Цветовая палитра:</div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="preset-chip active" id="chip-palette-cyber" onclick="setStudioPalette('cyber')">
+                  <span class="color-swatch" style="background: #38bdf8;"></span>
+                  <span>Cyber Blue</span>
+                </button>
+                <button type="button" class="preset-chip" id="chip-palette-obsidian" onclick="setStudioPalette('obsidian')">
+                  <span class="color-swatch" style="background: #c084fc;"></span>
+                  <span>Dark Obsidian</span>
+                </button>
+                <button type="button" class="preset-chip" id="chip-palette-nord" onclick="setStudioPalette('nord')">
+                  <span class="color-swatch" style="background: #88c0d0;"></span>
+                  <span>Nordic Arctic</span>
+                </button>
+                <button type="button" class="preset-chip" id="chip-palette-emerald" onclick="setStudioPalette('emerald')">
+                  <span class="color-swatch" style="background: #34d399;"></span>
+                  <span>Emerald SecOps</span>
+                </button>
+                <button type="button" class="preset-chip" id="chip-palette-light" onclick="setStudioPalette('light')">
+                  <span class="color-swatch" style="background: #2563eb; border: 1px solid #cbd5e1;"></span>
+                  <span>Enterprise Light</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Default Theme Mode: Dark (Ночь) vs Light (День) -->
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblStudioThemeMode">Режим темы по умолчанию:</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <button type="button" class="studio-mode-btn active" id="btnStudioModeDark" onclick="setStudioThemeMode('dark')">
+                  <span>🌙</span>
+                  <span style="font-size: 12px; font-weight: 600;" data-i18n="optModeDark">Темная (Ночь)</span>
+                </button>
+                <button type="button" class="studio-mode-btn" id="btnStudioModeLight" onclick="setStudioThemeMode('light')">
+                  <span>☀️</span>
+                  <span style="font-size: 12px; font-weight: 600;" data-i18n="optModeLight">Светлая (День)</span>
+                </button>
+              </div>
             </div>
           </div>
 

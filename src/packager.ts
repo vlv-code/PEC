@@ -28,6 +28,9 @@ export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
   uiMode: "popup",
   presetTemplate: "self-service-pro",
   presetStyle: "cyber-blue",
+  uiLayout: "console",
+  colorPalette: "cyber",
+  defaultThemeMode: "dark",
   themeColor: "#0284c7",
   themeBackground: "#0b1120",
   themeCard: "#131d36",
@@ -265,6 +268,14 @@ export function packCrxBuffer(zipBuffer: Buffer, privateKey: crypto.KeyObject): 
 }
 
 function getThemeStyles(cfg: ExtensionBuildConfig) {
+  const paletteColors: Record<string, { primary: string; bg: string; card: string; border: string; text: string }> = {
+    cyber: { primary: "#38bdf8", bg: "#0b1120", card: "#131d36", border: "#22345c", text: "#f8fafc" },
+    obsidian: { primary: "#c084fc", bg: "#09090b", card: "#18181b", border: "#27272a", text: "#fafafa" },
+    nord: { primary: "#88c0d0", bg: "#242933", card: "#2e3440", border: "#4c566a", text: "#eceff4" },
+    emerald: { primary: "#34d399", bg: "#061e14", card: "#0d3322", border: "#1a6344", text: "#ecfdf5" },
+    light: { primary: "#2563eb", bg: "#f8fafc", card: "#ffffff", border: "#cbd5e1", text: "#0f172a" },
+  };
+
   const stylesMap: Record<string, { primary: string; bg: string; card: string; border: string; text: string }> = {
     "cyber-blue": { primary: "#0284c7", bg: "#0b1120", card: "#131d36", border: "#22345c", text: "#f8fafc" },
     "dark-obsidian": { primary: "#a855f7", bg: "#09090b", card: "#18181b", border: "#27272a", text: "#fafafa" },
@@ -273,7 +284,9 @@ function getThemeStyles(cfg: ExtensionBuildConfig) {
     "minimal-light": { primary: "#2563eb", bg: "#f8fafc", card: "#ffffff", border: "#cbd5e1", text: "#0f172a" },
   };
 
-  const selected = stylesMap[cfg.presetStyle] || stylesMap["cyber-blue"];
+  const selectedPalette = cfg.colorPalette ? paletteColors[cfg.colorPalette] : null;
+  const selectedStyle = stylesMap[cfg.presetStyle || ""] || stylesMap["cyber-blue"];
+  const selected = selectedPalette || selectedStyle;
   return {
     primary: cfg.themeColor || selected.primary,
     bg: cfg.themeBackground || selected.bg,
@@ -581,6 +594,66 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
       if (fs.existsSync(extPopJ)) fs.unlinkSync(extPopJ);
     }
   }
+}
+
+export async function buildExtensionFiles(cfg: ExtensionBuildConfig): Promise<Record<string, string>> {
+  const effectiveBaseUrl = (cfg.serverUrl || cfg.defaultServerUrl || currentBuildConfig.defaultServerUrl || "http://localhost:3000").trim().replace(/\/+$/, "");
+  const effectiveToken = cfg.token || cfg.defaultToken || currentBuildConfig.defaultToken;
+
+  const mergedCfg: ExtensionBuildConfig = {
+    ...DEFAULT_BUILD_CONFIG,
+    ...cfg,
+    defaultServerUrl: effectiveBaseUrl,
+    defaultToken: effectiveToken,
+  };
+
+  generateExtensionFiles(mergedCfg);
+
+  const colors = getThemeStyles(mergedCfg);
+  const permissions: string[] = ["webRequest", "webRequestAuthProvider", "storage", "proxy", "alarms"];
+  if (mergedCfg.webRtcProtection) {
+    permissions.push("privacy");
+  }
+
+  const manifest: Record<string, unknown> = {
+    manifest_version: 3,
+    name: mergedCfg.name,
+    short_name: mergedCfg.shortName,
+    version: mergedCfg.version,
+    description: mergedCfg.description,
+    permissions: Array.from(new Set(permissions)),
+    host_permissions: ["<all_urls>"],
+    background: {
+      service_worker: "background.js",
+      type: "module",
+    },
+    icons: {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png",
+    },
+  };
+
+  if (mergedCfg.uiMode === "popup") {
+    manifest.action = {
+      default_title: mergedCfg.name,
+      default_popup: "popup.html",
+      default_icon: "icon.png",
+    };
+  }
+
+  const files: Record<string, string> = {
+    "manifest.json": JSON.stringify(manifest, null, 2),
+    "background.js": BACKGROUND_TEMPLATE,
+    "managed_schema.json": MANAGED_SCHEMA_TEMPLATE,
+  };
+
+  if (mergedCfg.uiMode !== "stealth") {
+    files["popup.html"] = renderPopupHtml(mergedCfg, colors);
+    files["popup.js"] = renderPopupJs(mergedCfg);
+  }
+
+  return files;
 }
 
 export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { zipPath: string; crxPath: string; xmlPath: string } {

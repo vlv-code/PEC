@@ -467,7 +467,12 @@
         chipSelfService: 'Self-Service Pro',
         chipKiosk: 'Kiosk / Restricted',
         chipStealth: 'Stealth Agent',
-        lblThemePalettes: '2. Theme & Color Palettes',
+        lblThemePalettes: '2. UI Layout & Color Palette',
+        lblStudioLayout: 'Interface Layout:',
+        lblStudioPalette: 'Color Palette:',
+        lblStudioThemeMode: 'Default Theme Mode:',
+        optModeDark: 'Dark (Night)',
+        optModeLight: 'Light (Day)',
         lblExtName: 'Extension Name',
         phExtName: 'Corp Proxy Auth & Sync',
         lblShortName: 'Short Name',
@@ -776,7 +781,12 @@
         chipSelfService: 'Self-Service Pro',
         chipKiosk: 'Киоск / Ограниченный',
         chipStealth: 'Скрытый агент (Stealth)',
-        lblThemePalettes: '2. Темы и цветовые палитры',
+        lblThemePalettes: '2. Макет и цветовая палитра',
+        lblStudioLayout: 'Макет интерфейса:',
+        lblStudioPalette: 'Цветовая палитра:',
+        lblStudioThemeMode: 'Режим темы по умолчанию:',
+        optModeDark: 'Темная (Ночь)',
+        optModeLight: 'Светлая (День)',
         lblExtName: 'Название расширения',
         phExtName: 'Corp Proxy Auth & Sync',
         lblShortName: 'Короткое имя',
@@ -1360,6 +1370,85 @@
     let codeEditorDebounceTimer = null;
     let activeTemplatePreset = 'self-service-pro';
     let activeStylePreset = 'cyber-blue';
+    let activeStudioLayout = 'console';
+    let activeStudioPalette = 'cyber';
+    let activeStudioThemeMode = 'dark';
+
+    function setStudioLayout(layout, silent = false) {
+      if (layout !== 'terminal' && layout !== 'console') {
+        layout = 'console';
+      }
+      activeStudioLayout = layout;
+
+      const btnConsole = document.getElementById('btnStudioLayoutConsole');
+      const btnTerminal = document.getElementById('btnStudioLayoutTerminal');
+      if (btnConsole) btnConsole.classList.toggle('active', layout === 'console');
+      if (btnTerminal) btnTerminal.classList.toggle('active', layout === 'terminal');
+
+      updateLivePreviewThemeAndLayout();
+      if (!silent) onConfigChangeLive();
+    }
+
+    function setStudioPalette(palette, silent = false) {
+      const validPalettes = ['cyber', 'obsidian', 'nord', 'emerald', 'light'];
+      if (!validPalettes.includes(palette)) {
+        palette = 'cyber';
+      }
+      activeStudioPalette = palette;
+
+      validPalettes.forEach(p => {
+        const el = document.getElementById('chip-palette-' + p);
+        if (el) el.classList.toggle('active', p === palette);
+      });
+
+      const paletteToBrandColor = {
+        cyber: '#38bdf8',
+        obsidian: '#c084fc',
+        nord: '#88c0d0',
+        emerald: '#34d399',
+        light: '#2563eb'
+      };
+      const brandColorInput = document.getElementById('bldThemeColor');
+      if (brandColorInput && paletteToBrandColor[palette]) {
+        brandColorInput.value = paletteToBrandColor[palette];
+      }
+
+      updateLivePreviewThemeAndLayout();
+      if (!silent) onConfigChangeLive();
+    }
+
+    function setStudioThemeMode(mode, silent = false) {
+      if (mode !== 'light' && mode !== 'dark') {
+        mode = 'dark';
+      }
+      activeStudioThemeMode = mode;
+
+      const btnDark = document.getElementById('btnStudioModeDark');
+      const btnLight = document.getElementById('btnStudioModeLight');
+      if (btnDark) btnDark.classList.toggle('active', mode === 'dark');
+      if (btnLight) btnLight.classList.toggle('active', mode === 'light');
+
+      updateLivePreviewThemeAndLayout();
+      if (!silent) onConfigChangeLive();
+    }
+
+    function updateLivePreviewThemeAndLayout() {
+      const iframe = document.getElementById('previewFrame');
+      if (iframe && iframe.contentWindow) {
+        try {
+          iframe.contentWindow.postMessage({
+            type: 'UPDATE_STUDIO_THEME',
+            palette: activeStudioPalette,
+            layout: activeStudioLayout,
+            themeMode: activeStudioThemeMode
+          }, '*');
+        } catch (e) {}
+      }
+    }
+
+    window.setStudioLayout = setStudioLayout;
+    window.setStudioPalette = setStudioPalette;
+    window.setStudioThemeMode = setStudioThemeMode;
 
     async function loadBuilderConfig() {
       try {
@@ -1395,6 +1484,30 @@
         }
         if (cfg.presetStyle) {
           highlightStyleChip(cfg.presetStyle);
+        }
+        if (cfg.uiLayout) {
+          setStudioLayout(cfg.uiLayout, true);
+        } else {
+          setStudioLayout('console', true);
+        }
+        if (cfg.colorPalette) {
+          setStudioPalette(cfg.colorPalette, true);
+        } else if (cfg.presetStyle) {
+          const styleToPalette = {
+            'cyber-blue': 'cyber',
+            'dark-obsidian': 'obsidian',
+            'emerald-sentinel': 'emerald',
+            'sunset-amber': 'cyber',
+            'minimal-light': 'light'
+          };
+          setStudioPalette(styleToPalette[cfg.presetStyle] || 'cyber', true);
+        } else {
+          setStudioPalette('cyber', true);
+        }
+        if (cfg.defaultThemeMode) {
+          setStudioThemeMode(cfg.defaultThemeMode, true);
+        } else {
+          setStudioThemeMode('dark', true);
         }
 
         updateLivePreview();
@@ -1712,6 +1825,12 @@
               'if (bg) bg.className = e.data.state.bypassActive ? "status-badge bypass" : (e.data.state.online ? "status-badge" : "status-badge offline");' +
               'if (btn) btn.textContent = e.data.state.bypassActive ? "Включить прокси" : "Временно отключить";' +
             '}' +
+          '} else if (e.data && e.data.type === "UPDATE_STUDIO_THEME") {' +
+            'if (document.body) {' +
+              'if (e.data.palette) document.body.setAttribute("data-palette", e.data.palette);' +
+              'if (e.data.layout) document.body.setAttribute("data-layout", e.data.layout);' +
+              'if (e.data.themeMode) document.body.setAttribute("data-theme", e.data.themeMode);' +
+            '}' +
           '}' +
         '});' +
         'document.addEventListener("click", function(ev) {' +
@@ -1752,6 +1871,12 @@
         scriptClose;
 
       let doc = htmlContent;
+      doc = doc.replace(/<body([^>]*)>/i, function(match, attrs) {
+        let clean = attrs.replace(/\s*data-palette="[^"]*"/g, '')
+                         .replace(/\s*data-layout="[^"]*"/g, '')
+                         .replace(/\s*data-theme="[^"]*"/g, '');
+        return '<body' + clean + ' data-palette="' + activeStudioPalette + '" data-layout="' + activeStudioLayout + '" data-theme="' + activeStudioThemeMode + '">';
+      });
       // NB: built with RegExp so that \s and \. are real regex escapes - a
       // plain string literal would turn '\s' into 's' and never match.
       const popupScriptRegex = new RegExp('<script[^>]*src="popup\\.js"[^>]*>\\s*</script>', 'i');
@@ -1765,6 +1890,7 @@
       if (iframe) {
         iframe.onload = function() {
           pushSimStateToIframe();
+          updateLivePreviewThemeAndLayout();
         };
         iframe.srcdoc = doc;
       }
@@ -1849,6 +1975,9 @@
         supportUrl: document.getElementById('bldSupportUrl').value.trim(),
         presetTemplate: activeTemplatePreset,
         presetStyle: activeStylePreset,
+        uiLayout: activeStudioLayout,
+        colorPalette: activeStudioPalette,
+        defaultThemeMode: activeStudioThemeMode,
       };
 
       try {
@@ -1870,6 +1999,16 @@
         return false;
       }
     }
+
+    async function buildExtensionPackage() {
+      const savedOk = await saveBuilderConfigOnly(false);
+      if (savedOk === false) {
+        toast('Build aborted: could not save the builder configuration.', 'error');
+        return;
+      }
+      return await buildAndPackExtension();
+    }
+    window.buildExtensionPackage = buildExtensionPackage;
 
     async function buildAndPackExtension() {
       const savedOk = await saveBuilderConfigOnly(false);
