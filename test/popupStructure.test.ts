@@ -19,6 +19,9 @@ test("popup HTML has 380px width, 3 tabs, 3-button controls, user overrides, and
   assert.ok(html.includes('id="tab-btn-conn"'), "Connection tab button must exist");
   assert.ok(html.includes('id="tab-btn-routing"'), "Routing tab button must exist");
   assert.ok(html.includes('id="tab-btn-diag"'), "Diagnostics/Info tab button must exist");
+  assert.ok(html.includes("📊 Инфо"), "Tab 3 must be renamed to 📊 Инфо");
+  assert.ok(html.includes("grid-template-columns: repeat(3, 1fr);"), ".tabs must use repeat(3, 1fr) grid");
+  assert.ok(html.includes("padding: 12px 14px;"), ".card padding must be standardized to 12px 14px");
 
   // 3-button controls on connection tab
   assert.ok(html.includes('id="btnSyncNow"'), "Sync button must exist");
@@ -51,5 +54,8 @@ test("extension/popup.html matches modern structure", () => {
   assert.ok(rawHtml.includes('id="btnPowerToggle"'));
   assert.ok(rawHtml.includes('id="btnPauseToggle"'));
   assert.ok(rawHtml.includes('id="btnAddCurrentSite"'));
+  assert.ok(rawHtml.includes("📊 Инфо"), "extension/popup.html must have tab 3 renamed to 📊 Инфо");
+  assert.ok(rawHtml.includes("grid-template-columns: repeat(3, 1fr);"), "extension/popup.html .tabs must use grid");
+  assert.ok(rawHtml.includes("padding: 12px 14px;"), "extension/popup.html .card padding must be 12px 14px");
   assert.ok(!rawHtml.includes("onclick="));
 });

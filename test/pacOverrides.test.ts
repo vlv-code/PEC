@@ -25,7 +25,7 @@ function FindProxyForURL(url, host) {
 
   assert.ok(modified.includes('shExpMatch(host, "*.custom-direct.com")'));
   assert.ok(modified.includes('return "DIRECT";'));
-  assert.ok(modified.includes('shExpMatch(host, "specific-proxy.org")'));
+  assert.ok(modified.includes('host === "specific-proxy.org" || dnsDomainIs(host, ".specific-proxy.org") || shExpMatch(host, "*.specific-proxy.org")'));
   assert.ok(modified.includes('return "PROXY proxy.corp:3128";'));
   assert.ok(!modified.includes("disabled.com"));
 
@@ -34,6 +34,9 @@ function FindProxyForURL(url, host) {
     shExpMatch: (host: string, pattern: string) => {
       const regex = new RegExp("^" + pattern.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$");
       return regex.test(host);
+    },
+    dnsDomainIs: (host: string, domain: string) => {
+      return host === domain || host.endsWith(domain);
     },
   };
   vm.createContext(sandbox);
@@ -58,14 +61,14 @@ test("injectUserRulesIntoPac handles edge cases safely", () => {
   const dangerousRules = [{ pattern: 'test".corp; return "DIRECT', action: "PROXY", enabled: true }];
   const sanitized = injectUserRulesIntoPac(basePac, dangerousRules, "proxy:8080");
   assert.ok(!sanitized.includes('test".corp'));
-  assert.ok(sanitized.includes('shExpMatch(host, "test.corp; return DIRECT")'));
+  assert.ok(sanitized.includes('test.corp; return DIRECT'));
 
   // Sanitizes dangerous newlines in pattern
   const newlineRules = [{ pattern: 'malicious\r\n.corp', action: "PROXY", enabled: true }];
   const sanitizedNl = injectUserRulesIntoPac(basePac, newlineRules, "proxy:8080");
   assert.ok(!sanitizedNl.includes("\r"));
   assert.ok(!sanitizedNl.includes("\n  if (shExpMatch(host, \"malicious\r\n"));
-  assert.ok(sanitizedNl.includes('shExpMatch(host, "malicious.corp")'));
+  assert.ok(sanitizedNl.includes('malicious.corp'));
 });
 
 test("background.js handles GET_USER_RULES, SAVE_USER_RULES, and SET_ENABLED messages", async () => {
@@ -270,6 +273,6 @@ function FindProxyForURL(url, host) {
   assert.ok(installedPac, "PAC script must be installed inline");
   assert.ok(installedPac.includes('shExpMatch(host, "*.special-domain.com")'));
   assert.ok(installedPac.includes('return "DIRECT";'));
-  assert.ok(installedPac.includes('shExpMatch(host, "proxy-override.com")'));
+  assert.ok(installedPac.includes('host === "proxy-override.com" || dnsDomainIs(host, ".proxy-override.com") || shExpMatch(host, "*.proxy-override.com")'));
   assert.ok(installedPac.includes('return "PROXY proxy.corp:3128";'));
 });

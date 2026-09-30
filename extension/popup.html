@@ -182,7 +182,8 @@
 
     /* Tabs */
     .tabs {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 6px;
       margin-bottom: 12px;
       border-bottom: 1px solid var(--border);
@@ -220,7 +221,7 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 12px;
+      padding: 12px 14px;
       margin-bottom: 10px;
     }
     .card-header {
@@ -583,7 +584,7 @@
   <div class="tabs">
     <button class="tab-btn active" id="tab-btn-conn" data-tab="tab-content-conn">⚡ Подключение</button>
     <button class="tab-btn" id="tab-btn-routing" data-tab="tab-content-routing">🔀 Маршрутизация</button>
-    <button class="tab-btn" id="tab-btn-diag" data-tab="tab-content-diag">📊 Инфо и Диагностика</button>
+    <button class="tab-btn" id="tab-btn-diag" data-tab="tab-content-diag">📊 Инфо</button>
   </div>
 
   <!-- TAB 1: Connection -->

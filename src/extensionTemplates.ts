@@ -282,14 +282,78 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer) {
   for (const r of activeRules) {
     const rawPattern = r.pattern.trim();
     // Sanitize pattern: strip newlines, quotes and backslashes
-    const cleanPattern = rawPattern.replace(/["\\\\\\r\\n]/g, "");
+    let cleanPattern = rawPattern.replace(/["\\\\\\r\\n]/g, "");
     if (!cleanPattern) continue;
+
+    // Support IDN / Punycode conversion if non-ASCII characters are present so Chrome 7-bit ASCII compliance is never violated
+    let hasNonAscii = false;
+    for (let j = 0; j < cleanPattern.length; j++) {
+      if (cleanPattern.charCodeAt(j) > 127) {
+        hasNonAscii = true;
+        break;
+      }
+    }
+    if (hasNonAscii) {
+      try {
+        if (cleanPattern.startsWith("*.")) {
+          const ascii = new URL("http://" + cleanPattern.slice(2)).hostname;
+          cleanPattern = "*." + ascii;
+        } else if (cleanPattern.startsWith(".")) {
+          const ascii = new URL("http://" + cleanPattern.slice(1)).hostname;
+          cleanPattern = "." + ascii;
+        } else if (cleanPattern.indexOf("*") === -1 && cleanPattern.indexOf("/") === -1) {
+          cleanPattern = new URL("http://" + cleanPattern).hostname;
+        } else {
+          cleanPattern = cleanPattern
+            .split(".")
+            .map((part) => {
+              let partNonAscii = false;
+              for (let k = 0; k < part.length; k++) {
+                if (part.charCodeAt(k) > 127) {
+                  partNonAscii = true;
+                  break;
+                }
+              }
+              if (partNonAscii && part.indexOf("*") === -1) {
+                try {
+                  const h = new URL("http://" + part + ".test").hostname;
+                  return h.endsWith(".test") ? h.slice(0, -5) : h;
+                } catch {
+                  return part;
+                }
+              }
+              return part;
+            })
+            .join(".");
+        }
+      } catch (e) {}
+
+      let asciiOnly = "";
+      for (let m = 0; m < cleanPattern.length; m++) {
+        if (cleanPattern.charCodeAt(m) <= 127) {
+          asciiOnly += cleanPattern[m];
+        }
+      }
+      cleanPattern = asciiOnly;
+      if (!cleanPattern) continue;
+    }
 
     const actionStr = r.action === "PROXY"
       ? (proxyServer ? "PROXY " + proxyServer : "DIRECT")
       : "DIRECT";
 
-    ruleLines += '  if (shExpMatch(host, "' + cleanPattern + '")) { return "' + actionStr + '"; }' + nl;
+    let condition = "";
+    if (cleanPattern.startsWith("*.")) {
+      condition = 'shExpMatch(host, "' + cleanPattern + '") || host === "' + cleanPattern.slice(2) + '"';
+    } else if (cleanPattern.startsWith(".")) {
+      condition = 'shExpMatch(host, "*.' + cleanPattern.slice(1) + '") || host === "' + cleanPattern.slice(1) + '"';
+    } else if (cleanPattern.indexOf("*") === -1 && cleanPattern.indexOf("/") === -1) {
+      condition = 'host === "' + cleanPattern + '" || dnsDomainIs(host, ".' + cleanPattern + '") || shExpMatch(host, "*.' + cleanPattern + '")';
+    } else {
+      condition = 'shExpMatch(host, "' + cleanPattern + '")';
+    }
+
+    ruleLines += '  if (' + condition + ') { return "' + actionStr + '"; }' + nl;
   }
   ruleLines += "  // === USER OVERRIDES END ===" + nl;
 
@@ -979,7 +1043,7 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
     offline: isRu ? "Отключен" : "Offline",
     tabConn: isRu ? "Подключение" : "Connection",
     tabRules: isRu ? "Маршрутизация" : "Routing",
-    tabDiag: isRu ? "Инфо и Диагностика" : "Diagnostics & Info",
+    tabDiag: isRu ? "Инфо" : "Info",
     tabHelp: isRu ? "Поддержка" : "Support",
     proxyMode: isRu ? "Режим прокси" : "Proxy Mode",
     activeEndpoint: isRu ? "Прокси-сервер" : "Active Endpoint",
@@ -1240,7 +1304,8 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
 
     /* Tabs */
     .tabs {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 6px;
       margin-bottom: 12px;
       border-bottom: 1px solid var(--border);
@@ -1278,7 +1343,7 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 12px;
+      padding: 12px 14px;
       margin-bottom: 10px;
     }
     .card-header {
