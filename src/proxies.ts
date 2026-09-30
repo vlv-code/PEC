@@ -1,5 +1,6 @@
 import "./loadEnv.js";
 import fs from "node:fs";
+import net from "node:net";
 import crypto from "node:crypto";
 import { writeJsonAtomic, readJsonStore } from "./jsonStore.js";
 import { getProxiesStorePath, getCredsStorePath } from "./storage.js";
@@ -244,3 +245,56 @@ export function initDefaultProxyIfNeeded(): void {
   writeJsonAtomic(storePath, [defaultNode]);
   syncActiveProxyToConfigAndCreds(defaultNode);
 }
+
+let lastProbeResult: { host: string; port: number; reachable: boolean; timestamp: number } | null = null;
+const PROBE_CACHE_TTL_MS = 10000;
+
+export async function probeProxyTcp(host: string, port: number, timeoutMs = 1500): Promise<boolean> {
+  const cleanHost = String(host || "").trim();
+  const cleanPort = Number(port);
+  if (!cleanHost || !cleanPort || isNaN(cleanPort)) {
+    return false;
+  }
+
+  // Fast path for known unreachable placeholders
+  if (cleanHost === "10.0.0.1" || cleanHost === "0.0.0.0") {
+    return false;
+  }
+
+  const now = Date.now();
+  if (
+    lastProbeResult &&
+    lastProbeResult.host === cleanHost &&
+    lastProbeResult.port === cleanPort &&
+    now - lastProbeResult.timestamp < PROBE_CACHE_TTL_MS
+  ) {
+    return lastProbeResult.reachable;
+  }
+
+  const reachable = await new Promise<boolean>((resolve) => {
+    let settled = false;
+    const socket = new net.Socket();
+
+    const finish = (result: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(result);
+    };
+
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+
+    try {
+      socket.connect(cleanPort, cleanHost);
+    } catch {
+      finish(false);
+    }
+  });
+
+  lastProbeResult = { host: cleanHost, port: cleanPort, reachable, timestamp: now };
+  return reachable;
+}
+

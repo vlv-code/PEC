@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { getProxyConfig, registerHeartbeat } from "../instances.js";
+import { probeProxyTcp } from "../proxies.js";
 import { resolveProfileForInstance, getProfileById, generatePacScript } from "../routing.js";
 import { readCurrentCredsAsync } from "../rotate.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
@@ -121,6 +122,9 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       details: `Instance: ${instanceId || "anon"}, Profile: ${assignedProfile.name}`,
     });
 
+    const probeTimeout = process.env.NODE_ENV === "test" ? 300 : 1500;
+    const proxyReachable = await probeProxyTcp(proxyConfig.host, proxyConfig.port, probeTimeout);
+
     return res.json({
       ok: true,
       serverTime: new Date().toISOString(),
@@ -128,6 +132,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       profileId: assignedProfile.id,
       profileName: assignedProfile.name,
       profileDefaultPolicy: assignedProfile.defaultPolicy || "direct",
+      proxyReachable,
       config: {
         ...proxyConfig,
         pacUrl,

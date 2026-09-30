@@ -11,6 +11,7 @@ import {
   deleteProxy,
   setActiveProxy,
   initDefaultProxyIfNeeded,
+  probeProxyTcp,
 } from "../src/proxies.js";
 import { getProxyConfig } from "../src/instances.js";
 import { getProxiesStorePath, getCredsStorePath, getProxyConfigPath } from "../src/storage.js";
@@ -295,3 +296,26 @@ test("Proxy Repository: edge cases and error handling", () => {
   assert.strictEqual(credsAfter.user, "");
   assert.strictEqual(credsAfter.pass, "");
 });
+
+test("probeProxyTcp: verifies TCP connectivity with listening and non-listening sockets", async () => {
+  const net = await import("node:net");
+  // 1. Non-listening port returns false
+  const unreachable = await probeProxyTcp("127.0.0.1", 64999, 300);
+  assert.strictEqual(unreachable, false, "unreachable port must return false");
+
+  // 2. Placeholder 10.0.0.1 returns false immediately
+  const placeholder = await probeProxyTcp("10.0.0.1", 10809, 300);
+  assert.strictEqual(placeholder, false, "placeholder IP 10.0.0.1 must return false");
+
+  // 3. Listening server returns true
+  const server = net.createServer((sock) => sock.end());
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const port = (server.address() as net.AddressInfo).port;
+  try {
+    const reachable = await probeProxyTcp("127.0.0.1", port, 1000);
+    assert.strictEqual(reachable, true, "listening port must return true");
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+

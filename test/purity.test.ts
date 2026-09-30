@@ -777,6 +777,98 @@ test("purity: popup.js and renderPopupJs render descriptive routing mode indicat
   assert.ok(el3.modeVal.title.length > 0, "rendered template must set tooltip title");
 });
 
+test("purity: background.js sets ERR badge and logs warning when proxyReachable is false", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  const loggedEvents: Array<{ level: string; message: string }> = [];
+
+  const vmScript = `
+    const chrome = {
+      storage: {
+        local: {
+          get: () => Promise.resolve({ pecLogs: [] }),
+          set: (obj) => {
+            if (obj.pecLogs) {
+              loggedEvents.length = 0;
+              loggedEvents.push(...obj.pecLogs);
+            }
+            return Promise.resolve();
+          }
+        },
+        managed: { get: () => Promise.resolve({}) }
+      },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: {
+        setBadgeText: (opt) => { globalThis.badgeText = opt.text; },
+        setBadgeBackgroundColor: (opt) => { globalThis.badgeColor = opt.color; }
+      },
+      proxy: {
+        settings: {
+          set: () => Promise.resolve(),
+          get: () => Promise.resolve({ value: { mode: "pac_script" }, levelOfControl: "controlled_by_this_extension" })
+        },
+        onProxyError: { addListener: () => {} }
+      },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: {
+        getManifest: () => ({ version: "1.0.0" }),
+        id: "test-id",
+        onMessage: { addListener: () => {} }
+      }
+    };
+    ${src}
+    globalThis.testSyncWithServer = syncWithServer;
+  `;
+
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: (url: string) => {
+      if (url.includes("/api/sync")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            profileName: "Dead Proxy Profile",
+            profileDefaultPolicy: "direct",
+            proxyReachable: false,
+            config: {
+              protocol: "pac",
+              pacUrl: "https://pac.example.corp/proxy.pac",
+              host: "192.0.2.1",
+              port: 10809,
+            },
+            creds: { user: "u", pass: "p" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, text: () => Promise.resolve("function FindProxyForURL() { return 'DIRECT'; }") });
+    },
+    AbortSignal,
+    Map,
+    parseInt,
+    loggedEvents,
+  });
+
+  vm.runInContext(vmScript, ctx);
+
+  await (ctx as any).testSyncWithServer(true);
+
+  assert.strictEqual((ctx as any).badgeText, "ERR", "badge must show ERR when proxy is unreachable");
+  assert.strictEqual((ctx as any).badgeColor, "#ef4444", "badge color must be red");
+  const warnLog = loggedEvents.find(
+    (e) => e.level === "warn" && e.message.toLowerCase().includes("unreachable")
+  );
+  assert.ok(warnLog, "must record warning log about unreachable proxy");
+});
+
+
 
 
 

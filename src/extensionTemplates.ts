@@ -67,6 +67,7 @@ let currentProxyState = {
   port: 10809,
   profileName: "Default Split",
   profileDefaultPolicy: "direct",
+  proxyReachable: true,
   bypassActive: false,
   bypassExpiresAt: null,
   serverBase: DEFAULT_SERVER_BASE,
@@ -386,7 +387,11 @@ async function applyPacScript(pacUrl) {
       throw setErr;
     }
   }
-  updateBadge("PAC", "#0284c7");
+  if (currentProxyState.proxyReachable === false) {
+    updateBadge("ERR", "#ef4444");
+  } else {
+    updateBadge("PAC", "#0284c7");
+  }
   await verifyAppliedProxySettings("pac_script");
 }
 
@@ -438,7 +443,11 @@ async function applyProxyConfig(config) {
       },
       scope: "regular",
     });
-    updateBadge(scheme === "socks5" ? "S5" : "PRX", "#10b981");
+    if (currentProxyState.proxyReachable === false) {
+      updateBadge("ERR", "#ef4444");
+    } else {
+      updateBadge(scheme === "socks5" ? "S5" : "PRX", "#10b981");
+    }
     await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
     console.error("[corp-proxy] Error applying proxy settings:", err);
@@ -538,6 +547,7 @@ async function syncWithServer(forceRefresh = false) {
 
           if (payload.config) {
             const isPac = Boolean(payload.config.pacUrl && payload.config.routingMode !== "fixed") || payload.config.protocol === "pac";
+            const proxyReachable = payload.proxyReachable !== false;
             currentProxyState = {
               ...currentProxyState,
               online: true,
@@ -546,11 +556,16 @@ async function syncWithServer(forceRefresh = false) {
               port: payload.config.port || 10809,
               profileName: payload.profileName || "Default Profile",
               profileDefaultPolicy: payload.profileDefaultPolicy || "direct",
+              proxyReachable: proxyReachable,
               pacUrl: payload.config.pacUrl || "",
               lastSync: Date.now(),
             };
 
             logEvent("info", "Sync successful: profile=" + currentProxyState.profileName + ", mode=" + currentProxyState.protocol + ", host=" + (currentProxyState.host || "pac"));
+
+            if (!proxyReachable) {
+              logEvent("warn", "Configured proxy " + (currentProxyState.host || "") + ":" + currentProxyState.port + " is unreachable from server");
+            }
 
             if (autoConfigureProxy) {
               await applyProxyConfig(payload.config);
