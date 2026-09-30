@@ -13,6 +13,7 @@ import {
   isPackageStale,
 } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
+import { createRateLimiter } from "../middleware/security.js";
 
 export function createBuilderRouter(getFleetToken: () => string, getAdminToken?: () => string): Router {
   const router = Router();
@@ -91,7 +92,13 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
     res.json({ ...info, baseUrl, gpo });
   });
 
-  router.get("/api/extension/download-zip", (req: Request, res: Response) => {
+  const downloadLimiter = createRateLimiter({
+    windowMs: 60_000,
+    maxRequests: 10,
+    message: "Rate limit exceeded for extension download.",
+  });
+
+  router.get("/api/extension/download-zip", downloadLimiter, (req: Request, res: Response) => {
     const updatesDir = path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
     const zipPath = path.join(updatesDir, "extension.zip");
     if (!fs.existsSync(zipPath) || isPackageStale()) {

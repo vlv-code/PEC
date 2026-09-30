@@ -123,7 +123,7 @@ test("HTTP: two-token access matrix - fleet token on admin routes, admin token o
   const app = express();
   app.use(express.json());
   const adminAuth = createTokenAuthMiddleware(() => TEST_ADMIN_TOKEN, "x-admin-token");
-  const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync", "/extension/download-zip"]);
+  const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync"]);
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     return adminAuth(req, res, next);
@@ -182,9 +182,13 @@ test("HTTP: two-token access matrix - fleet token on admin routes, admin token o
     const echo = await fetch(`${base}/api/ip-echo`);
     assert.strictEqual(echo.status, 200);
 
-    // /api/extension/download-zip stays public (downloadable without token in browser)
-    const zipRes = await fetch(`${base}/api/extension/download-zip`);
-    assert.strictEqual(zipRes.status, 200);
+    // /api/extension/download-zip is admin-gated (401 without auth, 200 with admin token)
+    const zipNoAuth = await fetch(`${base}/api/extension/download-zip`);
+    assert.strictEqual(zipNoAuth.status, 401, "/api/extension/download-zip must require admin auth");
+    const zipAuth = await fetch(`${base}/api/extension/download-zip`, {
+      headers: { "X-Admin-Token": TEST_ADMIN_TOKEN },
+    });
+    assert.strictEqual(zipAuth.status, 200, "/api/extension/download-zip must succeed with admin token");
   } finally {
     server.close();
   }

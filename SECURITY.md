@@ -20,7 +20,7 @@
    - Fleet-токен `EXT_SHARED_TOKEN` (заголовок `X-Ext-Token`) — низкопривилегированный: аутентифицирует расширения на `/creds` и `/api/sync` и намеренно зашивается в публичные артефакты (CRX, GPO `.reg`). Компрометация fleet-токена НЕ даёт доступа к админке.
    - Админ-токен `ADMIN_TOKEN` (заголовок `X-Admin-Token`) открывает все management-API (`/api/builder/*`, `/api/routing/*`, `/api/rotation/*`, `/api/instances/*`, `/api/config`, `/api/status`), не покидает сервер и никогда не попадает в артефакты. Обязателен при `NODE_ENV=production`; должен отличаться от fleet-токена.
    - Строгая изоляция: fleet-токен на админ-роутах → 401; admin-токен на fleet-роутах → 403.
-   - Публичными остаются только `/healthz`, `/proxy.pac`, `/updates/*`, `/api/ip-echo` и `/api/sync` (последний проверяет fleet-токен внутри роутера со своим rate limiter'ом).
+   - Публичными остаются только `/healthz`, `/proxy.pac`, `/updates/*` (для автообновлений Chrome через GPO), `/api/ip-echo` и `/api/sync` (последний проверяет fleet-токен внутри роутера со своим rate limiter'ом). Скачивание ZIP-архива расширения (`/api/extension/download-zip`) требует аутентификации администратора (сессионная кука + CSRF или `X-Admin-Token`) и ограничено rate limiter'ом (10 запросов в минуту).
    - Веб-панель не содержит токен в HTML: вход по админ-токену, хранение в `sessionStorage`.
 3. **Защита от Timing Attacks:**
    - Токен сравнивается по SHA-256-дайджестам через `crypto.timingSafeEqual` (без утечки длины).

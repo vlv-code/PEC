@@ -179,5 +179,18 @@ test("builder: packageExtension forces EXT_SHARED_TOKEN environment variable ove
   }
 });
 
+test("builder: GET /api/extension/download-zip is rate limited to 10 requests per minute", async () => {
+  await withServer(async (base) => {
+    // 10 downloads should succeed
+    for (let i = 0; i < 10; i++) {
+      const res = await fetch(`${base}/api/extension/download-zip`);
+      assert.strictEqual(res.status, 200, `request ${i + 1} must succeed`);
+    }
+    // 11th request must be rate limited (429)
+    const blockedRes = await fetch(`${base}/api/extension/download-zip`);
+    assert.strictEqual(blockedRes.status, 429, "11th download request must be rejected with HTTP 429");
+  });
+});
+
 
 

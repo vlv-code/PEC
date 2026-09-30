@@ -1895,14 +1895,34 @@
     async function downloadExtensionPackage(type) {
       toast(currentLang === 'ru' ? 'Сборка пакета перед скачиванием...' : 'Building package before download...', 'info');
       await buildAndPackExtension();
-      const url = type === 'crx' ? '/updates/extension.crx' : '/api/extension/download-zip';
-      const a = document.createElement('a');
-      a.href = url;
-      if (type === 'zip') a.download = 'corp-proxy-extension.zip';
-      else a.download = 'extension.crx';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      if (type === 'zip') {
+        try {
+          const res = await adminFetch('/api/extension/download-zip');
+          if (!res.ok) {
+            toast('Failed to download zip: HTTP ' + res.status, 'error');
+            return;
+          }
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = 'corp-proxy-extension.zip';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch (e) {
+          toast('Error downloading package: ' + e, 'error');
+        }
+      } else {
+        const url = '/updates/extension.crx';
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'extension.crx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
     }
 
     // ----------------- Fleet & Instances -----------------

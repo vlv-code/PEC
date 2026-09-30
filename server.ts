@@ -135,7 +135,7 @@ app.use(express.urlencoded({ extended: true }));
 // authenticates there); /api/ip-echo is a diagnostic echo endpoint used by
 // extension popups; /api/auth/login|session power the dashboard login.
 const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token", createCookieAuthenticator());
-const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync", "/auth/login", "/auth/session", "/extension/download-zip"]);
+const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync", "/auth/login", "/auth/session"]);
 app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   if (PUBLIC_API_PATHS.has(req.path)) {
     return next();
