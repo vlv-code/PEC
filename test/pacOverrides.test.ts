@@ -4,43 +4,9 @@ import vm from "node:vm";
 import fs from "node:fs";
 import path from "node:path";
 import { BACKGROUND_TEMPLATE } from "../src/extensionTemplates.js";
+import { injectUserRulesIntoPac } from "../src/extensionPureLogic.js";
 
 const REPO_ROOT = path.resolve(".");
-
-// Function under test exported or evaluated from template
-function injectUserRulesIntoPac(
-  pacText: string,
-  userRules: Array<{ pattern: string; action: string; enabled: boolean }>,
-  proxyServer: string
-): string {
-  if (!pacText || typeof pacText !== "string") return pacText;
-  if (!Array.isArray(userRules) || userRules.length === 0) return pacText;
-
-  const activeRules = userRules.filter((r) => r.enabled && r.pattern && r.pattern.trim());
-  if (activeRules.length === 0) return pacText;
-
-  let ruleLines = "  // === USER OVERRIDES BEGIN ===\n";
-  for (const r of activeRules) {
-    const rawPattern = r.pattern.trim();
-    // Sanitize pattern: strip non-ascii or punycode, avoid quote breaks
-    const cleanPattern = rawPattern.replace(/["\\]/g, "");
-    if (!cleanPattern) continue;
-
-    const actionStr = r.action === "PROXY"
-      ? (proxyServer ? `PROXY ${proxyServer}` : "DIRECT")
-      : "DIRECT";
-
-    ruleLines += `  if (shExpMatch(host, "${cleanPattern}")) { return "${actionStr}"; }\n`;
-  }
-  ruleLines += "  // === USER OVERRIDES END ===\n";
-
-  const targetIdx = pacText.indexOf("function FindProxyForURL(url, host) {");
-  if (targetIdx !== -1) {
-    const insertPos = targetIdx + "function FindProxyForURL(url, host) {".length;
-    return pacText.slice(0, insertPos) + "\n" + ruleLines + pacText.slice(insertPos);
-  }
-  return pacText;
-}
 
 test("injectUserRulesIntoPac inserts active user rules into FindProxyForURL", () => {
   const basePac = `
@@ -93,6 +59,13 @@ test("injectUserRulesIntoPac handles edge cases safely", () => {
   const sanitized = injectUserRulesIntoPac(basePac, dangerousRules, "proxy:8080");
   assert.ok(!sanitized.includes('test".corp'));
   assert.ok(sanitized.includes('shExpMatch(host, "test.corp; return DIRECT")'));
+
+  // Sanitizes dangerous newlines in pattern
+  const newlineRules = [{ pattern: 'malicious\r\n.corp', action: "PROXY", enabled: true }];
+  const sanitizedNl = injectUserRulesIntoPac(basePac, newlineRules, "proxy:8080");
+  assert.ok(!sanitizedNl.includes("\r"));
+  assert.ok(!sanitizedNl.includes("\n  if (shExpMatch(host, \"malicious\r\n"));
+  assert.ok(sanitizedNl.includes('shExpMatch(host, "malicious.corp")'));
 });
 
 test("background.js handles GET_USER_RULES, SAVE_USER_RULES, and SET_ENABLED messages", async () => {

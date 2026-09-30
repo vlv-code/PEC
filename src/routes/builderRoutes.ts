@@ -18,7 +18,7 @@ import { createRateLimiter } from "../middleware/security.js";
 export function createBuilderRouter(getFleetToken: () => string, getAdminToken?: () => string): Router {
   const router = Router();
 
-  const warnIfAdminTokenInArtifact = (token: string): void => {
+  const warnIfAdminTokenInArtifact = (token?: string): void => {
     const adminToken = getAdminToken?.();
     if (adminToken && token && token === adminToken) {
       console.error("[SECURITY WARNING] defaultToken must never equal ADMIN_TOKEN - artifacts (CRX/GPO) ship the fleet token publicly.");

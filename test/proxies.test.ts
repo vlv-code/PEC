@@ -310,7 +310,7 @@ test("probeProxyTcp: verifies TCP connectivity with listening and non-listening 
   // 3. Listening server returns true
   const server = net.createServer((sock) => sock.end());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
-  const port = (server.address() as net.AddressInfo).port;
+  const port = (server.address() as any).port;
   try {
     const reachable = await probeProxyTcp("127.0.0.1", port, 1000);
     assert.strictEqual(reachable, true, "listening port must return true");

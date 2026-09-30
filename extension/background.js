@@ -265,12 +265,8 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer) {
   let ruleLines = "  // === USER OVERRIDES BEGIN ===" + nl;
   for (const r of activeRules) {
     const rawPattern = r.pattern.trim();
-    // Sanitize pattern: strip non-ascii or punycode, avoid quote breaks
-    let cleanPattern = "";
-    for (let c = 0; c < rawPattern.length; c++) {
-      const ch = rawPattern[c];
-      if (ch !== '"' && ch !== "\\") cleanPattern += ch;
-    }
+    // Sanitize pattern: strip newlines, quotes and backslashes
+    const cleanPattern = rawPattern.replace(/["\\\r\n]/g, "");
     if (!cleanPattern) continue;
 
     const actionStr = r.action === "PROXY"

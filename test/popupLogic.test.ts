@@ -172,3 +172,11 @@ test("applyPopupState correctly handles bypass, disabled power, and tunnel polic
   // 4. Reset bypass so timer stops
   ctx.window.applyPopupState({ bypassActive: false });
 });
+
+test("popup.js and renderPopupJs defensively filter user rules", () => {
+  const rawJs = fs.readFileSync("extension/popup.js", "utf8");
+  assert.ok(rawJs.includes('rules || []).filter(r => r && typeof r.pattern === "string")'), "popup.js must filter invalid rules defensively");
+
+  const generatedJs = renderPopupJs({ name: "PEC", serverUrl: "https://proxyex.ic-iskra.ru" } as any);
+  assert.ok(generatedJs.includes('rules || []).filter(r => r && typeof r.pattern === "string")'), "renderPopupJs must filter invalid rules defensively");
+});

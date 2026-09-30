@@ -13,6 +13,7 @@ import {
 } from "./extensionTemplates.js";
 import { writeJsonAtomic } from "./jsonStore.js";
 import { getBuilderConfigPath } from "./storage.js";
+import type { ExtensionBuildConfig, ExtensionBuildInfo } from "./types.js";
 
 const EXTENSION_DIR = path.resolve(process.env.PEC_EXTENSION_DIR || "./extension");
 const KEY_PATH = path.join(EXTENSION_DIR, "key.pem");

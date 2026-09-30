@@ -355,12 +355,13 @@ function initPopup() {
   function renderUserRules(rules) {
     const listEl = document.getElementById("userRulesList");
     if (!listEl) return;
-    if (!rules || !rules.length) {
+    const validRules = (rules || []).filter(r => r && typeof r.pattern === "string");
+    if (!validRules.length) {
       listEl.innerHTML = '<div class="empty-rules">Нет пользовательских правил</div>';
       return;
     }
     listEl.innerHTML = "";
-    rules.forEach((rule, idx) => {
+    validRules.forEach((rule, idx) => {
       const item = document.createElement("div");
       item.className = "user-rule-item";
 
@@ -376,7 +377,7 @@ function initPopup() {
       chk.checked = Boolean(rule.enabled);
       chk.title = rule.enabled ? "Отключить правило" : "Включить правило";
       chk.addEventListener("change", () => {
-        userRules[idx].enabled = chk.checked;
+        rule.enabled = chk.checked;
         saveUserRules(userRules);
       });
 
@@ -405,7 +406,12 @@ function initPopup() {
       delBtn.textContent = "✕";
       delBtn.title = "Удалить правило";
       delBtn.addEventListener("click", () => {
-        userRules.splice(idx, 1);
+        const removeIdx = userRules.indexOf(rule);
+        if (removeIdx !== -1) {
+          userRules.splice(removeIdx, 1);
+        } else {
+          userRules.splice(idx, 1);
+        }
         saveUserRules(userRules);
       });
 

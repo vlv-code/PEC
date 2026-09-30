@@ -281,12 +281,8 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer) {
   let ruleLines = "  // === USER OVERRIDES BEGIN ===" + nl;
   for (const r of activeRules) {
     const rawPattern = r.pattern.trim();
-    // Sanitize pattern: strip non-ascii or punycode, avoid quote breaks
-    let cleanPattern = "";
-    for (let c = 0; c < rawPattern.length; c++) {
-      const ch = rawPattern[c];
-      if (ch !== '"' && ch !== "\\\\") cleanPattern += ch;
-    }
+    // Sanitize pattern: strip newlines, quotes and backslashes
+    const cleanPattern = rawPattern.replace(/["\\\\\\r\\n]/g, "");
     if (!cleanPattern) continue;
 
     const actionStr = r.action === "PROXY"
@@ -2137,12 +2133,13 @@ function initPopup() {
   function renderUserRules(rules) {
     const listEl = document.getElementById("userRulesList");
     if (!listEl) return;
-    if (!rules || !rules.length) {
+    const validRules = (rules || []).filter(r => r && typeof r.pattern === "string");
+    if (!validRules.length) {
       listEl.innerHTML = '<div class="empty-rules">${t.emptyUserRules}</div>';
       return;
     }
     listEl.innerHTML = "";
-    rules.forEach((rule, idx) => {
+    validRules.forEach((rule, idx) => {
       const item = document.createElement("div");
       item.className = "user-rule-item";
 
@@ -2158,7 +2155,7 @@ function initPopup() {
       chk.checked = Boolean(rule.enabled);
       chk.title = rule.enabled ? "${t.isRu ? "Отключить правило" : "Disable rule"}" : "${t.isRu ? "Включить правило" : "Enable rule"}";
       chk.addEventListener("change", () => {
-        userRules[idx].enabled = chk.checked;
+        rule.enabled = chk.checked;
         saveUserRules(userRules);
       });
 
@@ -2187,7 +2184,12 @@ function initPopup() {
       delBtn.textContent = "✕";
       delBtn.title = "${t.isRu ? "Удалить правило" : "Delete rule"}";
       delBtn.addEventListener("click", () => {
-        userRules.splice(idx, 1);
+        const removeIdx = userRules.indexOf(rule);
+        if (removeIdx !== -1) {
+          userRules.splice(removeIdx, 1);
+        } else {
+          userRules.splice(idx, 1);
+        }
         saveUserRules(userRules);
       });
 

@@ -52,8 +52,8 @@ export function injectUserRulesIntoPac(
   let ruleLines = "  // === USER OVERRIDES BEGIN ===\n";
   for (const r of activeRules) {
     const rawPattern = r.pattern.trim();
-    // Sanitize pattern: strip non-ascii or punycode, avoid quote breaks
-    const cleanPattern = rawPattern.replace(/["\\]/g, "");
+    // Sanitize pattern: strip newlines, quotes and backslashes
+    const cleanPattern = rawPattern.replace(/["\\\r\n]/g, "");
     if (!cleanPattern) continue;
 
     const actionStr = r.action === "PROXY"
