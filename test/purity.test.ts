@@ -987,12 +987,16 @@ test("purity: background.js responds to both msg.action and msg.type with full p
   assert.ok(clearResp && clearResp.ok === true, "CLEAR_LOGS via { type } must return ok: true");
 });
 
+test("purity: 1:1 parity between extension/ static files and src/extensionTemplates.ts", async () => {
+  const { BACKGROUND_TEMPLATE, MANAGED_SCHEMA_TEMPLATE } = await import("../src/extensionTemplates.js");
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const schemaPath = path.join(REPO_ROOT, "extension", "managed_schema.json");
 
+  const bgDisk = fs.readFileSync(bgPath, "utf-8").replace(/\r\n/g, "\n").trim();
+  const bgTmpl = BACKGROUND_TEMPLATE.replace(/\r\n/g, "\n").trim();
+  assert.strictEqual(bgDisk, bgTmpl, "extension/background.js must match BACKGROUND_TEMPLATE exactly");
 
-
-
-
-
-
-
-
+  const schemaDisk = fs.readFileSync(schemaPath, "utf-8").replace(/\r\n/g, "\n").trim();
+  const schemaTmpl = MANAGED_SCHEMA_TEMPLATE.replace(/\r\n/g, "\n").trim();
+  assert.strictEqual(schemaDisk, schemaTmpl, "extension/managed_schema.json must match MANAGED_SCHEMA_TEMPLATE exactly");
+});
