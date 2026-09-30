@@ -1783,6 +1783,31 @@
 
       const mockScript = scriptOpen +
         'window.__simState = ' + JSON.stringify(liveSimState) + ';' +
+        'var __simStorage = {' +
+          'pecThemeMode: ' + JSON.stringify(activeStudioThemeMode || 'dark') + ',' +
+          'pecUserRules: []' +
+        '};' +
+        'var _simStorageGet = function(keys, cb) {' +
+          'var res = {};' +
+          'if (keys === null || keys === undefined) {' +
+            'for (var k in __simStorage) { if (Object.prototype.hasOwnProperty.call(__simStorage, k)) res[k] = __simStorage[k]; }' +
+          '} else if (typeof keys === "string") {' +
+            'res[keys] = __simStorage[keys];' +
+          '} else if (Array.isArray(keys)) {' +
+            'for (var i = 0; i < keys.length; i++) { var k = keys[i]; res[k] = __simStorage[k]; }' +
+          '} else if (typeof keys === "object") {' +
+            'for (var k in keys) { if (Object.prototype.hasOwnProperty.call(keys, k)) res[k] = (__simStorage[k] !== undefined) ? __simStorage[k] : keys[k]; }' +
+          '}' +
+          'if (typeof cb === "function") cb(res);' +
+          'return Promise.resolve(res);' +
+        '};' +
+        'var _simStorageSet = function(items, cb) {' +
+          'if (items && typeof items === "object") {' +
+            'for (var k in items) { if (Object.prototype.hasOwnProperty.call(items, k)) __simStorage[k] = items[k]; }' +
+          '}' +
+          'if (typeof cb === "function") cb();' +
+          'return Promise.resolve();' +
+        '};' +
         'window.switchPopupTab = function(tabId) {' +
           'if (!tabId) return;' +
           'var tabs = document.querySelectorAll(".tab-btn");' +
@@ -1798,17 +1823,47 @@
           'runtime: {' +
             'lastError: null,' +
             'sendMessage: function(msg, cb) {' +
-              'if (!msg) return;' +
-              'if (msg.action === "GET_STATUS") {' +
-                'if (cb) cb(window.__simState || ' + JSON.stringify(liveSimState) + ');' +
-              '} else if (msg.action === "FORCE_SYNC") {' +
-                'setTimeout(function() {' +
-                  'if (cb) cb({ ok: true, syncedAt: new Date().toLocaleTimeString() });' +
-                '}, 400);' +
-              '} else if (msg.action === "TOGGLE_BYPASS") {' +
+              'if (!msg) return Promise.resolve();' +
+              'var action = msg.action || msg.type || "";' +
+              'var res = { ok: true };' +
+              'if (action === "GET_STATUS") {' +
+                'res = window.__simState || ' + JSON.stringify(liveSimState) + ';' +
+              '} else if (action === "SET_ENABLED") {' +
+                'if (!window.__simState) window.__simState = ' + JSON.stringify(liveSimState) + ';' +
+                'window.__simState.online = (msg.enabled !== undefined) ? Boolean(msg.enabled) : !window.__simState.online;' +
+                'res = window.__simState;' +
+              '} else if (action === "BYPASS_TOGGLE" || action === "TOGGLE_BYPASS") {' +
+                'if (!window.__simState) window.__simState = ' + JSON.stringify(liveSimState) + ';' +
+                'window.__simState.bypassActive = !window.__simState.bypassActive;' +
                 'window.parent.postMessage({ type: "SIM_TOGGLE_BYPASS" }, "*");' +
-                'if (cb) cb({ ok: true });' +
+                'res = window.__simState;' +
+              '} else if (action === "SYNC_NOW" || action === "FORCE_SYNC") {' +
+                'res = { ok: true, profile: "Direct by Default", syncedAt: new Date().toLocaleTimeString() };' +
+              '} else if (action === "GET_USER_RULES") {' +
+                'var rules = Array.isArray(__simStorage.pecUserRules) ? __simStorage.pecUserRules : [];' +
+                'res = { ok: true, rules: rules, userRules: rules };' +
+              '} else if (action === "SAVE_USER_RULES") {' +
+                '__simStorage.pecUserRules = Array.isArray(msg.rules) ? msg.rules : [];' +
+                'res = { ok: true, count: __simStorage.pecUserRules.length };' +
+              '} else if (action === "GET_LOGS") {' +
+                'res = { ok: true, logs: [' +
+                  '{ time: new Date().toLocaleTimeString(), level: "info", message: "Live simulator initialized" },' +
+                  '{ time: new Date().toLocaleTimeString(), level: "info", message: "Proxy node connected: direct egress" }' +
+                '] };' +
               '}' +
+              'if (typeof cb === "function") cb(res);' +
+              'return Promise.resolve(res);' +
+            '}' +
+          '},' +
+          'storage: {' +
+            'local: { get: _simStorageGet, set: _simStorageSet },' +
+            'sync: { get: _simStorageGet, set: _simStorageSet }' +
+          '},' +
+          'tabs: {' +
+            'query: function(queryInfo, cb) {' +
+              'var tabs = [{ id: 1, url: "https://yandex.ru/search", title: "Yandex", active: true }];' +
+              'if (typeof cb === "function") cb(tabs);' +
+              'return Promise.resolve(tabs);' +
             '}' +
           '}' +
         '};' +
@@ -1841,21 +1896,23 @@
           '}' +
         '});' +
         'window.addEventListener("unhandledrejection", function(e) { e.preventDefault(); });' +
-        // Report the document height to the parent so the sandboxed preview
+        // Report the document dimensions to the parent so the sandboxed preview
         // iframe can size itself to the popup content (a real Chrome popup
         // sizes to content; the sandbox blocks the parent from measuring).
-        'function __postPreviewHeight() {' +
+        'function __postPreviewSize() {' +
           'try {' +
+            'var w = Math.max(380, document.body ? document.body.scrollWidth : 380);' +
             'var h = Math.max(' +
               'document.documentElement ? document.documentElement.scrollHeight : 0,' +
               'document.body ? document.body.scrollHeight : 0);' +
-            'window.parent.postMessage({ type: "PREVIEW_RESIZE", height: h }, "*");' +
+            'window.parent.postMessage({ type: "PREVIEW_RESIZE", width: w, height: h }, "*");' +
           '} catch (e) {}' +
         '}' +
-        'window.addEventListener("load", __postPreviewHeight);' +
-        'setTimeout(__postPreviewHeight, 60);' +
-        'setTimeout(__postPreviewHeight, 400);' +
-        'if (window.ResizeObserver) { new ResizeObserver(__postPreviewHeight).observe(document.documentElement); }' +
+        'var __postPreviewHeight = __postPreviewSize;' +
+        'window.addEventListener("load", __postPreviewSize);' +
+        'setTimeout(__postPreviewSize, 60);' +
+        'setTimeout(__postPreviewSize, 400);' +
+        'if (window.ResizeObserver) { new ResizeObserver(__postPreviewSize).observe(document.documentElement); }' +
         'var _origFetch = window.fetch;' +
         'window.fetch = function(url, opts) {' +
           'if (typeof url === "string" && url.includes("/api/ip-echo")) {' +
@@ -1905,8 +1962,10 @@
       } else if (e.data && e.data.type === 'PREVIEW_RESIZE' && typeof e.data.height === 'number') {
         // Size the preview to the popup content like a real Chrome popup,
         // clamped to a sane band so a broken template cannot blow up the UI.
-        const h = Math.max(180, Math.min(700, Math.round(e.data.height)));
-        pf.style.height = h + 'px';
+        pf.style.height = Math.max(180, Math.min(850, Math.round(e.data.height))) + 'px';
+        if (typeof e.data.width === 'number') {
+          pf.style.width = Math.max(380, Math.min(600, Math.round(e.data.width))) + 'px';
+        }
       }
     });
 

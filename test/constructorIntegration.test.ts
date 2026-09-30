@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { buildExtensionFiles, saveBuildConfig, getBuildConfig } from "../src/packager.js";
 import { ExtensionBuildConfig } from "../src/types.js";
 
@@ -71,3 +73,43 @@ test("saveBuildConfig round-trips uiLayout, colorPalette, and defaultThemeMode",
   assert.equal(updated.colorPalette, "nord");
   assert.equal(updated.defaultThemeMode, "light");
 });
+
+test("dashboard.css configures .popup-frame-box with flexible fit-content width and smooth transitions", () => {
+  const css = fs.readFileSync(path.resolve(process.cwd(), "public/dashboard.css"), "utf-8");
+  assert.match(css, /\.popup-frame-box\s*\{[^}]*width:\s*fit-content/);
+  assert.match(css, /\.popup-frame-box\s*\{[^}]*max-width:\s*100%/);
+  assert.match(css, /\.popup-frame-box\s*\{[^}]*transition:\s*width\s+0\.2s\s+ease,\s*height\s+0\.2s\s+ease/);
+  assert.match(css, /\.popup-frame-box\s+iframe\s*\{[^}]*width:\s*380px/);
+  assert.match(css, /\.popup-frame-box\s+iframe\s*\{[^}]*height:\s*580px/);
+});
+
+test("dashboard.js mockScript includes full chrome.storage.local mock with get/set", () => {
+  const js = fs.readFileSync(path.resolve(process.cwd(), "public/dashboard.js"), "utf-8");
+  assert.ok(js.includes("storage: {") || js.includes("storage:{"));
+  assert.ok(js.includes("__simStorage"));
+  assert.ok(js.includes("pecUserRules"));
+});
+
+test("dashboard.js mockScript includes chrome.tabs mock", () => {
+  const js = fs.readFileSync(path.resolve(process.cwd(), "public/dashboard.js"), "utf-8");
+  assert.ok(js.includes("tabs: {") || js.includes("tabs:{"));
+  assert.ok(js.includes("query: function"));
+});
+
+test("dashboard.js mockScript supports SET_ENABLED, SAVE_USER_RULES, and GET_USER_RULES with action and type", () => {
+  const js = fs.readFileSync(path.resolve(process.cwd(), "public/dashboard.js"), "utf-8");
+  assert.ok(js.includes("SET_ENABLED"));
+  assert.ok(js.includes("SAVE_USER_RULES"));
+  assert.ok(js.includes("GET_USER_RULES"));
+  assert.ok(js.includes("BYPASS_TOGGLE"));
+  assert.ok(js.includes("GET_LOGS"));
+});
+
+test("dashboard.js handles PREVIEW_RESIZE with both width and height", () => {
+  const js = fs.readFileSync(path.resolve(process.cwd(), "public/dashboard.js"), "utf-8");
+  assert.ok(js.includes("__postPreviewSize"));
+  assert.ok(js.includes("PREVIEW_RESIZE"));
+  assert.match(js, /pf\.style\.width\s*=\s*Math\.max\(380,\s*Math\.min\(600/);
+  assert.match(js, /pf\.style\.height\s*=\s*Math\.max\(180,\s*Math\.min\(850/);
+});
+
