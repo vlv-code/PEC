@@ -44,7 +44,9 @@ const FETCH_TIMEOUT_MS = 6000;
 let memoryCredsCache = null; // { user, pass, fetchedAt }
 let syncPromise = null;
 const seenRequests = new Map();
+let lastConfig = null;
 let currentProxyState = {
+  enabled: true,
   online: false,
   protocol: "http",
   host: "",
@@ -64,12 +66,18 @@ let recentLogs = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
       if (res && res.pecProxyState && typeof res.pecProxyState === "object") {
         currentProxyState = { ...currentProxyState, ...res.pecProxyState };
+      }
+      if (res && res.pecLastConfig && typeof res.pecLastConfig === "object") {
+        lastConfig = res.pecLastConfig;
+      }
+      if (res && typeof res.pecEnabled === "boolean") {
+        currentProxyState.enabled = res.pecEnabled;
       }
     });
   }
@@ -78,7 +86,7 @@ try {
 function persistProxyState() {
   try {
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-      chrome.storage.local.set({ pecProxyState: currentProxyState });
+      chrome.storage.local.set({ pecProxyState: currentProxyState, pecEnabled: currentProxyState.enabled !== false });
     }
   } catch (e) {}
 }
@@ -244,6 +252,52 @@ async function verifyAppliedProxySettings(expectedMode) {
   }
 }
 
+// Injects user-defined routing rules (PROXY or DIRECT) ahead of corporate PAC rules
+// inside FindProxyForURL(url, host).
+function injectUserRulesIntoPac(pacText, userRules, proxyServer) {
+  if (!pacText || typeof pacText !== "string") return pacText;
+  if (!Array.isArray(userRules) || userRules.length === 0) return pacText;
+
+  const activeRules = userRules.filter((r) => r && r.enabled && r.pattern && typeof r.pattern === "string" && r.pattern.trim());
+  if (activeRules.length === 0) return pacText;
+
+  const nl = String.fromCharCode(10);
+  let ruleLines = "  // === USER OVERRIDES BEGIN ===" + nl;
+  for (const r of activeRules) {
+    const rawPattern = r.pattern.trim();
+    // Sanitize pattern: strip non-ascii or punycode, avoid quote breaks
+    let cleanPattern = "";
+    for (let c = 0; c < rawPattern.length; c++) {
+      const ch = rawPattern[c];
+      if (ch !== '"' && ch !== "\\") cleanPattern += ch;
+    }
+    if (!cleanPattern) continue;
+
+    const actionStr = r.action === "PROXY"
+      ? (proxyServer ? "PROXY " + proxyServer : "DIRECT")
+      : "DIRECT";
+
+    ruleLines += '  if (shExpMatch(host, "' + cleanPattern + '")) { return "' + actionStr + '"; }' + nl;
+  }
+  ruleLines += "  // === USER OVERRIDES END ===" + nl;
+
+  const marker = "function FindProxyForURL(url, host) {";
+  const targetIdx = pacText.indexOf(marker);
+  if (targetIdx !== -1) {
+    const insertPos = targetIdx + marker.length;
+    return pacText.slice(0, insertPos) + nl + ruleLines + pacText.slice(insertPos);
+  }
+  const fnIdx = pacText.indexOf("FindProxyForURL");
+  if (fnIdx !== -1) {
+    const braceIdx = pacText.indexOf("{", fnIdx);
+    if (braceIdx !== -1) {
+      const insertPos = braceIdx + 1;
+      return pacText.slice(0, insertPos) + nl + ruleLines + pacText.slice(insertPos);
+    }
+  }
+  return pacText;
+}
+
 // Apply a PAC script. Two strategies:
 //  1) INLINE (preferred): the worker downloads the PAC text itself and
 //     installs it via pacScript.data. Atomic and deterministic - the exact
@@ -254,7 +308,7 @@ async function verifyAppliedProxySettings(expectedMode) {
 //     url-mode, while that browser-side download is pending - or when it
 //     fails - Chrome silently routes everything DIRECT (mandatory:false),
 //     with no feedback anywhere.
-async function applyPacScript(pacUrl) {
+async function applyPacScript(pacUrl, config) {
   let pacText = null;
   logEvent("info", "Fetching PAC script from " + pacUrl);
   try {
@@ -279,6 +333,25 @@ async function applyPacScript(pacUrl) {
     logEvent("warn", "PAC download error (" + (err && err.message ? err.message : err) + ") - falling back to URL mode");
   }
 
+  // Inject active user overrides ahead of corporate rules
+  if (pacText !== null) {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+        const stored = await chrome.storage.local.get(["pecUserRules"]);
+        if (stored && Array.isArray(stored.pecUserRules) && stored.pecUserRules.length > 0) {
+          const proxyHost = (config && config.host) || currentProxyState.host || "";
+          const proxyPort = (config && config.port) || currentProxyState.port || 10809;
+          const proxyServer = proxyHost ? proxyHost + ":" + proxyPort : "";
+          pacText = injectUserRulesIntoPac(pacText, stored.pecUserRules, proxyServer);
+          logEvent("info", "Injected " + stored.pecUserRules.length + " user routing overrides into PAC");
+        }
+      }
+    } catch (injectErr) {
+      console.warn("[corp-proxy] Failed to inject user rules into PAC:", injectErr);
+      logEvent("warn", "Failed to inject user rules into PAC: " + (injectErr && injectErr.message ? injectErr.message : injectErr));
+    }
+  }
+
   // Chrome's pacScript.data API strictly requires 7-bit ASCII code.
   // If pacText contains any non-ASCII characters (e.g. Cyrillic comments or IDN domains),
   // sanitize them to ASCII (Punycode domains, ASCII comments) to avoid Chrome throwing:
@@ -293,7 +366,8 @@ async function applyPacScript(pacUrl) {
     }
 
     if (hasNonAscii) {
-      const lines = pacText.split("\n");
+      const nl = String.fromCharCode(10);
+      const lines = pacText.split(nl);
       for (let i = 0; i < lines.length; i++) {
         const commentIdx = lines[i].indexOf("//");
         if (commentIdx !== -1) {
@@ -304,7 +378,7 @@ async function applyPacScript(pacUrl) {
           lines[i] = lines[i].slice(0, commentIdx) + cleanComment;
         }
       }
-      let sanitized = lines.join("\n");
+      let sanitized = lines.join(nl);
 
       sanitized = sanitized.replace(/"([^"]*)"/g, (match, content) => {
         let contentNonAscii = false;
@@ -389,14 +463,38 @@ async function applyPacScript(pacUrl) {
   await verifyAppliedProxySettings("pac_script");
 }
 
+// Apply proxy settings to browser network stack using explicit config or cached state
+async function applyProxySettings(config) {
+  const cfg = config || lastConfig || {
+    protocol: currentProxyState.protocol,
+    host: currentProxyState.host,
+    port: currentProxyState.port,
+    pacUrl: currentProxyState.pacUrl,
+    enabled: currentProxyState.enabled !== false,
+  };
+  return await applyProxyConfig(cfg);
+}
+
 // Apply proxy settings to browser network stack
 async function applyProxyConfig(config) {
   if (!chrome.proxy || !chrome.proxy.settings) return;
 
+  if (config) {
+    lastConfig = config;
+  }
+  const effectiveConfig = config || lastConfig || {
+    protocol: currentProxyState.protocol,
+    host: currentProxyState.host,
+    port: currentProxyState.port,
+    pacUrl: currentProxyState.pacUrl,
+    enabled: currentProxyState.enabled !== false,
+  };
+
   try {
-    if (currentProxyState.bypassActive || config.killSwitch || config.enabled === false || config.protocol === "direct") {
+    const isEnabled = (effectiveConfig.enabled !== false) && currentProxyState.enabled !== false;
+    if (currentProxyState.bypassActive || effectiveConfig.killSwitch || !isEnabled || effectiveConfig.protocol === "direct") {
       console.log("[corp-proxy] Routing set to DIRECT.");
-      logEvent("info", "Proxy set to DIRECT (bypass=" + currentProxyState.bypassActive + ", enabled=" + config.enabled + ")");
+      logEvent("info", "Proxy set to DIRECT (bypass=" + currentProxyState.bypassActive + ", enabled=" + isEnabled + ")");
       await chrome.proxy.settings.set({
         value: { mode: "direct" },
         scope: "regular",
@@ -406,9 +504,9 @@ async function applyProxyConfig(config) {
       return;
     }
 
-    const usePac = (config.protocol === "pac" || (config.pacUrl && config.routingMode !== "fixed"));
-    if (usePac && config.pacUrl) {
-      await applyPacScript(config.pacUrl);
+    const usePac = (effectiveConfig.protocol === "pac" || (effectiveConfig.pacUrl && effectiveConfig.routingMode !== "fixed"));
+    if (usePac && effectiveConfig.pacUrl) {
+      await applyPacScript(effectiveConfig.pacUrl, effectiveConfig);
       return;
     }
 
@@ -418,19 +516,19 @@ async function applyProxyConfig(config) {
       https: "https",
       socks5: "socks5",
     };
-    const scheme = schemeMap[config.protocol] || "http";
-    const bypassList = Array.isArray(config.bypassList) ? config.bypassList : ["<local>"];
+    const scheme = schemeMap[effectiveConfig.protocol] || "http";
+    const bypassList = Array.isArray(effectiveConfig.bypassList) ? effectiveConfig.bypassList : ["<local>"];
 
-    console.log("[corp-proxy] Applying " + scheme.toUpperCase() + " Proxy: " + config.host + ":" + config.port);
-    logEvent("info", "Applying " + scheme.toUpperCase() + " Proxy: " + config.host + ":" + config.port);
+    console.log("[corp-proxy] Applying " + scheme.toUpperCase() + " Proxy: " + effectiveConfig.host + ":" + effectiveConfig.port);
+    logEvent("info", "Applying " + scheme.toUpperCase() + " Proxy: " + effectiveConfig.host + ":" + effectiveConfig.port);
     await chrome.proxy.settings.set({
       value: {
         mode: "fixed_servers",
         rules: {
           singleProxy: {
             scheme: scheme,
-            host: config.host,
-            port: parseInt(config.port, 10),
+            host: effectiveConfig.host,
+            port: parseInt(effectiveConfig.port, 10),
           },
           bypassList: bypassList,
         },
@@ -540,6 +638,12 @@ async function syncWithServer(forceRefresh = false) {
           }
 
           if (payload.config) {
+            lastConfig = payload.config;
+            try {
+              if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+                chrome.storage.local.set({ pecLastConfig: lastConfig });
+              }
+            } catch (e) {}
             const isPac = Boolean(payload.config.pacUrl && payload.config.routingMode !== "fixed") || payload.config.protocol === "pac";
             const proxyReachable = payload.proxyReachable !== false;
             currentProxyState = {
@@ -677,6 +781,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ...currentProxyState });
     return true;
   }
+  if (action === "GET_USER_RULES") {
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get(["pecUserRules"]);
+        const rules = (stored && Array.isArray(stored.pecUserRules)) ? stored.pecUserRules : [];
+        sendResponse({ userRules: rules });
+      } catch (e) {
+        sendResponse({ userRules: [] });
+      }
+    })();
+    return true;
+  }
+  if (action === "SAVE_USER_RULES") {
+    const rules = Array.isArray(msg.rules) ? msg.rules : [];
+    (async () => {
+      try {
+        await chrome.storage.local.set({ pecUserRules: rules });
+        logEvent("info", "Saved " + rules.length + " user routing overrides");
+        await applyProxySettings();
+        sendResponse({ ok: true, count: rules.length });
+      } catch (err) {
+        logEvent("error", "Failed to save user rules: " + (err && err.message ? err.message : err));
+        sendResponse({ ok: false, error: String(err) });
+      }
+    })();
+    return true;
+  }
+  if (action === "SET_ENABLED") {
+    const enabled = msg.enabled !== undefined ? Boolean(msg.enabled) : !currentProxyState.enabled;
+    currentProxyState.enabled = enabled;
+    persistProxyState();
+    (async () => {
+      try {
+        await chrome.storage.local.set({ pecEnabled: enabled });
+        logEvent("info", "Proxy power toggled: " + (enabled ? "ENABLED" : "DISABLED"));
+        await applyProxySettings();
+        sendResponse({ ok: true, enabled: enabled });
+      } catch (err) {
+        logEvent("error", "Failed to set proxy enabled: " + (err && err.message ? err.message : err));
+        sendResponse({ ok: false, error: String(err) });
+      }
+    })();
+    return true;
+  }
   if (action === "GET_LOGS") {
     sendResponse({ logs: [...recentLogs] });
     return true;
@@ -691,7 +839,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true, logs: [] });
     return true;
   }
-  if (action === "FORCE_SYNC") {
+  if (action === "FORCE_SYNC" || action === "SYNC_NOW") {
     syncWithServer(true)
       .then(() => {
         persistProxyState();
@@ -702,7 +850,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
     return true;
   }
-  if (action === "TOGGLE_BYPASS") {
+  if (action === "TOGGLE_BYPASS" || action === "BYPASS_TOGGLE") {
     currentProxyState.bypassActive = !currentProxyState.bypassActive;
     if (currentProxyState.bypassActive) {
       // Schedule automatic re-enable - "temporary bypass" must actually be temporary.

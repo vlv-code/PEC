@@ -35,6 +35,49 @@ export function pacRevisionOf(pacText: string): string {
 }
 
 /**
+ * Injects user-defined routing rules (PROXY or DIRECT) ahead of corporate PAC rules
+ * inside FindProxyForURL(url, host).
+ */
+export function injectUserRulesIntoPac(
+  pacText: string,
+  userRules: Array<{ pattern: string; action: string; enabled: boolean }>,
+  proxyServer: string
+): string {
+  if (!pacText || typeof pacText !== "string") return pacText;
+  if (!Array.isArray(userRules) || userRules.length === 0) return pacText;
+
+  const activeRules = userRules.filter((r) => r && r.enabled && r.pattern && typeof r.pattern === "string" && r.pattern.trim());
+  if (activeRules.length === 0) return pacText;
+
+  let ruleLines = "  // === USER OVERRIDES BEGIN ===\n";
+  for (const r of activeRules) {
+    const rawPattern = r.pattern.trim();
+    // Sanitize pattern: strip non-ascii or punycode, avoid quote breaks
+    const cleanPattern = rawPattern.replace(/["\\]/g, "");
+    if (!cleanPattern) continue;
+
+    const actionStr = r.action === "PROXY"
+      ? (proxyServer ? `PROXY ${proxyServer}` : "DIRECT")
+      : "DIRECT";
+
+    ruleLines += `  if (shExpMatch(host, "${cleanPattern}")) { return "${actionStr}"; }\n`;
+  }
+  ruleLines += "  // === USER OVERRIDES END ===\n";
+
+  const targetIdx = pacText.indexOf("function FindProxyForURL(url, host) {");
+  if (targetIdx !== -1) {
+    const insertPos = targetIdx + "function FindProxyForURL(url, host) {".length;
+    return pacText.slice(0, insertPos) + "\n" + ruleLines + pacText.slice(insertPos);
+  }
+  const match = pacText.match(/function\s+FindProxyForURL\s*\([^)]*\)\s*\{/);
+  if (match && typeof match.index === "number") {
+    const insertPos = match.index + match[0].length;
+    return pacText.slice(0, insertPos) + "\n" + ruleLines + pacText.slice(insertPos);
+  }
+  return pacText;
+}
+
+/**
  * Chrome's pacScript.data API strictly requires 7-bit ASCII code.
  * If pacText contains any non-ASCII characters (e.g. Cyrillic comments or IDN domains),
  * sanitize them to ASCII (Punycode domains, ASCII comments) to avoid Chrome throwing:
