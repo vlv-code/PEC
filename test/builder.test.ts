@@ -192,5 +192,32 @@ test("builder: GET /api/extension/download-zip is rate limited to 10 requests pe
   });
 });
 
+test("builder: generateExtensionFiles and packageExtension do not modify existing files in extension/ without force or PEC_KEEP_EXTENSION_DIR", () => {
+  const origKeep = process.env.PEC_KEEP_EXTENSION_DIR;
+  delete process.env.PEC_KEEP_EXTENSION_DIR;
+  try {
+    const extDir = process.env.PEC_EXTENSION_DIR || "./extension";
+    const unpackedDir = process.env.PEC_UNPACKED_DIR || path.join(TEST_TMP_DIR, "unpacked");
+    fs.mkdirSync(extDir, { recursive: true });
+    fs.mkdirSync(unpackedDir, { recursive: true });
+    const manifestPath = path.join(extDir, "manifest.json");
+    fs.writeFileSync(manifestPath, JSON.stringify({ name: "Base Extension", version: "1.0.0" }));
+    const mtimeBefore = fs.statSync(manifestPath).mtimeMs;
+
+    saveBuildConfig({ name: "Temporary Test Name Change" });
+    packageExtension("https://test.example.corp");
+
+    const mtimeAfter = fs.statSync(manifestPath).mtimeMs;
+    assert.strictEqual(mtimeAfter, mtimeBefore, "manifest.json in extension/ must not be touched during packaging");
+
+    const unpackedManifest = JSON.parse(
+      fs.readFileSync(path.join(unpackedDir, "manifest.json"), "utf-8")
+    );
+    assert.strictEqual(unpackedManifest.name, "Temporary Test Name Change", "unpacked dir must receive the updated name");
+  } finally {
+    if (origKeep) process.env.PEC_KEEP_EXTENSION_DIR = origKeep;
+  }
+});
+
 
 

@@ -465,14 +465,33 @@ function writeGeneratedFile(
   force = false
 ): void {
   const overridden = (cfg.overriddenFiles || []).includes(fileName);
-  if (overridden && !force) {
-    return;
+
+  if (!fs.existsSync(UNPACKED_DIR)) {
+    fs.mkdirSync(UNPACKED_DIR, { recursive: true });
   }
-  const fullPath = path.join(EXTENSION_DIR, fileName);
-  if (Buffer.isBuffer(content)) {
-    fs.writeFileSync(fullPath, content);
+
+  if (overridden && !force && fs.existsSync(path.join(EXTENSION_DIR, fileName))) {
+    const extContent = fs.readFileSync(path.join(EXTENSION_DIR, fileName));
+    fs.writeFileSync(path.join(UNPACKED_DIR, fileName), extContent);
   } else {
-    fs.writeFileSync(fullPath, content, "utf-8");
+    const unpackedPath = path.join(UNPACKED_DIR, fileName);
+    if (Buffer.isBuffer(content)) {
+      fs.writeFileSync(unpackedPath, content);
+    } else {
+      fs.writeFileSync(unpackedPath, content, "utf-8");
+    }
+  }
+
+  if (!fs.existsSync(EXTENSION_DIR)) {
+    fs.mkdirSync(EXTENSION_DIR, { recursive: true });
+  }
+  const extPath = path.join(EXTENSION_DIR, fileName);
+  if (force || process.env.PEC_KEEP_EXTENSION_DIR === "1" || !fs.existsSync(extPath)) {
+    if (Buffer.isBuffer(content)) {
+      fs.writeFileSync(extPath, content);
+    } else {
+      fs.writeFileSync(extPath, content, "utf-8");
+    }
   }
 }
 
@@ -551,10 +570,16 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
     writeGeneratedFile("popup.js", popupJs, cfg, force);
   } else {
     // Stealth mode: remove popup files if they exist
-    const popH = path.join(EXTENSION_DIR, "popup.html");
-    const popJ = path.join(EXTENSION_DIR, "popup.js");
+    const popH = path.join(UNPACKED_DIR, "popup.html");
+    const popJ = path.join(UNPACKED_DIR, "popup.js");
     if (fs.existsSync(popH)) fs.unlinkSync(popH);
     if (fs.existsSync(popJ)) fs.unlinkSync(popJ);
+    if (force || process.env.PEC_KEEP_EXTENSION_DIR === "1") {
+      const extPopH = path.join(EXTENSION_DIR, "popup.html");
+      const extPopJ = path.join(EXTENSION_DIR, "popup.js");
+      if (fs.existsSync(extPopH)) fs.unlinkSync(extPopH);
+      if (fs.existsSync(extPopJ)) fs.unlinkSync(extPopJ);
+    }
   }
 }
 
@@ -586,14 +611,12 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   const spkiDer = getPublicKeySpkiDer(privKey);
   const extensionId = calculateExtensionId(spkiDer);
 
-  const manifestPath = path.join(EXTENSION_DIR, "manifest.json");
+  const manifestPath = fs.existsSync(path.join(UNPACKED_DIR, "manifest.json"))
+    ? path.join(UNPACKED_DIR, "manifest.json")
+    : path.join(EXTENSION_DIR, "manifest.json");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
   const version = manifest.version || buildConfigToPack.version || "1.2.0";
   const name = manifest.name || buildConfigToPack.name || "Corp Proxy Auth & Sync";
-
-  const zip = new AdmZip();
-  const items = fs.readdirSync(EXTENSION_DIR);
-  const renderedBg = renderBackgroundJs(buildConfigToPack);
 
   function isExcludedFromPackage(fileName: string): boolean {
     const lower = fileName.toLowerCase();
@@ -611,29 +634,46 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
 
   if (!fs.existsSync(UNPACKED_DIR)) {
     fs.mkdirSync(UNPACKED_DIR, { recursive: true });
-  } else {
-    for (const f of fs.readdirSync(UNPACKED_DIR)) {
-      if (isExcludedFromPackage(f)) {
-        try { fs.rmSync(path.join(UNPACKED_DIR, f), { recursive: true, force: true }); } catch {}
+  }
+
+  // Render background.js with substituted placeholders directly into UNPACKED_DIR
+  const renderedBg = renderBackgroundJs(buildConfigToPack);
+  fs.writeFileSync(path.join(UNPACKED_DIR, "background.js"), renderedBg, "utf-8");
+
+  // Copy any custom/extra non-excluded files from EXTENSION_DIR into UNPACKED_DIR
+  // only if they don't already exist or are explicitly overridden by operator
+  if (fs.existsSync(EXTENSION_DIR)) {
+    for (const item of fs.readdirSync(EXTENSION_DIR)) {
+      if (isExcludedFromPackage(item)) continue;
+      const full = path.join(EXTENSION_DIR, item);
+      const dest = path.join(UNPACKED_DIR, item);
+      const stat = fs.statSync(full);
+      if (stat.isFile()) {
+        const isOverridden = (buildConfigToPack.overriddenFiles || []).includes(item);
+        if (!fs.existsSync(dest) || isOverridden) {
+          if (item !== "background.js") {
+            fs.copyFileSync(full, dest);
+          }
+        }
       }
     }
   }
 
-  for (const item of items) {
-    if (isExcludedFromPackage(item)) {
-      continue;
+  // Remove any excluded files from UNPACKED_DIR
+  for (const f of fs.readdirSync(UNPACKED_DIR)) {
+    if (isExcludedFromPackage(f)) {
+      try { fs.rmSync(path.join(UNPACKED_DIR, f), { recursive: true, force: true }); } catch {}
     }
-    const full = path.join(EXTENSION_DIR, item);
+  }
+
+  // Create ZIP directly from the clean UNPACKED_DIR
+  const zip = new AdmZip();
+  for (const item of fs.readdirSync(UNPACKED_DIR)) {
+    if (isExcludedFromPackage(item)) continue;
+    const full = path.join(UNPACKED_DIR, item);
     const stat = fs.statSync(full);
     if (stat.isFile()) {
-      const dest = path.join(UNPACKED_DIR, item);
-      if (item === "background.js") {
-        zip.addFile(item, Buffer.from(renderedBg, "utf-8"));
-        fs.writeFileSync(dest, renderedBg, "utf-8");
-      } else {
-        zip.addLocalFile(full);
-        fs.copyFileSync(full, dest);
-      }
+      zip.addLocalFile(full);
     }
   }
 
