@@ -154,4 +154,30 @@ test("builder: pack-extension script requires explicit server URL and rejects em
   );
 });
 
+test("builder: packageExtension forces EXT_SHARED_TOKEN environment variable over saved stale config", async () => {
+  const origEnvToken = process.env.EXT_SHARED_TOKEN;
+  try {
+    saveBuildConfig({ defaultToken: "stale-saved-token-12345" });
+    process.env.EXT_SHARED_TOKEN = "fresh-env-token-99999";
+
+    packageExtension("https://env-override.example.corp");
+
+    const zipPath = path.join(TEST_TMP_DIR, "updates", "extension.zip");
+    const zip = new AdmZip(zipPath);
+    const bg = zip.readAsText("background.js");
+
+    assert.ok(
+      bg.includes("fresh-env-token-99999"),
+      "packaged background.js must contain fresh token from EXT_SHARED_TOKEN"
+    );
+    assert.ok(
+      !bg.includes("stale-saved-token-12345"),
+      "packaged background.js must NOT contain stale token from saved config"
+    );
+  } finally {
+    process.env.EXT_SHARED_TOKEN = origEnvToken;
+  }
+});
+
+
 

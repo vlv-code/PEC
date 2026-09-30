@@ -95,28 +95,34 @@ test("CRX3: package is a valid CRX version 3 with verifiable RSA-SHA256 proof", 
 });
 
 test("CRX3: zip contains the rendered background.js (placeholders substituted) and managed_schema", () => {
-  saveBuildConfig({ defaultServerUrl: "https://pec-test.example.corp", defaultToken: "build-token-42", syncIntervalMinutes: 15, bypassAutoTimeoutMinutes: 30 });
-  packageExtension("https://pec-test.example.corp");
+  const origToken = process.env.EXT_SHARED_TOKEN;
+  process.env.EXT_SHARED_TOKEN = "build-token-42";
+  try {
+    saveBuildConfig({ defaultServerUrl: "https://pec-test.example.corp", defaultToken: "build-token-42", syncIntervalMinutes: 15, bypassAutoTimeoutMinutes: 30 });
+    packageExtension("https://pec-test.example.corp");
 
-  const zip = new AdmZip(path.join(TEST_TMP_DIR, "updates", "extension.zip"));
-  const bg = zip.readAsText("background.js");
-  const schema = zip.readAsText("managed_schema.json");
+    const zip = new AdmZip(path.join(TEST_TMP_DIR, "updates", "extension.zip"));
+    const bg = zip.readAsText("background.js");
+    const schema = zip.readAsText("managed_schema.json");
 
-  assert.match(bg, /const DEFAULT_SERVER_BASE = "https:\/\/pec-test\.example\.corp"/);
-  assert.match(bg, /const FALLBACK_TOKEN = "build-token-42"/);
-  assert.match(bg, /const SYNC_INTERVAL_MIN = 15;/);
-  assert.match(bg, /const BYPASS_TIMEOUT_MIN = 30;/);
-  assert.match(bg, /corp_proxy_bypass_expire/); // temporary bypass auto-revert alarm
-  assert.doesNotMatch(bg, /__PEC_/); // no raw placeholders may ship
-  assert.match(schema, /targetGroup/); // GPO group routing key is declared
+    assert.match(bg, /const DEFAULT_SERVER_BASE = "https:\/\/pec-test\.example\.corp"/);
+    assert.match(bg, /const FALLBACK_TOKEN = "build-token-42"/);
+    assert.match(bg, /const SYNC_INTERVAL_MIN = 15;/);
+    assert.match(bg, /const BYPASS_TIMEOUT_MIN = 30;/);
+    assert.match(bg, /corp_proxy_bypass_expire/); // temporary bypass auto-revert alarm
+    assert.doesNotMatch(bg, /__PEC_/); // no raw placeholders may ship
+    assert.match(schema, /targetGroup/); // GPO group routing key is declared
 
-  const manifest = JSON.parse(zip.readAsText("manifest.json"));
-  assert.strictEqual(manifest.minimum_chrome_version, "108");
-  assert.strictEqual(manifest.manifest_version, 3);
+    const manifest = JSON.parse(zip.readAsText("manifest.json"));
+    assert.strictEqual(manifest.minimum_chrome_version, "108");
+    assert.strictEqual(manifest.manifest_version, 3);
 
-  // The source file on disk keeps placeholders for the next rebuild
-  const srcBg = fs.readFileSync(path.join(TEST_TMP_DIR, "extension", "background.js"), "utf-8");
-  assert.match(srcBg, /__PEC_SERVER_BASE__/);
+    // The source file on disk keeps placeholders for the next rebuild
+    const srcBg = fs.readFileSync(path.join(TEST_TMP_DIR, "extension", "background.js"), "utf-8");
+    assert.match(srcBg, /__PEC_SERVER_BASE__/);
+  } finally {
+    process.env.EXT_SHARED_TOKEN = origToken;
+  }
 });
 
 test("CRX3: packCrxBuffer is deterministic for the same key and archive", () => {

@@ -567,9 +567,16 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     ? currentBuildConfig.defaultServerUrl.trim().replace(/\/+$/, "")
     : (baseUrl ? baseUrl.trim().replace(/\/+$/, "") : "http://localhost:3000");
 
+  if (process.env.EXT_SHARED_TOKEN && currentBuildConfig.defaultToken && currentBuildConfig.defaultToken !== process.env.EXT_SHARED_TOKEN) {
+    console.warn(
+      "[packager] Saved build-config defaultToken differs from EXT_SHARED_TOKEN - overriding with env value."
+    );
+  }
+
   const buildConfigToPack: ExtensionBuildConfig = {
     ...currentBuildConfig,
     defaultServerUrl: effectiveBaseUrl,
+    defaultToken: process.env.EXT_SHARED_TOKEN || currentBuildConfig.defaultToken,
   };
 
   // Generate / refresh extension files based on build config to pack
