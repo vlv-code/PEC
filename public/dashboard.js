@@ -436,6 +436,7 @@
         optScopeInstances: 'Specific Selected Instances',
         lblTargetGroup: 'Target Group Name',
         phTargetGroup: 'e.g. SEC-Proxy-VPN-VIP or Dev-Team',
+        lblFailClosed: 'Fail-Closed: Prevent direct fallback (DIRECT) if proxy drops (avoids IP leak)',
         profDescDefault: 'Routing policy applied to matching browser instances.',
         btnSaveProfile: 'Save Routing Profile',
         btnDeleteProfile: 'Delete Profile',
@@ -744,6 +745,7 @@
         optScopeInstances: 'Отдельные выбранные устройства',
         lblTargetGroup: 'Имя целевой группы',
         phTargetGroup: 'напр. SEC-Proxy-VPN-VIP или Dev-Team',
+        lblFailClosed: 'Fail-Closed: запретить прямой доступ (DIRECT) при падении прокси (защита от утечки IP)',
         profDescDefault: 'Политика маршрутизации, применяемая к соответствующим браузерам.',
         btnSaveProfile: 'Сохранить профиль',
         btnDeleteProfile: 'Удалить профиль',
@@ -1160,6 +1162,7 @@
       document.getElementById('profDefaultPolicy').value = p.defaultPolicy || 'direct';
       document.getElementById('profTargetScope').value = p.targetScope || 'all';
       document.getElementById('profTargetGroup').value = p.targetGroup || '';
+      document.getElementById('profFailClosed').checked = Boolean(p.failClosed);
       document.getElementById('profDesc').textContent = p.description || 'Configured routing rules.';
       
       const groupRow = document.getElementById('groupTargetRow');
@@ -1259,6 +1262,7 @@
       currentProfile.defaultPolicy = document.getElementById('profDefaultPolicy').value;
       currentProfile.targetScope = document.getElementById('profTargetScope').value;
       currentProfile.targetGroup = document.getElementById('profTargetGroup').value.trim();
+      currentProfile.failClosed = document.getElementById('profFailClosed').checked;
 
       try {
         const res = await adminFetch('/api/routing/profiles', {

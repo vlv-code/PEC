@@ -111,6 +111,47 @@ test("PAC: block sinkhole is terminal (no silent DIRECT fallback)", () => {
   assert.doesNotMatch(pac, /PROXY 127\.0\.0\.1:0; DIRECT/, "blocked domains must not fall back to DIRECT");
 });
 
+test("PAC: failClosed profile omits '; DIRECT' fallback on proxy directives to prevent IP leak", () => {
+  const profileFailClosed = makeProfile({
+    name: "Secure Fail-Closed Profile",
+    defaultPolicy: "proxy",
+    failClosed: true,
+    rules: [
+      {
+        id: "r1",
+        name: "Route Domain",
+        targetType: "domain",
+        pattern: "secure.example.com",
+        action: "proxy",
+        enabled: true,
+      },
+    ],
+  });
+
+  const pac = generatePacScript(profileFailClosed, PROXY_CFG);
+  assert.doesNotMatch(pac, /PROXY [^;]+; DIRECT/, "failClosed profile must omit ; DIRECT fallback");
+  assert.match(pac, /return "PROXY [^";]+";/);
+
+  const profileNormal = makeProfile({
+    name: "Normal Profile",
+    defaultPolicy: "proxy",
+    failClosed: false,
+    rules: [
+      {
+        id: "r2",
+        name: "Route Domain",
+        targetType: "domain",
+        pattern: "normal.example.com",
+        action: "proxy",
+        enabled: true,
+      },
+    ],
+  });
+
+  const pacNormal = generatePacScript(profileNormal, PROXY_CFG);
+  assert.match(pacNormal, /PROXY [^;]+; DIRECT/, "normal profile must retain ; DIRECT fallback");
+});
+
 test("PAC: proxy host sanitization still holds", () => {
   const maliciousConfig = {
     ...PROXY_CFG,

@@ -328,11 +328,12 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
   const safeHost = String(rawHost).replace(/[^a-zA-Z0-9.-]/g, "");
   const safePort = Math.min(65535, Math.max(1, parseInt(String(rawPort), 10) || 10809));
 
-  let proxyDirective = "PROXY " + safeHost + ":" + safePort + "; DIRECT";
+  const fallbackSuffix = profile.failClosed ? "" : "; DIRECT";
+  let proxyDirective = "PROXY " + safeHost + ":" + safePort + fallbackSuffix;
   if (effectiveProtocol === "socks5") {
-    proxyDirective = "SOCKS5 " + safeHost + ":" + safePort + "; DIRECT";
+    proxyDirective = "SOCKS5 " + safeHost + ":" + safePort + fallbackSuffix;
   } else if (effectiveProtocol === "https") {
-    proxyDirective = "HTTPS " + safeHost + ":" + safePort + "; DIRECT";
+    proxyDirective = "HTTPS " + safeHost + ":" + safePort + fallbackSuffix;
   }
 
   // Sinkhole for blocked domains: a dead proxy WITHOUT a DIRECT fallback.

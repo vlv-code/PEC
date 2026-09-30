@@ -32,6 +32,7 @@ export interface RoutingProfile {
   name: string;
   description: string;
   defaultPolicy: "direct" | "proxy"; // "direct": bypass all by default, proxy only matching. "proxy": tunnel all, direct only exceptions.
+  failClosed?: boolean; // When true, omit '; DIRECT' fallback to prevent IP leak when proxy is down
   rules: RoutingRule[];
   targetScope: "all" | "group" | "instances";
   targetGroup?: string;
