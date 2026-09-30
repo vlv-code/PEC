@@ -12,6 +12,8 @@
  * Managed storage (GPO) values always take precedence at runtime.
  */
 
+import type { ExtensionBuildConfig } from "./types.js";
+
 export const BACKGROUND_TEMPLATE = `// background.js - Enterprise Chrome MV3 Service Worker (PEC template)
 //
 // 1. Centralized proxy synchronization (SOCKS5/HTTP/HTTPS/PAC) pushed by server.
@@ -771,4 +773,613 @@ export function renderBackgroundJs(cfg: {
     .replace(/const BYPASS_TIMEOUT_MIN = [^;]+;/g, `const BYPASS_TIMEOUT_MIN = ${bypassTimeout};`)
     .replace(/const BADGE_ENABLED = [^;]+;/g, `const BADGE_ENABLED = ${badgeEnabled};`)
     .replace(/"__PEC_TARGET_GROUP__"/g, JSON.stringify(String(cfg.targetGroup || "Default Fleet")));
+}
+
+export function getPopupTranslations(cfg: ExtensionBuildConfig) {
+  const isRu = (cfg.locale || "ru") === "ru";
+  return {
+    isRu,
+    title: cfg.name,
+    active: isRu ? "Активен" : "Active",
+    bypassed: isRu ? "Обход активен" : "Bypass Active",
+    offline: isRu ? "Отключен" : "Offline",
+    tabConn: isRu ? "Подключение" : "Connection",
+    tabRules: isRu ? "Маршрутизация" : "Routing",
+    tabDiag: isRu ? "Диагностика" : "Diagnostics",
+    tabHelp: isRu ? "Поддержка" : "Support",
+    proxyMode: isRu ? "Режим прокси" : "Proxy Mode",
+    activeEndpoint: isRu ? "Прокси-сервер" : "Active Endpoint",
+    routingProfile: isRu ? "Профиль правил" : "Routing Profile",
+    latency: isRu ? "Задержка (Пинг)" : "Latency (Ping)",
+    btnSync: isRu ? "Синхронизировать сейчас" : "Sync with Server Now",
+    btnBypass: isRu ? `Временно отключить (${cfg.bypassAutoTimeoutMinutes || 15}м)` : `Bypass Proxy Temporarily (${cfg.bypassAutoTimeoutMinutes || 15}m)`,
+    btnResume: isRu ? "Включить прокси" : "Resume Proxy Now",
+    bypassRestricted: isRu ? "🔒 Прямой обход ограничен политикой безопасности предприятия." : "🔒 Direct bypass is restricted by IT enterprise policy.",
+    defaultFallback: isRu ? "По умолчанию" : "Default Fallback",
+    aiModels: isRu ? "🤖 Модели AI и LLM" : "🤖 AI & LLM Models",
+    corpIntranet: isRu ? "🏢 Корпоративная сеть RFC1918" : "🏢 Corporate RFC1918",
+    adsTelemetry: isRu ? "🛡️ Реклама и телеметрия" : "🛡️ Ads & Telemetry",
+    socialMedia: isRu ? "🌐 Медиа и соцсети" : "🌐 Global Social / Media",
+    webrtcShield: isRu ? "Защита WebRTC IP" : "WebRTC IP Shield",
+    webrtcStatus: isRu ? "Защищено (без утечки UDP)" : "Protected (No UDP leak)",
+    dnsGuard: isRu ? "Защита от подмены DNS" : "DNS Poisoning Guard",
+    dnsStatus: isRu ? "Включена" : "Enforced",
+    exitIp: isRu ? "Текущий внешний IP" : "Current Exit IP",
+    btnCheckIp: isRu ? "Проверить Egress IP и Гео" : "Verify Egress IP & Geo",
+    checkingIp: isRu ? "Проверка IP..." : "Checking IP...",
+    syncingCreds: isRu ? "Синхронизация..." : "Syncing credentials...",
+    supportText: isRu ? "При возникновении проблем с доступом или для запроса новых политик обратитесь в службу поддержки:" : "For proxy connectivity issues, network access requests, or policy updates, contact the enterprise security team:",
+    helpdesk: isRu ? "Техподдержка" : "Helpdesk",
+    buildVer: isRu ? "Версия сборки" : "Build Version",
+    contactSupport: isRu ? "Написать в службу поддержки" : "Contact IT Support Desk",
+    rulesNotice: isRu ? "Правила маршрутизации и обхода определяются активным PAC-профилем с сервера PEC." : "Rules are centrally managed and compiled to /proxy.pac dynamically.",
+    connError: isRu ? "Ошибка связи" : "Connection Error",
+    serverUnreachable: isRu ? "Сервер PEC недоступен" : "PEC Server Unreachable",
+    eventLog: isRu ? "Журнал событий" : "Event Log",
+    zeroEntries: isRu ? "0 записей" : "0 entries",
+    emptyLog: isRu ? "Журнал пуст" : "No log entries",
+    entriesSuffix: isRu ? " записей" : " entries",
+    copyLogs: isRu ? "Скопировать логи" : "Copy logs",
+    clearLogs: isRu ? "Очистить" : "Clear",
+    copied: isRu ? "Скопировано!" : "Copied!",
+  };
+}
+
+export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<string, string>): string {
+  const t = getPopupTranslations(cfg);
+  const effectiveColors = {
+    primary: cfg.themeColor || "#0284c7",
+    bg: cfg.themeBackground || "#0b1120",
+    card: cfg.themeCard || "#111c35",
+    border: "#1e293b",
+    text: "#f8fafc",
+    ...colors,
+  };
+
+  return `<!DOCTYPE html>
+<html lang="${cfg.locale || "ru"}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${cfg.name}</title>
+  <style>
+    :root {
+      --primary: ${effectiveColors.primary};
+      --bg: ${effectiveColors.bg};
+      --card: ${effectiveColors.card};
+      --border: ${effectiveColors.border};
+      --text: ${effectiveColors.text};
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 340px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.4;
+      user-select: none;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+    .brand-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+    .status-badge.offline {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .status-badge.offline .dot { background: var(--danger); }
+    .status-badge.bypass {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+    .status-badge.bypass .dot { background: var(--warning); }
+
+    /* Nav Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 4px;
+      border-radius: 5px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .tab-btn.active {
+      background: var(--card);
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; }
+    .label { color: var(--text-muted); font-size: 11px; }
+    .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; font-size: 12px; }
+    
+    .btn-primary {
+      width: 100%;
+      background: var(--primary);
+      color: #0b1120;
+      font-weight: 600;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 12px;
+      transition: opacity 0.2s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+
+    .btn-sec {
+      width: 100%;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      margin-top: 6px;
+      transition: background 0.2s;
+    }
+    .btn-sec:hover { background: rgba(255, 255, 255, 0.05); }
+    .btn-sec.warning { color: var(--warning); border-color: rgba(245, 158, 11, 0.3); }
+
+    .tag {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+    }
+    .support-box {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <span>${cfg.shortName || cfg.name}</span>
+    </div>
+    <div class="status-badge offline" id="badge">
+      <div class="dot"></div>
+      <span id="statusText">${t.offline}</span>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="conn">${t.tabConn}</button>
+    <button class="tab-btn" data-tab="rules">${t.tabRules}</button>
+    <button class="tab-btn" data-tab="diag">${t.tabDiag}</button>
+    <button class="tab-btn" data-tab="help">${t.tabHelp}</button>
+  </div>
+
+  <!-- TAB 1: Connection -->
+  <div class="tab-content active" id="tab-conn">
+    <div class="card">
+      <div class="row">
+        <span class="label">${t.proxyMode}</span>
+        <span class="tag" id="modeVal">PAC</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.activeEndpoint}</span>
+        <span class="val" id="serverVal">—</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.routingProfile}</span>
+        <span class="val" id="profileVal">—</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.latency}</span>
+        <span class="val" id="pingVal">—</span>
+      </div>
+    </div>
+
+    <button id="btnSync" class="btn-primary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+      <span>${t.btnSync}</span>
+    </button>
+
+    ${cfg.allowUserBypass ? `
+    <button id="btnToggleBypass" class="btn-sec warning">
+      ${t.btnBypass}
+    </button>` : `
+    <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 8px;">
+      ${t.bypassRestricted}
+    </div>`}
+  </div>
+
+  <!-- TAB 2: Routing -->
+  <div class="tab-content" id="tab-rules">
+    <div class="card">
+      <div class="row" style="margin-bottom: 6px;">
+        <span class="label">${t.defaultFallback}</span>
+        <span class="tag" id="tabRulesDefaultPolicy">DIRECT</span>
+      </div>
+      <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-top: 8px;">
+        ${t.rulesNotice}
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: Diagnostics -->
+  <div class="tab-content" id="tab-diag">
+    <div class="card">
+      <div class="row">
+        <span class="label">${t.webrtcShield}</span>
+        <span class="val" style="color: var(--success);">${cfg.webRtcProtection ? t.webrtcStatus : "Disabled"}</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.dnsGuard}</span>
+        <span class="val" style="color: var(--success);">${cfg.dnsLeakProtection ? t.dnsStatus : "Off"}</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.exitIp}</span>
+        <span class="val" id="exitIpVal">—</span>
+      </div>
+    </div>
+
+    ${cfg.showIpGeoChecker ? `
+    <button id="btnCheckIp" class="btn-sec">
+      ${t.btnCheckIp}
+    </button>` : ""}
+
+    <div class="card" style="margin-top: 10px;">
+      <div class="row" style="margin-bottom: 6px;">
+        <span class="label" style="font-weight: 600;">${t.eventLog}</span>
+        <span class="tag" id="logCountTag" style="font-size: 10px;">${t.zeroEntries}</span>
+      </div>
+      <pre id="logContainer" style="background: #050914; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; color: #94a3b8; max-height: 150px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin: 4px 0 8px 0;"></pre>
+      <div style="display: flex; gap: 6px;">
+        <button id="btnCopyLogs" class="btn-sec" style="margin-top: 0; flex: 1; padding: 5px 8px; font-size: 11px;">
+          ${t.copyLogs}
+        </button>
+        <button id="btnClearLogs" class="btn-sec" style="margin-top: 0; flex: 1; padding: 5px 8px; font-size: 11px;">
+          ${t.clearLogs}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: Support -->
+  <div class="tab-content" id="tab-help">
+    <div class="card">
+      <div class="support-box">
+        ${t.supportText}
+      </div>
+      <div class="row">
+        <span class="label">${t.helpdesk}</span>
+        <span class="val">${cfg.supportUrl || "mailto:it-support@corp.local"}</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.buildVer}</span>
+        <span class="val">v${cfg.version}</span>
+      </div>
+    </div>
+
+    <a href="${cfg.supportUrl || "mailto:it-support@corp.local"}" target="_blank" style="text-decoration: none;">
+      <button class="btn-sec">
+        ${t.contactSupport}
+      </button>
+    </a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>`;
+}
+
+export function renderPopupJs(cfg: ExtensionBuildConfig): string {
+  const t = getPopupTranslations(cfg);
+  return `// Global tab switching helper
+window.switchPopupTab = function(tabId) {
+  if (!tabId) return;
+  const tabs = document.querySelectorAll(".tab-btn");
+  tabs.forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+
+  const activeBtn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+  if (activeBtn) activeBtn.classList.add("active");
+  const target = document.getElementById("tab-" + tabId) || document.getElementById(tabId);
+  if (target) target.classList.add("active");
+
+  if (tabId === "diag" && typeof window.__pecLoadLogs === "function") {
+    window.__pecLoadLogs();
+  }
+};
+
+// Global state applier - reactive to simulator and chrome.runtime
+window.applyPopupState = function(response) {
+  if (!response) return;
+  const statusText = document.getElementById("statusText");
+  const badge = document.getElementById("badge");
+  const modeVal = document.getElementById("modeVal");
+  const serverVal = document.getElementById("serverVal");
+  const profileVal = document.getElementById("profileVal");
+  const pingVal = document.getElementById("pingVal");
+  const exitIpVal = document.getElementById("exitIpVal");
+  const btnToggle = document.getElementById("btnToggleBypass");
+  const tabRulesDefaultPolicy = document.getElementById("tabRulesDefaultPolicy");
+
+  if (statusText) {
+    if (response.bypassActive) statusText.textContent = "${t.bypassed}";
+    else if (!response.online) statusText.textContent = "${t.offline}";
+    else statusText.textContent = "${t.active}";
+  }
+  if (badge) {
+    if (response.bypassActive) {
+      badge.className = "status-badge bypass";
+    } else if (!response.online) {
+      badge.className = "status-badge offline";
+    } else {
+      badge.className = "status-badge";
+    }
+  }
+  if (modeVal) {
+    const proto = response.protocol ? response.protocol.toUpperCase() : "—";
+    const pol = response.profileDefaultPolicy === "direct" ? " (${t.isRu ? "селективный" : "selective"})" : (response.profileDefaultPolicy === "proxy" ? " (${t.isRu ? "туннель" : "tunnel"})" : "");
+    modeVal.textContent = proto + pol;
+  }
+  if (serverVal) serverVal.textContent = (response.online && response.host) ? (response.host + ":" + response.port) : (response.online ? "Direct" : "${t.offline}");
+  if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
+  if (tabRulesDefaultPolicy && response.profileDefaultPolicy) {
+    tabRulesDefaultPolicy.textContent = response.profileDefaultPolicy.toUpperCase();
+  }
+  if (pingVal) pingVal.textContent = (response.online && response.ping) ? response.ping : "—";
+  if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
+  if (response.serverBase) window.__pecServerBase = response.serverBase;
+  if (btnToggle) {
+    btnToggle.textContent = response.bypassActive ? "${t.btnResume}" : "${t.btnBypass}";
+  }
+};
+
+window.addEventListener("message", function(e) {
+  if (e.data && e.data.type === "UPDATE_SIM_STATE") {
+    window.applyPopupState(e.data.state);
+  }
+});
+
+function initPopup() {
+  const tabs = document.querySelectorAll(".tab-btn");
+  tabs.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tabId = btn.dataset.tab;
+      window.switchPopupTab(tabId);
+    });
+  });
+
+  const btnSync = document.getElementById("btnSync");
+  const btnToggle = document.getElementById("btnToggleBypass");
+  const btnCheckIp = document.getElementById("btnCheckIp");
+
+  async function loadState() {
+    if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage) {
+      return;
+    }
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "GET_STATUS" });
+      if (chrome.runtime.lastError) {
+        console.warn("Could not retrieve status:", chrome.runtime.lastError.message);
+        return;
+      }
+      window.applyPopupState(response);
+    } catch (err) {
+      console.warn("Failed to talk to background worker:", err);
+    }
+  }
+
+  if (btnSync) {
+    btnSync.addEventListener("click", async () => {
+      const originalText = btnSync.querySelector("span")?.textContent || "";
+      if (btnSync.querySelector("span")) btnSync.querySelector("span").textContent = "${t.syncingCreds}";
+      btnSync.style.opacity = "0.7";
+      try {
+        if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+          const res = await chrome.runtime.sendMessage({ type: "FORCE_SYNC" });
+          window.applyPopupState(res);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setTimeout(() => {
+          if (btnSync.querySelector("span")) btnSync.querySelector("span").textContent = originalText;
+          btnSync.style.opacity = "1";
+        }, 600);
+      }
+    });
+  }
+
+  if (btnToggle) {
+    btnToggle.addEventListener("click", async () => {
+      btnToggle.style.opacity = "0.7";
+      try {
+        if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+          const res = await chrome.runtime.sendMessage({ type: "TOGGLE_BYPASS" });
+          window.applyPopupState(res);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        btnToggle.style.opacity = "1";
+      }
+    });
+  }
+
+  if (btnCheckIp) {
+    btnCheckIp.addEventListener("click", async () => {
+      const exitIpVal = document.getElementById("exitIpVal");
+      if (exitIpVal) exitIpVal.textContent = "${t.checkingIp}";
+      btnCheckIp.style.opacity = "0.7";
+
+      const serverBase = window.__pecServerBase || "";
+      const url = serverBase ? serverBase + "/ip-echo" : "/ip-echo";
+
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (exitIpVal) exitIpVal.textContent = data.ip + (data.geo ? " (" + data.geo + ")" : "");
+        } else {
+          if (exitIpVal) exitIpVal.textContent = "${t.connError} (" + res.status + ")";
+        }
+      } catch (err) {
+        if (exitIpVal) exitIpVal.textContent = "${t.serverUnreachable}";
+      } finally {
+        setTimeout(() => {
+          btnCheckIp.style.opacity = "1";
+        }, 500);
+      }
+    });
+  }
+
+  // Diagnostics log viewer
+  function formatTime(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toTimeString().split(" ")[0];
+    } catch {
+      return "";
+    }
+  }
+
+  function renderLogs(logs) {
+    const container = document.getElementById("logContainer");
+    const countTag = document.getElementById("logCountTag");
+    if (!container) return;
+    if (!logs || !logs.length) {
+      container.textContent = "${t.emptyLog}";
+      if (countTag) countTag.textContent = "${t.zeroEntries}";
+      return;
+    }
+    if (countTag) countTag.textContent = logs.length + "${t.entriesSuffix}";
+    container.textContent = logs
+      .map(function(l) {
+        const time = formatTime(l.time);
+        const lvl = (l.level || "info").toUpperCase().padEnd(5);
+        return "[" + time + "] " + lvl + " " + l.message;
+      })
+      .join("\\n");
+    container.scrollTop = container.scrollHeight;
+  }
+
+  async function loadLogs() {
+    if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage) return;
+    try {
+      const resp = await chrome.runtime.sendMessage({ type: "GET_LOGS" });
+      if (resp && resp.logs) {
+        renderLogs(resp.logs);
+      }
+    } catch (e) {
+      console.warn("Failed to load logs:", e);
+    }
+  }
+
+  window.__pecLoadLogs = loadLogs;
+
+  const btnCopyLogs = document.getElementById("btnCopyLogs");
+  if (btnCopyLogs) {
+    btnCopyLogs.addEventListener("click", async function() {
+      const container = document.getElementById("logContainer");
+      if (container && container.textContent) {
+        try {
+          await navigator.clipboard.writeText(container.textContent);
+          const orig = btnCopyLogs.textContent;
+          btnCopyLogs.textContent = "${t.copied}";
+          setTimeout(function() { btnCopyLogs.textContent = orig; }, 1500);
+        } catch (e) {
+          console.warn("Clipboard copy failed:", e);
+        }
+      }
+    });
+  }
+
+  const btnClearLogs = document.getElementById("btnClearLogs");
+  if (btnClearLogs) {
+    btnClearLogs.addEventListener("click", async function() {
+      if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage) return;
+      try {
+        await chrome.runtime.sendMessage({ type: "CLEAR_LOGS" });
+        renderLogs([]);
+      } catch (e) {
+        console.warn("Failed to clear logs:", e);
+      }
+    });
+  }
+
+  loadState();
+  loadLogs();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initPopup);
+} else {
+  initPopup();
+}`;
 }

@@ -209,6 +209,26 @@ test("purity: packageExtension generates a ready-to-load unpacked directory with
   const bgContent = fs.readFileSync(bgFile, "utf-8");
   assert.ok(!bgContent.includes("__PEC_"), "unpacked background.js must have all placeholders resolved");
   assert.ok(bgContent.includes("https://unpacked-test.example.corp"), "unpacked background.js must contain effective server URL");
+
+  const popupHtmlContent = fs.readFileSync(popupHtmlFile, "utf-8");
+  assert.ok(popupHtmlContent.includes('id="logContainer"'), "unpacked popup.html must include event log container");
+  assert.ok(popupHtmlContent.includes('id="btnCopyLogs"'), "unpacked popup.html must include copy logs button");
+
+  const popupJsFile = path.join(res.unpackedPath, "popup.js");
+  assert.ok(fs.existsSync(popupJsFile), "unpacked popup.js must exist");
+  const popupJsContent = fs.readFileSync(popupJsFile, "utf-8");
+  assert.ok(popupJsContent.includes("__pecLoadLogs"), "unpacked popup.js must include __pecLoadLogs hook");
+});
+
+test("purity: generateExtensionFiles emits popup with logContainer and __pecLoadLogs", async () => {
+  const { generateExtensionFiles, getBuildConfig } = await import("../src/packager.js");
+  const extDir = process.env.PEC_EXTENSION_DIR || path.join(REPO_ROOT, "extension");
+  const cfg = getBuildConfig();
+  generateExtensionFiles(cfg, { force: true });
+  const html = fs.readFileSync(path.join(extDir, "popup.html"), "utf-8");
+  const js = fs.readFileSync(path.join(extDir, "popup.js"), "utf-8");
+  assert.ok(html.includes('id="logContainer"'), "generated popup.html must include id=logContainer");
+  assert.ok(js.includes("__pecLoadLogs"), "generated popup.js must include __pecLoadLogs");
 });
 
 test("purity: popup HTML and JS do not fake active status or dummy metrics", async () => {
