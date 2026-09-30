@@ -40,7 +40,29 @@ window.applyPopupState = function(response) {
       badge.className = "status-badge";
     }
   }
-  if (modeVal) modeVal.textContent = response.protocol ? response.protocol.toUpperCase() : "—";
+  const tabRulesDefaultPolicy = document.getElementById("tabRulesDefaultPolicy");
+  if (modeVal) {
+    if (response.bypassActive) {
+      modeVal.textContent = "Обход (Bypass)";
+      modeVal.title = "Прокси временно отключен пользователем";
+    } else if (response.protocol === "pac") {
+      const isTunnel = response.profileDefaultPolicy === "proxy";
+      modeVal.textContent = isTunnel ? "PAC (туннель)" : "PAC (селективный)";
+      modeVal.title = isTunnel
+        ? "Весь трафик через прокси, кроме исключений"
+        : "Проксируются только домены из правил; остальной трафик — напрямую";
+    } else if (response.protocol) {
+      modeVal.textContent = "Fixed (" + response.protocol.toUpperCase() + ")";
+      modeVal.title = "Весь трафик направляется через фиксированный прокси-сервер";
+    } else {
+      modeVal.textContent = "—";
+      modeVal.title = "";
+    }
+  }
+  if (tabRulesDefaultPolicy && response.profileDefaultPolicy) {
+    const isTunnel = response.profileDefaultPolicy === "proxy";
+    tabRulesDefaultPolicy.textContent = isTunnel ? "PROXY (туннель)" : "DIRECT (селективный)";
+  }
   if (serverVal) serverVal.textContent = (response.online && response.host) ? (response.host + ":" + response.port) : (response.online ? "Direct" : "Отключен");
   if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
   if (pingVal) pingVal.textContent = (response.online && response.ping) ? response.ping : "—";

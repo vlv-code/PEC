@@ -708,6 +708,76 @@ test("purity: background.js parses and stores profileDefaultPolicy from /api/syn
   assert.strictEqual(statusResponse.profileDefaultPolicy, "proxy", "profileDefaultPolicy must be passed through");
 });
 
+test("purity: popup.js and renderPopupJs render descriptive routing mode indicator (selective vs tunnel) with tooltips", async () => {
+  const popupJsPath = path.join(REPO_ROOT, "extension", "popup.js");
+  const src = fs.readFileSync(popupJsPath, "utf-8");
+  const vm = await import("node:vm");
+
+  function evaluateApplyPopupState(popupScript: string, state: any) {
+    const elements: Record<string, any> = {
+      statusText: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      badge: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      modeVal: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      serverVal: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      profileVal: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      pingVal: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      exitIpVal: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      tabRulesDefaultPolicy: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      btnToggleBypass: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      btnSync: { textContent: "", title: "", className: "", addEventListener: () => {} },
+      btnCheckIp: { textContent: "", title: "", className: "", addEventListener: () => {} },
+    };
+
+    const ctx = vm.createContext({
+      window: {
+        addEventListener: () => {},
+      },
+      document: {
+        getElementById: (id: string) => elements[id] || null,
+        querySelectorAll: () => [],
+      },
+      console,
+    });
+
+    vm.runInContext(popupScript, ctx);
+    (ctx as any).window.applyPopupState(state);
+    return elements;
+  }
+
+  // 1. Test extension/popup.js with selective PAC
+  const el1 = evaluateApplyPopupState(src, {
+    online: true,
+    protocol: "pac",
+    profileDefaultPolicy: "direct",
+  });
+  assert.strictEqual(el1.modeVal.textContent, "PAC (селективный)");
+  assert.ok(el1.modeVal.title.includes("домены из правил"), "modeVal must have informative tooltip");
+  assert.strictEqual(el1.tabRulesDefaultPolicy.textContent, "DIRECT (селективный)");
+
+  // 2. Test extension/popup.js with full tunnel PAC
+  const el2 = evaluateApplyPopupState(src, {
+    online: true,
+    protocol: "pac",
+    profileDefaultPolicy: "proxy",
+  });
+  assert.strictEqual(el2.modeVal.textContent, "PAC (туннель)");
+  assert.ok(el2.modeVal.title.includes("Весь трафик через прокси"), "modeVal must have tunnel tooltip");
+  assert.strictEqual(el2.tabRulesDefaultPolicy.textContent, "PROXY (туннель)");
+
+  // 3. Test renderPopupJs template from extensionTemplates
+  const { renderPopupJs } = await import("../src/extensionTemplates.js");
+  const { DEFAULT_BUILD_CONFIG } = await import("../src/packager.js");
+  const generatedJs = renderPopupJs(DEFAULT_BUILD_CONFIG);
+  const el3 = evaluateApplyPopupState(generatedJs, {
+    online: true,
+    protocol: "pac",
+    profileDefaultPolicy: "direct",
+  });
+  assert.strictEqual(el3.modeVal.textContent, "PAC (селективный)");
+  assert.ok(el3.modeVal.title.length > 0, "rendered template must set tooltip title");
+});
+
+
 
 
 

@@ -781,11 +781,12 @@ export function renderBackgroundJs(cfg: {
     .replace(/"__PEC_TARGET_GROUP__"/g, JSON.stringify(String(cfg.targetGroup || "Default Fleet")));
 }
 
-export function getPopupTranslations(cfg: ExtensionBuildConfig) {
-  const isRu = (cfg.locale || "ru") === "ru";
+export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
+  const safeCfg = cfg || {};
+  const isRu = (safeCfg.locale || "ru") === "ru";
   return {
     isRu,
-    title: cfg.name,
+    title: safeCfg.name || "PEC Corp",
     active: isRu ? "Активен" : "Active",
     bypassed: isRu ? "Обход активен" : "Bypass Active",
     offline: isRu ? "Отключен" : "Offline",
@@ -828,6 +829,13 @@ export function getPopupTranslations(cfg: ExtensionBuildConfig) {
     copyLogs: isRu ? "Скопировать логи" : "Copy logs",
     clearLogs: isRu ? "Очистить" : "Clear",
     copied: isRu ? "Скопировано!" : "Copied!",
+    pacSelective: isRu ? "PAC (селективный)" : "PAC (selective)",
+    pacTunnel: isRu ? "PAC (туннель)" : "PAC (tunnel)",
+    pacSelectiveHint: isRu ? "Проксируются только домены из правил; остальной трафик — напрямую" : "Only rule domains are proxied; other traffic goes direct",
+    pacTunnelHint: isRu ? "Весь трафик через прокси, кроме исключений" : "All traffic proxied except exceptions",
+    bypassMode: isRu ? "Обход (Bypass)" : "Direct (Bypass)",
+    bypassHint: isRu ? "Прокси временно отключен пользователем" : "Proxy is temporarily bypassed by user",
+    fixedProxyHint: isRu ? "Весь трафик направляется через фиксированный прокси-сервер" : "All traffic routed through fixed proxy server",
   };
 }
 
@@ -1189,14 +1197,26 @@ window.applyPopupState = function(response) {
     }
   }
   if (modeVal) {
-    const proto = response.protocol ? response.protocol.toUpperCase() : "—";
-    const pol = response.profileDefaultPolicy === "direct" ? " (${t.isRu ? "селективный" : "selective"})" : (response.profileDefaultPolicy === "proxy" ? " (${t.isRu ? "туннель" : "tunnel"})" : "");
-    modeVal.textContent = proto + pol;
+    if (response.bypassActive) {
+      modeVal.textContent = "${t.bypassMode}";
+      modeVal.title = "${t.bypassHint}";
+    } else if (response.protocol === "pac") {
+      const isTunnel = response.profileDefaultPolicy === "proxy";
+      modeVal.textContent = isTunnel ? "${t.pacTunnel}" : "${t.pacSelective}";
+      modeVal.title = isTunnel ? "${t.pacTunnelHint}" : "${t.pacSelectiveHint}";
+    } else if (response.protocol) {
+      modeVal.textContent = "Fixed (" + response.protocol.toUpperCase() + ")";
+      modeVal.title = "${t.fixedProxyHint}";
+    } else {
+      modeVal.textContent = "—";
+      modeVal.title = "";
+    }
   }
   if (serverVal) serverVal.textContent = (response.online && response.host) ? (response.host + ":" + response.port) : (response.online ? "Direct" : "${t.offline}");
   if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
   if (tabRulesDefaultPolicy && response.profileDefaultPolicy) {
-    tabRulesDefaultPolicy.textContent = response.profileDefaultPolicy.toUpperCase();
+    const isTunnel = response.profileDefaultPolicy === "proxy";
+    tabRulesDefaultPolicy.textContent = isTunnel ? "PROXY (${t.isRu ? "туннель" : "tunnel"})" : "DIRECT (${t.isRu ? "селективный" : "selective"})";
   }
   if (pingVal) pingVal.textContent = (response.online && response.ping) ? response.ping : "—";
   if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
