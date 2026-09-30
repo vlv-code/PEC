@@ -21,13 +21,16 @@ export function createSystemRouter(options: {
     res.json({ ok: true });
   });
 
-  router.get("/api/ip-echo", (req: Request, res: Response) => {
+  const handleIpEcho = (req: Request, res: Response) => {
     res.json({
       ip: getClientIp(req),
       note: "Egress IP as observed by the PEC server",
       timestamp: new Date().toISOString(),
     });
-  });
+  };
+
+  router.get("/api/ip-echo", handleIpEcho);
+  router.get("/ip-echo", handleIpEcho);
 
   router.get("/api/status", async (_req: Request, res: Response) => {
     try {
@@ -171,3 +174,5 @@ export function createSystemRouter(options: {
 
   return router;
 }
+
+export const createSystemRoutes = createSystemRouter;
