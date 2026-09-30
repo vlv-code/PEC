@@ -537,6 +537,10 @@ async function syncWithServer(forceRefresh = false) {
               await applyProxyConfig(payload.config);
             }
           }
+        } else {
+          const statusMsg = "HTTP " + res.status + (res.statusText ? " " + res.statusText : "");
+          console.warn("[corp-proxy] Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
+          logEvent("warn", "Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
         }
       } catch (err) {
         console.warn("[corp-proxy] Sync endpoint error, trying fallback /creds:", err);

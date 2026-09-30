@@ -557,4 +557,79 @@ test("purity: background.js handles non-ASCII PAC scripts safely and falls back 
   }
 });
 
+test("purity: background.js logs HTTP error status when /api/sync fails with non-OK status", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  const loggedEvents: Array<{ level: string; message: string }> = [];
+
+  const vmScript = `
+    const chrome = {
+      storage: {
+        local: {
+          get: () => Promise.resolve({ pecLogs: [] }),
+          set: (obj) => {
+            if (obj.pecLogs) {
+              loggedEvents.length = 0;
+              loggedEvents.push(...obj.pecLogs);
+            }
+            return Promise.resolve();
+          }
+        },
+        managed: { get: () => Promise.resolve({}) }
+      },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: {
+        settings: {
+          set: () => Promise.resolve(),
+          get: () => Promise.resolve({ value: { mode: "system" }, levelOfControl: "controlled_by_this_extension" })
+        },
+        onProxyError: { addListener: () => {} }
+      },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: { getManifest: () => ({ version: "1.0.0" }), id: "test-id", onMessage: { addListener: () => {} } }
+    };
+    ${src}
+    globalThis.testSyncWithServer = syncWithServer;
+  `;
+
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: (url: string) => {
+      if (url.includes("/api/sync")) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          statusText: "Unauthorized",
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ user: "fallbackUser", pass: "fallbackPass" }),
+      });
+    },
+    AbortSignal,
+    Map,
+    parseInt,
+    loggedEvents,
+  });
+
+  vm.runInContext(vmScript, ctx);
+
+  await (ctx as any).testSyncWithServer(true);
+
+  const syncFailLog = loggedEvents.find(
+    (e) => e.level === "warn" && e.message.includes("/api/sync returned HTTP 401")
+  );
+  assert.ok(syncFailLog, "must record warning log with HTTP 401 status when /api/sync fails");
+});
+
+
 
