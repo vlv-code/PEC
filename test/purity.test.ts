@@ -109,6 +109,45 @@ test("purity: extension/background.js evaluates top-level scope without Referenc
   vm.runInContext(vmScript, ctx);
 });
 
+test("purity: extension/background.js logs fatal error when loaded with unsubstituted __PEC_ placeholders", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  let errorLogged = "";
+  const vmScript = `
+    const chrome = {
+      storage: { local: { get: () => Promise.resolve({}), set: () => Promise.resolve() }, managed: { get: () => Promise.resolve({}) } },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: { settings: { set: () => Promise.resolve() } },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: { getManifest: () => ({ version: "1.0.0" }), id: "test-id", onMessage: { addListener: () => {} } }
+    };
+    ${src}
+  `;
+  const ctx = vm.createContext({
+    console: {
+      ...console,
+      error: (...args: any[]) => { errorLogged += args.join(" "); },
+    },
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: () => Promise.resolve({ ok: false }),
+    AbortSignal,
+    Map,
+  });
+  vm.runInContext(vmScript, ctx);
+
+  assert.ok(
+    errorLogged.includes("FATAL: server URL placeholder was not substituted"),
+    "background.js must log fatal error when raw placeholders are present"
+  );
+});
+
 test("purity: the rendered background.js (placeholders substituted) parses as JavaScript", async () => {
   const { packageExtension } = await import("../src/packager.js");
   packageExtension("https://purity-render.example.corp");

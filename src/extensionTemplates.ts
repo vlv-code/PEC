@@ -38,6 +38,15 @@ const BYPASS_TIMEOUT_MIN = 15;
 const BADGE_ENABLED = true;
 const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
 
+// Fail fast on un-substituted build placeholders (loaded extension/ instead of dist/unpacked)
+if (DEFAULT_SERVER_BASE.startsWith("__" + "PEC_")) {
+  console.error(
+    "[corp-proxy] FATAL: server URL placeholder was not substituted. " +
+    "You probably loaded the raw extension/ template directory instead of the " +
+    "built dist/unpacked/ output. Proxy sync is DISABLED."
+  );
+}
+
 const ALARM_SYNC = "corp_proxy_sync";
 const ALARM_BYPASS_EXPIRE = "corp_proxy_bypass_expire";
 
