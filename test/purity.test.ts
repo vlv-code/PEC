@@ -876,6 +876,16 @@ test("purity: package.json provides distinct build:server and build:extension sc
   assert.match(pkg.scripts["build:extension"], /pack-extension\.ts/);
 });
 
+test("purity: extension/README.md references actual npm/tsx build script and not nonexistent pack.py", () => {
+  const readme = fs.readFileSync(path.join(REPO_ROOT, "extension", "README.md"), "utf-8");
+  assert.ok(!readme.includes("pack.py"), "extension/README.md must not reference nonexistent pack.py");
+  assert.ok(
+    readme.includes("pack-extension.ts") || readme.includes("build:extension"),
+    "extension/README.md must reference pack-extension.ts or build:extension"
+  );
+});
+
+
 
 
 
