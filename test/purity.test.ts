@@ -631,5 +631,83 @@ test("purity: background.js logs HTTP error status when /api/sync fails with non
   assert.ok(syncFailLog, "must record warning log with HTTP 401 status when /api/sync fails");
 });
 
+test("purity: background.js parses and stores profileDefaultPolicy from /api/sync and delivers via GET_STATUS", async () => {
+  const bgPath = path.join(REPO_ROOT, "extension", "background.js");
+  const src = fs.readFileSync(bgPath, "utf-8");
+  const vm = await import("node:vm");
+
+  const vmScript = `
+    const chrome = {
+      storage: {
+        local: { get: () => Promise.resolve({}), set: () => Promise.resolve() },
+        managed: { get: () => Promise.resolve({}) }
+      },
+      alarms: { create: () => {}, get: (_n, cb) => cb && cb(null), onAlarm: { addListener: () => {} } },
+      privacy: { network: { webRTCIPHandlingPolicy: { set: () => Promise.resolve() } } },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      proxy: {
+        settings: {
+          set: () => Promise.resolve(),
+          get: () => Promise.resolve({ value: { mode: "system" }, levelOfControl: "controlled_by_this_extension" })
+        },
+        onProxyError: { addListener: () => {} }
+      },
+      webRequest: { onAuthRequired: { addListener: () => {} }, onCompleted: { addListener: () => {} }, onErrorOccurred: { addListener: () => {} } },
+      runtime: {
+        getManifest: () => ({ version: "1.0.0" }),
+        id: "test-id",
+        onMessage: {
+          addListener: (fn) => { globalThis.capturedMessageListener = fn; }
+        }
+      }
+    };
+    ${src}
+    globalThis.testSyncWithServer = syncWithServer;
+  `;
+
+  const ctx = vm.createContext({
+    console,
+    setTimeout,
+    clearTimeout,
+    Date,
+    URL,
+    fetch: (url: string) => {
+      if (url.includes("/api/sync")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            profileName: "Full Tunnel VIP",
+            profileDefaultPolicy: "proxy",
+            config: {
+              protocol: "pac",
+              pacUrl: "https://pac.example.corp/proxy.pac",
+            },
+            creds: { user: "u", pass: "p" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, text: () => Promise.resolve("function FindProxyForURL() { return 'DIRECT'; }") });
+    },
+    AbortSignal,
+    Map,
+    parseInt,
+  });
+
+  vm.runInContext(vmScript, ctx);
+
+  await (ctx as any).testSyncWithServer(true);
+
+  // Ask GET_STATUS via message listener
+  let statusResponse: any = null;
+  (ctx as any).capturedMessageListener({ action: "GET_STATUS" }, {}, (resp: any) => {
+    statusResponse = resp;
+  });
+
+  assert.ok(statusResponse, "GET_STATUS must return status object");
+  assert.strictEqual(statusResponse.profileDefaultPolicy, "proxy", "profileDefaultPolicy must be passed through");
+});
+
+
 
 

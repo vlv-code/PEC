@@ -127,6 +127,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       creds: currentCreds ? { user: currentCreds.user, pass: currentCreds.pass } : null,
       profileId: assignedProfile.id,
       profileName: assignedProfile.name,
+      profileDefaultPolicy: assignedProfile.defaultPolicy || "direct",
       config: {
         ...proxyConfig,
         pacUrl,

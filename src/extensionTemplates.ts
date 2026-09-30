@@ -66,6 +66,7 @@ let currentProxyState = {
   host: "",
   port: 10809,
   profileName: "Default Split",
+  profileDefaultPolicy: "direct",
   bypassActive: false,
   bypassExpiresAt: null,
   serverBase: DEFAULT_SERVER_BASE,
@@ -544,6 +545,7 @@ async function syncWithServer(forceRefresh = false) {
               host: payload.config.host || "",
               port: payload.config.port || 10809,
               profileName: payload.profileName || "Default Profile",
+              profileDefaultPolicy: payload.profileDefaultPolicy || "direct",
               pacUrl: payload.config.pacUrl || "",
               lastSync: Date.now(),
             };

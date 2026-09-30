@@ -112,11 +112,13 @@ test("HTTP: e2e - sync as a group worker, then receive that group's PAC", async 
       creds: { user: string; pass: string } | null;
       profileId: string;
       profileName: string;
+      profileDefaultPolicy: string;
       config: { pacUrl: string };
     };
     assert.strictEqual(sync.ok, true);
     assert.strictEqual(sync.profileName, "E2E QA Group Profile", "group workers must resolve their group profile");
     assert.strictEqual(sync.profileId, qaProfile.id);
+    assert.strictEqual(sync.profileDefaultPolicy, "direct", "sync must expose profileDefaultPolicy");
     assert.strictEqual(sync.creds!.pass, "e2e-fleet-pass", "sync must deliver the current fleet credentials");
     assert.ok(sync.config.pacUrl.includes(`profileId=${qaProfile.id}`), "pacUrl must point at the resolved profile");
 
