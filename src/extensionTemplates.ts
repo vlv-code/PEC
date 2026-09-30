@@ -1382,11 +1382,13 @@ function initPopup() {
 
   // Diagnostics log viewer
   function formatTime(iso) {
+    if (!iso) return "--:--:--";
     try {
       const d = new Date(iso);
+      if (isNaN(d.getTime())) return "--:--:--";
       return d.toTimeString().split(" ")[0];
     } catch {
-      return "";
+      return "--:--:--";
     }
   }
 
@@ -1402,7 +1404,7 @@ function initPopup() {
     if (countTag) countTag.textContent = logs.length + "${t.entriesSuffix}";
     container.textContent = logs
       .map(function(l) {
-        const time = formatTime(l.time);
+        const time = formatTime(l.timestamp || l.time);
         const lvl = (l.level || "info").toUpperCase().padEnd(5);
         return "[" + time + "] " + lvl + " " + l.message;
       })
