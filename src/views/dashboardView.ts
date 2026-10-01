@@ -84,7 +84,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- 3. Account (dashboard login credentials) -->
             <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);">
               <button type="button" id="btnOpenCredsModal" class="popover-layout-btn" style="width: 100%;">
-                🔑 <span style="font-size: 11px; font-weight: 600;">Сменить логин / пароль</span>
+                <img src="/icons/key.png" class="icon-inline" alt="key"> <span style="font-size: 11px; font-weight: 600;">Сменить логин / пароль</span>
               </button>
             </div>
           </div>
@@ -122,7 +122,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     ${isDefaultTokenInUse ? `
     <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid #ef4444; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
       <div style="display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 16px;">⚠️</span>
+        <img src="/icons/warning.png" class="icon-inline-lg" alt="warning">
         <span style="font-size: 12px; color: #fca5a5;">
           <strong>Security Warning:</strong> The server is running with the default shared token (see <code>EXT_SHARED_TOKEN</code> in <code>.env.example</code>). Please set a unique, secure <strong>EXT_SHARED_TOKEN</strong> in your <strong>.env</strong> file.
         </span>
@@ -147,12 +147,12 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
     <!-- Navigation Tabs -->
     <div class="tabs-nav">
-      <button id="tabBtnRouting" class="tab-btn active" onclick="switchTab('routing')" data-i18n="tabBtnRouting">Routing & GeoBases</button>
-      <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder">Extension Constructor Studio</button>
-      <button id="tab-instances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances">💻 Устройства</button>
-      <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo">GPO Deployment</button>
-      <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings">Proxy Settings</button>
-      <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs">Audit & Tester</button>
+      <button id="tabBtnRouting" class="tab-btn active" onclick="switchTab('routing')" data-i18n="tabBtnRouting"><img src="/icons/routing.png" class="icon-inline" alt="routing"> Routing & GeoBases</button>
+      <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder"><img src="/icons/palette.png" class="icon-inline" alt="builder"> Extension Constructor Studio</button>
+      <button id="tab-instances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances"><img src="/icons/devices.png" class="icon-inline" alt="devices"> Устройства</button>
+      <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo"><img src="/icons/building.png" class="icon-inline" alt="gpo"> GPO Deployment</button>
+      <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings"><img src="/icons/server.png" class="icon-inline" alt="proxy"> Proxy Settings</button>
+      <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs"><img src="/icons/logs.png" class="icon-inline" alt="logs"> Audit & Tester</button>
     </div>
 
     <!-- ==================== TAB 1: ROUTING & GEOBASES ==================== -->
@@ -209,7 +209,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               Routing policy applied to matching browser instances.
             </p>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span id="unsavedChangesBadge" class="unsaved-badge" style="display: none;">⚠️ <span data-i18n="lblUnsavedChanges">Unsaved Changes</span></span>
+              <span id="unsavedChangesBadge" class="unsaved-badge" style="display: none;"><img src="/icons/warning.png" class="icon-inline-sm" alt="warn"> <span data-i18n="lblUnsavedChanges">Unsaved Changes</span></span>
               <button onclick="saveCurrentProfile()" data-i18n="btnSaveProfile">Save Routing Profile</button>
               <button onclick="deleteCurrentProfile()" class="btn-danger" style="font-size: 12px;" data-i18n="btnDeleteProfile">Delete Profile</button>
               <a id="btnPacPreview" href="/proxy.pac" target="_blank" class="btn-secondary" style="font-size: 12px;" data-i18n="btnPacPreview">View PAC Script</a>
@@ -223,7 +223,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             Quick Add GeoBase & Domain Bundles
           </h3>
           <button type="button" onclick="openImportPresetsModal()" class="btn-secondary" style="font-size: 12px; padding: 4px 10px;" data-i18n="btnImportPresets">
-            📥 + Import Presets (.dat / .txt)
+            <img src="/icons/download.png" class="icon-inline" alt="import"> + Import Presets (.dat / .txt)
           </button>
         </div>
         <div class="presets-grid" id="presetsContainer">
@@ -305,11 +305,11 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <label style="margin-bottom: 8px;" data-i18n="lblArchetypePresets">1. Режим интерфейса</label>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button type="button" class="preset-chip active" id="chip-popup" onclick="applyUiModePreset('popup')">
-                <span>👤</span>
+                <img src="/icons/user.png" class="icon-inline" alt="user">
                 <span data-i18n="chipPopupMode">Обычный режим</span>
               </button>
               <button type="button" class="preset-chip" id="chip-stealth" onclick="applyUiModePreset('stealth')">
-                <span>👻</span>
+                <img src="/icons/ghost.png" class="icon-inline" alt="ghost">
                 <span data-i18n="chipStealthMode">Скрытый агент</span>
               </button>
             </div>
@@ -369,11 +369,11 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblStudioThemeMode">Режим темы по умолчанию:</div>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                 <button type="button" class="studio-mode-btn active" id="btnStudioModeDark" onclick="setStudioThemeMode('dark')">
-                  <span>🌙</span>
+                  <img src="/icons/moon.png" class="icon-inline" alt="moon">
                   <span style="font-size: 12px; font-weight: 600;" data-i18n="optModeDark">Темная (Ночь)</span>
                 </button>
                 <button type="button" class="studio-mode-btn" id="btnStudioModeLight" onclick="setStudioThemeMode('light')">
-                  <span>☀️</span>
+                  <img src="/icons/sun.png" class="icon-inline" alt="sun">
                   <span style="font-size: 12px; font-weight: 600;" data-i18n="optModeLight">Светлая (День)</span>
                 </button>
               </div>
@@ -420,12 +420,12 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <input type="text" id="bldEmoji" oninput="onConfigChangeLive()" placeholder="🛡️" style="width: 50px; text-align: center; font-size: 18px;" />
                 <input type="file" id="iconFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;" onchange="onIconFileSelected(event)" />
                 <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('iconFileInput').click()" style="display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; height: 34px;">
-                  <span>📁</span>
+                  <img src="/icons/folder.png" class="icon-inline" alt="folder">
                   <span data-i18n="btnUploadIcon">Загрузить изображение</span>
                 </button>
                 <div id="customIconPreviewBox" style="display: none; align-items: center; gap: 6px;">
                   <img id="customIconPreviewImg" src="" alt="Icon preview" style="width: 28px; height: 28px; border-radius: 6px; object-fit: contain; border: 1px solid var(--border);" />
-                  <button type="button" class="btn btn-sm" onclick="clearCustomIcon()" title="Удалить иконку" style="padding: 2px 6px; font-size: 11px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;">✕</button>
+                  <button type="button" class="btn btn-sm" onclick="clearCustomIcon()" title="Удалить иконку" style="padding: 2px 6px; font-size: 11px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;"><img src="/icons/cross.png" class="icon-inline-sm" alt="del"></button>
                 </div>
               </div>
             </div>
@@ -510,12 +510,12 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <span class="browser-dot dot-green"></span>
               </div>
               <div class="browser-address-bar">
-                <span>🔒</span>
+                <img src="/icons/lock.png" class="icon-inline" alt="lock">
                 <span>https://company-intranet.corp/internal-app</span>
               </div>
               <!-- Chrome extension icon with live badge -->
               <div class="browser-ext-icon" id="browserExtIcon" onclick="togglePopupPreviewVisibility()" title="Click to inspect extension popup">
-                <span id="browserIconGlyph">🛡️</span>
+                <span id="browserIconGlyph"><img src="/icons/shield.png" class="icon-inline" alt="shield"></span>
                 <span class="browser-ext-badge" id="browserBadge">PRX</span>
               </div>
             </div>
@@ -529,7 +529,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
               <!-- Stealth Mode Fallback Card -->
               <div id="stealthNotice" style="display: none; background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 24px; text-align: center; max-width: 320px;">
-                <div style="font-size: 38px; margin-bottom: 10px;">👻</div>
+                <div style="margin-bottom: 10px;"><img src="/icons/ghost.png" style="width: 38px; height: 38px;" alt="stealth"></div>
                 <h4 style="font-size: 15px; margin-bottom: 6px;" data-i18n="titleStealthNotice">Stealth Mode Enabled</h4>
                 <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5;" data-i18n="subStealthNotice">
                   The extension runs silently as an enterprise background service worker without a popup window. Traffic is routed dynamically via PAC policy.
@@ -672,7 +672,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     <div id="tab-proxy-settings" class="tab-pane">
       <!-- 0. Warning Banner for placeholder 10.0.0.1 (shown when no proxy is active) -->
       <div id="noActiveProxyWarning" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.4); border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; display: none; align-items: flex-start; gap: 10px; font-size: 13px;">
-        <span style="font-size: 18px; line-height: 1;">⚠️</span>
+        <img src="/icons/warning.png" class="icon-inline-lg" alt="warn">
         <div>
           <strong data-i18n="warnNoActiveProxyTitle">No active upstream proxy.</strong>
           <div data-i18n="warnNoActiveProxyDesc" style="margin-top: 2px;">Extensions are receiving placeholder <code>10.0.0.1:10809</code> and traffic will not flow. Add a proxy via "+ Add Manual Proxy" or "+ Add from 3x-ui" and click "Activate".</div>
@@ -863,7 +863,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
   <div id="loginModal" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
     <div style="max-width: 420px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px; text-align: center;">
-      <div style="font-size: 28px; margin-bottom: 8px;">🔐</div>
+      <div style="margin-bottom: 8px;"><img src="/icons/lock.png" style="width: 28px; height: 28px;" alt="login"></div>
       <h2 style="margin: 0 0 8px 0; font-size: 18px;">Authentication Required</h2>
       <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите логин и пароль администратора для входа в консоль управления PEC. Учётные данные проверяются на сервере и заменяются HttpOnly-сессией. Это НЕ токен расширений (EXT_SHARED_TOKEN).</p>
       <input type="text" id="loginUsernameInput" placeholder="Логин" autocomplete="username" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
@@ -875,7 +875,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
   <div id="credsModal" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
     <div style="max-width: 440px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px;">
-      <h2 style="margin: 0 0 8px 0; font-size: 17px; text-align: center;">🔑 Учётная запись администратора</h2>
+      <h2 style="margin: 0 0 8px 0; font-size: 17px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px;"><img src="/icons/key.png" class="icon-inline" alt="key"> <span>Учётная запись администратора</span></h2>
       <p style="color: #94a3b8; font-size: 12px; margin: 0 0 16px 0; text-align: center;">Смена логина и/или пароля панели. Требуется текущий пароль; после сохранения все прочие сессии будут завершены.</p>
       <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Текущий пароль</label>
       <input type="password" id="credCurrentPassword" autocomplete="current-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
@@ -976,8 +976,9 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         </div>
       </div>
 
-      <div id="proxyFormSocksWarning" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; font-size: 11px; color: #f59e0b; line-height: 1.4;">
-        <span data-i18n="warnChromiumSocks5Auth">⚠️ Warning: Chromium browsers (Chrome, Edge, Yandex) do not support username/password authentication for SOCKS5. For Chrome with auth, use HTTP protocol.</span>
+      <div id="proxyFormSocksWarning" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; font-size: 11px; color: #f59e0b; line-height: 1.4; align-items: center; gap: 6px;">
+        <img src="/icons/warning.png" class="icon-inline" alt="warn">
+        <span data-i18n="warnChromiumSocks5Auth">Warning: Chromium browsers (Chrome, Edge, Yandex) do not support username/password authentication for SOCKS5. For Chrome with auth, use HTTP protocol.</span>
       </div>
 
       <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">

@@ -188,7 +188,8 @@ function applyTheme(theme) {
   }
   const btnThemeToggle = typeof document !== "undefined" && document.getElementById ? document.getElementById("btnThemeToggle") : null;
   if (btnThemeToggle) {
-    btnThemeToggle.textContent = isLight ? "🌙" : "☀️";
+    const iconName = isLight ? "moon.png" : "sun.png";
+    btnThemeToggle.innerHTML = '<img src="icons/' + iconName + '" class="icon-inline" alt="theme">';
     btnThemeToggle.title = isLight ? "Переключить на темную тему" : "Переключить на светлую тему";
   }
 }
@@ -282,7 +283,7 @@ function initPopup() {
       if (!syncIcon) {
         const span = document.createElement("span");
         span.className = "sync-icon";
-        span.textContent = btnSyncNow.textContent || "🔄";
+        span.innerHTML = '<img src="icons/sync.png" class="icon-inline" alt="sync">';
         btnSyncNow.textContent = "";
         btnSyncNow.appendChild(span);
         syncIcon = span;
@@ -426,7 +427,7 @@ function initPopup() {
 
       const delBtn = document.createElement("button");
       delBtn.className = "rule-del-btn";
-      delBtn.textContent = "✕";
+      delBtn.innerHTML = '<img src="icons/cross.png" class="icon-inline-sm" alt="del">';
       delBtn.title = "Удалить правило";
       delBtn.addEventListener("click", () => {
         const removeIdx = userRules.indexOf(rule);

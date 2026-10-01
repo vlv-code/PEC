@@ -407,8 +407,8 @@
         btnKillSwitchOn: 'Kill-Switch: ON (Active)',
         tabBtnRouting: 'Routing & GeoBases',
         tabBtnBuilder: 'Extension Constructor Studio',
-        tabBtnFleet: '💻 Devices',
-        tabBtnInstances: '💻 Devices',
+        tabBtnFleet: 'Devices',
+        tabBtnInstances: 'Devices',
         tabBtnGpo: 'GPO Deployment',
         tabBtnRotation: 'Proxy Settings',
         tabBtnProxySettings: 'Proxy Settings',
@@ -419,9 +419,9 @@
         modalSettingsTitle: 'Server Customization & GitHub Releases',
         lblSettingsLayout: '1. Dashboard Layout Style',
         subSettingsLayout: 'Choose the structural layout archetype for all dashboard tabs:',
-        optLayoutConsole: '🖥️ Compact Console',
+        optLayoutConsole: '<img src="/icons/devices.png" class="icon-inline" alt="console"> Compact Console',
         descLayoutConsole: 'Ultra-minimalist compact layout with flat borders, 4px corners, and maximum information density across all tabs.',
-        optLayoutTerminal: '⚡ Cyber Terminal',
+        optLayoutTerminal: '<img src="/icons/bolt.png" class="icon-inline" alt="terminal"> Cyber Terminal',
         descLayoutTerminal: 'Monospace SecOps cyber-terminal with sharp 0px corners, neon highlights, and glowing cards.',
         badgeSelected: 'Active',
         lblSettingsTheme: '2. Color Palette Scheme',
@@ -453,7 +453,7 @@
         btnDeleteProfile: 'Delete Profile',
         btnPacPreview: 'View PAC Script',
         titleGeoPresets: 'Quick Add GeoBase & Domain Bundles',
-        btnImportPresets: '📥 + Import Presets (.dat / .txt)',
+        btnImportPresets: '<img src="/icons/upload.png" class="icon-inline" alt="import"> + Import Presets (.dat / .txt)',
         titleImportPresets: 'Import GeoData & Presets',
         subImportPresets: 'Import geosite.dat, geoip.dat or plaintext domain lists',
         titleCustomRule: 'Add Custom Domain / Subnet Rule',
@@ -529,10 +529,10 @@
         subStealthNotice: 'The extension runs silently as an enterprise background service worker without a popup window. Traffic is routed dynamically via PAC policy.',
         badgeStealthActive: 'Icon Badge: Active',
         lblSimState: 'Simulated Extension State',
-        btnSimOnline: 'Online Proxy',
-        btnSimBypass: 'Bypassed',
-        btnSimOffline: 'Offline Fallback',
-        btnSimError: 'Re-Authenticating',
+        btnSimOnline: '<img src="/icons/status-green.png" class="icon-inline-sm" alt="online"> Online Proxy',
+        btnSimBypass: '<img src="/icons/status-yellow.png" class="icon-inline-sm" alt="bypass"> Bypassed',
+        btnSimOffline: '<img src="/icons/status-red.png" class="icon-inline-sm" alt="offline"> Offline Fallback',
+        btnSimError: '<img src="/icons/sync.png" class="icon-inline-sm" alt="auth"> Re-Authenticating',
         titleCodeInternals: 'Extension Source Code Internals',
         lblActiveFile: 'Active File:',
         subCodeInternals: 'Live Code Editor: Edits in popup.html or popup.js update the Interactive Preview instantly.',
@@ -633,7 +633,7 @@
         toastProxySynced: 'Proxy synchronized!',
         toastProxyDeleted: 'Proxy deleted',
         toastProxySaved: 'Proxy saved!',
-        warnChromiumSocks5Auth: '⚠️ Chromium (Chrome, Edge, Brave, Yandex) does not support SOCKS5 authentication. If credentials are set, Chrome will reject the connection or bypass the proxy. Use HTTP protocol for authenticated corporate proxies or use SOCKS5 without username/password (e.g. IP whitelist).',
+        warnChromiumSocks5Auth: '<img src="/icons/warning.png" class="icon-inline" alt="warn"> Chromium (Chrome, Edge, Brave, Yandex) does not support SOCKS5 authentication. If credentials are set, Chrome will reject the connection or bypass the proxy. Use HTTP protocol for authenticated corporate proxies or use SOCKS5 without username/password (e.g. IP whitelist).',
         warnSocksAuthTable: 'Chromium browsers do not support SOCKS5 authentication. Use HTTP or IP-whitelisted SOCKS5.',
         title3xuiCreds: '3x-ui API Credentials & Timing Scheduler',
         lbl3xuiPanelUrl: '3x-ui Panel URL',
@@ -669,11 +669,11 @@
         titleDeployScenarios: 'Server Deployment & Container Scenarios',
         badgeProdReady: 'Production Ready',
         subDeployScenarios: 'Choose the best installation option for your corporate infrastructure: from isolated Docker containers to Linux systemd services or Nginx SSL reverse-proxy.',
-        btnScenDocker: '🐳 Docker & Compose',
-        btnScenSystemd: '🐧 Linux Systemd Service',
-        btnScenNginx: '🛡️ Nginx + SSL (HTTPS)',
-        btnScenStandalone: '⚡ Standalone / PM2',
-        btnScenGpo: '🏢 Active Directory / GPO',
+        btnScenDocker: '<img src="/icons/docker.png" class="icon-inline" alt="docker"> Docker & Compose',
+        btnScenSystemd: '<img src="/icons/linux.png" class="icon-inline" alt="linux"> Linux Systemd Service',
+        btnScenNginx: '<img src="/icons/shield.png" class="icon-inline" alt="nginx"> Nginx + SSL (HTTPS)',
+        btnScenStandalone: '<img src="/icons/bolt.png" class="icon-inline" alt="standalone"> Standalone / PM2',
+        btnScenGpo: '<img src="/icons/building.png" class="icon-inline" alt="gpo"> Active Directory / GPO',
         scen1Title: 'Option 1: Docker & Docker Compose (Recommended)',
         scen1Desc: 'Fully isolated multi-stage container based on Alpine Linux. Automatically persists rotated passwords, compiled .CRX extensions and PAC scripts in Docker volumes.',
         scen1Quick: 'Quick single-command launch:',
@@ -730,8 +730,8 @@
         btnKillSwitchOn: 'Kill-Switch: ВКЛ (Авария)',
         tabBtnRouting: 'Маршрутизация и Гео-базы',
         tabBtnBuilder: 'Конструктор расширения',
-        tabBtnFleet: '💻 Устройства',
-        tabBtnInstances: '💻 Устройства',
+        tabBtnFleet: 'Устройства',
+        tabBtnInstances: 'Устройства',
         tabBtnGpo: 'GPO & Реестр Windows',
         tabBtnRotation: 'Настройки прокси',
         tabBtnProxySettings: 'Настройки прокси',
@@ -742,9 +742,9 @@
         modalSettingsTitle: 'Кастомизация сервера и Релизы',
         lblSettingsLayout: '1. Стиль интерфейса сервера (Layout)',
         subSettingsLayout: 'Выберите структурный шаблон для всех вкладок панели:',
-        optLayoutConsole: '🖥️ Compact Console',
+        optLayoutConsole: '<img src="/icons/devices.png" class="icon-inline" alt="console"> Compact Console',
         descLayoutConsole: 'Ультра-минималистичный компактный интерфейс с плоскими границами, 4px скруглениями и максимальной плотностью информации во всех вкладках.',
-        optLayoutTerminal: '⚡ Cyber Terminal',
+        optLayoutTerminal: '<img src="/icons/bolt.png" class="icon-inline" alt="terminal"> Cyber Terminal',
         descLayoutTerminal: 'Моноширинный киберпанк/SecOps терминал со строгими 0px углами, неоновой сеткой и подсвеченными карточками.',
         badgeSelected: 'Активно',
         lblSettingsTheme: '2. Цветовая палитра (Color Scheme)',
@@ -776,7 +776,7 @@
         btnDeleteProfile: 'Удалить профиль',
         btnPacPreview: 'Открыть PAC-скрипт',
         titleGeoPresets: 'Быстрое добавление гео-баз и наборов доменов',
-        btnImportPresets: '📥 + Импорт пресетов (.dat / .txt)',
+        btnImportPresets: '<img src="/icons/upload.png" class="icon-inline" alt="import"> + Импорт пресетов (.dat / .txt)',
         titleImportPresets: 'Импорт гео-данных и пресетов',
         subImportPresets: 'Импорт geosite.dat, geoip.dat или текстовых списков доменов',
         titleCustomRule: 'Добавить пользовательское правило для домена / подсети',
@@ -852,10 +852,10 @@
         subStealthNotice: 'Расширение работает в фоновом режиме без всплывающего окна. Трафик маршрутизируется динамически через PAC-скрипт.',
         badgeStealthActive: 'Бейдж иконки: Активен',
         lblSimState: 'Состояние симуляции расширения',
-        btnSimOnline: '🟢 Онлайн прокси',
-        btnSimBypass: '🟡 Прямой обход',
-        btnSimOffline: '🔴 Офлайн',
-        btnSimError: '🔄 407 Ре-аутентификация',
+        btnSimOnline: '<img src="/icons/status-green.png" class="icon-inline-sm" alt="online"> Онлайн прокси',
+        btnSimBypass: '<img src="/icons/status-yellow.png" class="icon-inline-sm" alt="bypass"> Прямой обход',
+        btnSimOffline: '<img src="/icons/status-red.png" class="icon-inline-sm" alt="offline"> Офлайн',
+        btnSimError: '<img src="/icons/sync.png" class="icon-inline-sm" alt="auth"> 407 Ре-аутентификация',
         titleCodeInternals: 'Исходный код и внутренние файлы расширения',
         lblActiveFile: 'Активный файл:',
         subCodeInternals: 'Редактор кода: изменения в popup.html или popup.js мгновенно обновляют интерактивный предпросмотр.',
@@ -956,7 +956,7 @@
         toastProxySynced: 'Прокси синхронизирован!',
         toastProxyDeleted: 'Прокси удален',
         toastProxySaved: 'Прокси сохранен!',
-        warnChromiumSocks5Auth: '⚠️ Браузеры на базе Chromium (Chrome, Edge, Brave, Яндекс) не поддерживают авторизацию (логин/пароль) для SOCKS5. При наличии логина Chrome не сможет подключиться к прокси. Используйте протокол HTTP для авторизованных корпоративных прокси либо SOCKS5 без логина/пароля (по IP-фильтру).',
+        warnChromiumSocks5Auth: '<img src="/icons/warning.png" class="icon-inline" alt="warn"> Браузеры на базе Chromium (Chrome, Edge, Brave, Яндекс) не поддерживают авторизацию (логин/пароль) для SOCKS5. При наличии логина Chrome не сможет подключиться к прокси. Используйте протокол HTTP для авторизованных корпоративных прокси либо SOCKS5 без логина/пароля (по IP-фильтру).',
         warnSocksAuthTable: 'Браузеры Chromium не поддерживают авторизацию для SOCKS5. Используйте HTTP или SOCKS5 без авторизации.',
         title3xuiCreds: 'Учетные данные 3x-ui API и планировщик',
         lbl3xuiPanelUrl: 'URL панели 3x-ui',
@@ -992,11 +992,11 @@
         titleDeployScenarios: 'Сценарии установки и развертывания сервера',
         badgeProdReady: 'Готово к Production',
         subDeployScenarios: 'Выберите подходящий вариант для вашей инфраструктуры: от изолированного контейнера Docker до службы Linux systemd или Nginx с SSL.',
-        btnScenDocker: '🐳 Docker и Compose',
-        btnScenSystemd: '🐧 Служба Linux Systemd',
-        btnScenNginx: '🛡️ Nginx + SSL (HTTPS)',
-        btnScenStandalone: '⚡ Standalone / PM2',
-        btnScenGpo: '🏢 Active Directory / GPO',
+        btnScenDocker: '<img src="/icons/docker.png" class="icon-inline" alt="docker"> Docker и Compose',
+        btnScenSystemd: '<img src="/icons/linux.png" class="icon-inline" alt="linux"> Служба Linux Systemd',
+        btnScenNginx: '<img src="/icons/shield.png" class="icon-inline" alt="nginx"> Nginx + SSL (HTTPS)',
+        btnScenStandalone: '<img src="/icons/bolt.png" class="icon-inline" alt="standalone"> Standalone / PM2',
+        btnScenGpo: '<img src="/icons/building.png" class="icon-inline" alt="gpo"> Active Directory / GPO',
         scen1Title: 'Вариант 1: Запуск через Docker и Docker Compose (Рекомендуемый)',
         scen1Desc: 'Полностью изолированный multi-stage контейнер на базе Alpine Linux. Автоматически сохраняет ротируемые пароли, скомпилированные .CRX расширения и PAC-скрипты в томах Docker.',
         scen1Quick: 'Быстрый запуск одной командой:',
@@ -1077,7 +1077,17 @@
       document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
         if (dict[key]) {
-          el.textContent = dict[key];
+          const icon = el.querySelector('img.icon-inline, svg');
+          if (icon) {
+            const clone = icon.cloneNode(true);
+            el.innerHTML = '';
+            el.appendChild(clone);
+            el.appendChild(document.createTextNode(' ' + dict[key]));
+          } else if (dict[key].includes('<')) {
+            el.innerHTML = dict[key];
+          } else {
+            el.textContent = dict[key];
+          }
         }
       });
 
@@ -1101,7 +1111,11 @@
       for (const key in dict) {
         const el = document.getElementById(key);
         if (el && !el.hasAttribute('data-i18n')) {
-          el.textContent = dict[key];
+          if (dict[key].includes('<')) {
+            el.innerHTML = dict[key];
+          } else {
+            el.textContent = dict[key];
+          }
         }
       }
 
@@ -1203,7 +1217,7 @@
             <div>
               <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; margin-bottom: 4px;">
                 <h4 style="margin: 0; font-size: 13px; font-weight: 600;">${esc(p.name)}</h4>
-                <button type="button" onclick="openGeobaseInspector('${esc(p.id)}')" class="btn-icon" title="${isRu ? 'Инспектор пресета' : 'Inspect Preset'}" style="font-size: 11px; padding: 2px 5px; line-height: 1;">🔍</button>
+                <button type="button" onclick="openGeobaseInspector('${esc(p.id)}')" class="btn-icon" title="${isRu ? 'Инспектор пресета' : 'Inspect Preset'}" style="font-size: 11px; padding: 2px 5px; line-height: 1;"><img src="/icons/search.png" class="icon-inline-sm" alt="inspect"></button>
               </div>
               <p style="margin: 0 0 6px 0;">${esc(p.description)} (${count} ${isRu ? 'записей' : 'entries'})</p>
               ${badgeHtml ? `<div style="margin-bottom: 6px;">${badgeHtml}</div>` : ''}
@@ -1943,6 +1957,51 @@
       reader.readAsDataURL(file);
     };
 
+    function getEmojiIconDataUrl() {
+      try {
+        const emojiEl = document.getElementById('bldEmoji');
+        const emoji = (emojiEl ? emojiEl.value : '🛡️').trim() || '🛡️';
+        const colorEl = document.getElementById('bldThemeColor');
+        const themeColor = (colorEl ? colorEl.value : '#00f0ff').trim() || '#00f0ff';
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return '';
+
+        // Rounded rect background
+        const rad = 28;
+        ctx.fillStyle = '#0a1020';
+        ctx.beginPath();
+        ctx.moveTo(rad, 0);
+        ctx.lineTo(128 - rad, 0);
+        ctx.quadraticCurveTo(128, 0, 128, rad);
+        ctx.lineTo(128, 128 - rad);
+        ctx.quadraticCurveTo(128, 128, 128 - rad, 128);
+        ctx.lineTo(rad, 128);
+        ctx.quadraticCurveTo(0, 128, 0, 128 - rad);
+        ctx.lineTo(0, rad);
+        ctx.quadraticCurveTo(0, 0, rad, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        // Border in primary theme color
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = themeColor;
+        ctx.stroke();
+
+        // Centered emoji
+        ctx.font = '68px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, 64, 70);
+
+        return canvas.toDataURL('image/png');
+      } catch (_) {
+        return '';
+      }
+    }
+
     async function loadBuilderConfig() {
       try {
         const res = await adminFetch('/api/builder/config');
@@ -2521,7 +2580,7 @@
         iconType: document.getElementById('bldIconType') ? document.getElementById('bldIconType').value : undefined,
         themeColor: document.getElementById('bldThemeColor').value.trim(),
         iconEmoji: document.getElementById('bldEmoji').value.trim(),
-        customIconDataUrl: currentCustomIconDataUrl || undefined,
+        customIconDataUrl: currentCustomIconDataUrl || getEmojiIconDataUrl() || undefined,
         description: document.getElementById('bldDesc').value.trim(),
         defaultServerUrl: document.getElementById('bldServerUrl')
           ? document.getElementById('bldServerUrl').value.trim()
@@ -2677,7 +2736,7 @@
             </select>
           </td>
           <td>
-            <button class="btn btn-sm btn-danger btn-delete-instance" data-id="${escapeHtml(inst.instanceId)}" title="Удалить устройство">🗑️</button>
+            <button class="btn btn-sm btn-danger btn-delete-instance" data-id="${escapeHtml(inst.instanceId)}" title="Удалить устройство"><img src="/icons/trash.png" class="icon-inline-sm" alt="del"></button>
           </td>
         </tr>`;
       }).join('');
@@ -2924,7 +2983,7 @@
           body: JSON.stringify(payload)
         });
         const data = await res.json();
-        out.textContent = (data.ok ? '✅ ' : '❌ ') + data.message;
+        out.innerHTML = (data.ok ? '<img src="/icons/check.png" class="icon-inline-sm" alt="ok"> ' : '<img src="/icons/cross.png" class="icon-inline-sm" alt="err"> ') + esc(data.message);
         out.style.color = data.ok ? 'var(--success)' : 'var(--danger)';
       } catch (e) {
         out.textContent = 'Connection test failed: ' + e;
@@ -2998,11 +3057,11 @@
             const syncTime = px.lastSync ? '<div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">' + new Date(px.lastSync).toLocaleTimeString() + '</div>' : '';
 
             const syncBtn = px.type === '3x-ui'
-              ? '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 3px 6px;" onclick="syncProxy(\'' + esc(px.id) + '\')" title="' + esc(t('btnSyncProxy', 'Sync & Rotate')) + '">🔄</button>'
+              ? '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 3px 6px;" onclick="syncProxy(\'' + esc(px.id) + '\')" title="' + esc(t('btnSyncProxy', 'Sync & Rotate')) + '"><img src="/icons/sync.png" class="icon-inline-sm" alt="sync"></button>'
               : '';
 
             const socksAuthWarn = (px.protocol === 'socks5' && px.username)
-              ? ' <span title="' + esc(t('warnSocksAuthTable', 'Chromium browsers do not support SOCKS5 with authentication. Use HTTP or IP-whitelisted SOCKS5.')) + '" style="cursor: help; color: #f59e0b;" class="socks-auth-warn">⚠️</span>'
+              ? ' <span title="' + esc(t('warnSocksAuthTable', 'Chromium browsers do not support SOCKS5 with authentication. Use HTTP or IP-whitelisted SOCKS5.')) + '" style="cursor: help; color: #f59e0b;" class="socks-auth-warn"><img src="/icons/warning.png" class="icon-inline-sm" alt="warn"></span>'
               : '';
 
             return '<tr>' +
@@ -3015,8 +3074,8 @@
               '<td><span class="badge ' + esc(statusBadge) + '" title="' + esc(px.errorMessage || '') + '">' + esc(px.status || 'IDLE') + '</span>' + syncTime + '</td>' +
               '<td style="text-align: right;"><div style="display: flex; gap: 4px; justify-content: flex-end;">' +
                 syncBtn +
-                '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 3px 6px;" onclick="openEditProxyModal(\'' + esc(px.id) + '\')" title="' + esc(t('btnEditProxy', 'Edit')) + '">✏️</button>' +
-                '<button type="button" class="btn-danger" style="font-size: 11px; padding: 3px 6px;" onclick="deleteProxy(\'' + esc(px.id) + '\')" title="' + esc(t('btnDeleteProxy', 'Delete')) + '">🗑️</button>' +
+                '<button type="button" class="btn-secondary" style="font-size: 11px; padding: 3px 6px;" onclick="openEditProxyModal(\'' + esc(px.id) + '\')" title="' + esc(t('btnEditProxy', 'Edit')) + '"><img src="/icons/edit.png" class="icon-inline-sm" alt="edit"></button>' +
+                '<button type="button" class="btn-danger" style="font-size: 11px; padding: 3px 6px;" onclick="deleteProxy(\'' + esc(px.id) + '\')" title="' + esc(t('btnDeleteProxy', 'Delete')) + '"><img src="/icons/trash.png" class="icon-inline-sm" alt="del"></button>' +
               '</div></td>' +
             '</tr>';
           }).join('');
@@ -3193,8 +3252,9 @@
           const ib = data.inbound;
           let warnHtml = '';
           if ((ib.protocol === 'socks' || ib.protocol === 'socks5') && (ib.username || ib.hasPassword)) {
-            warnHtml = '<div style="margin-top: 8px; padding: 6px 10px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 4px; color: #fbbf24; font-size: 11px;">' +
-              esc(t('warnChromiumSocks5Auth', '⚠️ Chromium (Chrome, Edge, Brave, Yandex) does not support SOCKS5 authentication. If credentials are set, Chrome will reject the connection or bypass the proxy. Use HTTP protocol for authenticated corporate proxies or use SOCKS5 without username/password (e.g. IP whitelist).')) +
+            warnHtml = '<div style="margin-top: 8px; padding: 6px 10px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 4px; color: #fbbf24; font-size: 11px; display: flex; align-items: center; gap: 6px;">' +
+              '<img src="/icons/warning.png" class="icon-inline" alt="warn"> ' +
+              '<span>' + t('warnChromiumSocks5Auth', 'Chromium (Chrome, Edge, Brave, Yandex) does not support SOCKS5 authentication. If credentials are set, Chrome will reject the connection or bypass the proxy. Use HTTP protocol for authenticated corporate proxies or use SOCKS5 without username/password (e.g. IP whitelist).') + '</span>' +
               '</div>';
           }
           if (previewEl) {

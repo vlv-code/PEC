@@ -586,7 +586,7 @@ async function applyPacScript(pacUrl, config) {
   if (currentProxyState.proxyReachable === false) {
     updateBadge("ERR", "#ef4444");
   } else {
-    updateBadge("PAC", "#0284c7");
+    updateBadge("P", "#0284c7");
   }
   await verifyAppliedProxySettings("pac_script");
 }
@@ -1100,7 +1100,7 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
     tabRules: isRu ? "Роутинг" : "Routing",
     tabDiag: isRu ? "Инфо" : "Info",
     tabHelp: isRu ? "Поддержка" : "Support",
-    connGateway: isRu ? "🔌 Подключение к корпоративному шлюзу" : "🔌 Corporate Gateway Connection",
+    connGateway: isRu ? "Подключение к прокси" : "Proxy Connection",
     proxyMode: isRu ? "Режим прокси" : "Proxy Mode",
     activeEndpoint: isRu ? "Прокси-сервер" : "Active Endpoint",
     routingProfile: isRu ? "Профиль правил" : "Routing Profile",
@@ -1124,12 +1124,12 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
     connParams: isRu ? "Параметры соединения" : "Connection Details",
     testBtn: isRu ? "Тест" : "Test",
     checkBtn: isRu ? "Проверить" : "Verify",
-    bypassRestricted: isRu ? "🔒 Прямой обход ограничен политикой безопасности предприятия." : "🔒 Direct bypass is restricted by IT enterprise policy.",
+    bypassRestricted: isRu ? "Прямой обход ограничен политикой безопасности предприятия." : "Direct bypass is restricted by IT enterprise policy.",
     defaultFallback: isRu ? "По умолчанию" : "Default Fallback",
-    aiModels: isRu ? "🤖 Модели AI и LLM" : "🤖 AI & LLM Models",
-    corpIntranet: isRu ? "🏢 Корпоративная сеть RFC1918" : "🏢 Corporate RFC1918",
-    adsTelemetry: isRu ? "🛡️ Реклама и телеметрия" : "🛡️ Ads & Telemetry",
-    socialMedia: isRu ? "🌐 Медиа и соцсети" : "🌐 Global Social / Media",
+    aiModels: isRu ? "Модели AI и LLM" : "AI & LLM Models",
+    corpIntranet: isRu ? "Корпоративная сеть RFC1918" : "Corporate RFC1918",
+    adsTelemetry: isRu ? "Реклама и телеметрия" : "Ads & Telemetry",
+    socialMedia: isRu ? "Медиа и соцсети" : "Global Social / Media",
     webrtcShield: isRu ? "Защита WebRTC IP" : "WebRTC IP Shield",
     webrtcStatus: isRu ? "Защищено (без утечки UDP)" : "Protected (No UDP leak)",
     dnsGuard: isRu ? "Защита от подмены DNS" : "DNS Poisoning Guard",
@@ -1246,20 +1246,15 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       --bg: #f8fafc; --card: #ffffff; --card-inner: #f1f5f9; --border: #cbd5e1;
     }
 
-    /* Layout Terminal */
-    [data-layout="terminal"] {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    /* Layout Terminal: 0px razor-sharp retro-terminal corners matching dashboard */
+    [data-layout="terminal"],
+    [data-layout="terminal"] * {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+      border-radius: 0 !important;
     }
-    [data-layout="terminal"] .card,
-    [data-layout="terminal"] .tab-btn,
-    [data-layout="terminal"] .btn-action,
-    [data-layout="terminal"] .form-input,
-    [data-layout="terminal"] .form-select,
-    [data-layout="terminal"] .btn-primary-sm,
-    [data-layout="terminal"] .btn-sec,
-    [data-layout="terminal"] .btn-sm,
-    [data-layout="terminal"] .btn-quick-add {
-      border-radius: 4px !important;
+    [data-layout="terminal"] *::before,
+    [data-layout="terminal"] *::after {
+      border-radius: 0 !important;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1437,6 +1432,46 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
     .btn-icon-minimal:hover {
       background: var(--bg-hover, rgba(255, 255, 255, 0.08));
       border-color: var(--accent-color);
+    }
+    .btn-icon-minimal:active,
+    .btn-theme-toggle:active,
+    .btn-sm:active,
+    .btn-sec:active,
+    .btn-primary-sm:active,
+    .btn-action:active,
+    .tab-btn:active {
+      transform: translateY(1px) scale(0.95) !important;
+      filter: brightness(0.85) contrast(1.15) !important;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    /* Inline PNG icon pack */
+    .icon-inline {
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .icon-inline-lg {
+      width: 18px;
+      height: 18px;
+      vertical-align: -4px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .icon-inline-sm {
+      width: 12px;
+      height: 12px;
+      vertical-align: -1px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
     }
     .card-header {
       display: flex;
@@ -1788,7 +1823,7 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       <span class="version-tag">v${safeCfg.version || "1.4.0"}</span>
     </div>
     <div class="header-actions">
-      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme">☀️</button>
+      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme"><img src="icons/sun.png" class="icon-inline" alt="theme"></button>
       <div class="status-badge offline" id="statusPill">
         <span class="dot"></span>
         <span id="statusText">${t.offline}</span>
@@ -1798,20 +1833,20 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
 
   <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">${t.tabConn || "Главная"}</button>
-    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">${t.tabRules || "Роутинг"}</button>
-    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">${t.tabDiag || "Инфо"}</button>
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus"><img src="icons/bolt.png" class="icon-inline" alt="status"> ${t.tabConn || "Главная"}</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting"><img src="icons/routing.png" class="icon-inline" alt="routing"> ${t.tabRules || "Роутинг"}</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo"><img src="icons/info.png" class="icon-inline" alt="info"> ${t.tabDiag || "Инфо"}</button>
   </div>
 
   <!-- TAB 1: Main (Главная) -->
   <div class="tab-content active" id="tab-status">
     <div class="card" id="cardConnection">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="card-title">${t.connGateway || "🔌 Подключение к корпоративному шлюзу"}</span>
+        <span class="card-title"><img src="icons/plug.png" class="icon-inline" alt="plug" style="margin-right: 4px;"> ${t.connGateway || "Подключение к прокси"}</span>
         <div class="card-header-actions">
-          <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}"><span class="sync-icon">🔄</span></button>
-          <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}">⏻</button>
-          <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || "Приостановить прокси на 15 минут"}">⏸️</button>
+          <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}"><span class="sync-icon"><img src="icons/sync.png" class="icon-inline" alt="sync"></span></button>
+          <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}"><img src="icons/power.png" class="icon-inline" alt="power"></button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || "Приостановить прокси на 15 минут"}"><img src="icons/pause.png" class="icon-inline" alt="pause"></button>
         </div>
       </div>
       <div class="hero-meta">
@@ -1912,8 +1947,8 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       </div>
       <pre id="logContainer" class="log-terminal"></pre>
       <div class="log-actions">
-        <button id="btnCopyLogs" class="btn-sec">${t.copyLogs}</button>
-        <button id="btnClearLogs" class="btn-sec">${t.clearLogs}</button>
+        <button id="btnCopyLogs" class="btn-sec"><img src="icons/copy.png" class="icon-inline" alt="copy" style="margin-right: 4px;"> ${t.copyLogs}</button>
+        <button id="btnClearLogs" class="btn-sec"><img src="icons/trash.png" class="icon-inline" alt="clear" style="margin-right: 4px;"> ${t.clearLogs}</button>
       </div>
     </div>
   </div>
@@ -2114,7 +2149,8 @@ function applyTheme(theme) {
   }
   const btnThemeToggle = typeof document !== "undefined" && document.getElementById ? document.getElementById("btnThemeToggle") : null;
   if (btnThemeToggle) {
-    btnThemeToggle.textContent = isLight ? "🌙" : "☀️";
+    const iconName = isLight ? "moon.png" : "sun.png";
+    btnThemeToggle.innerHTML = '<img src="icons/' + iconName + '" class="icon-inline" alt="theme">';
     btnThemeToggle.title = isLight ? "${t.isRu ? "Переключить на темную тему" : "Switch to dark theme"}" : "${t.isRu ? "Переключить на светлую тему" : "Switch to light theme"}";
   }
 }
@@ -2208,7 +2244,7 @@ function initPopup() {
       if (!syncIcon) {
         const span = document.createElement("span");
         span.className = "sync-icon";
-        span.textContent = btnSyncNow.textContent || "🔄";
+        span.innerHTML = '<img src="icons/sync.png" class="icon-inline" alt="sync">';
         btnSyncNow.textContent = "";
         btnSyncNow.appendChild(span);
         syncIcon = span;
@@ -2352,7 +2388,7 @@ function initPopup() {
 
       const delBtn = document.createElement("button");
       delBtn.className = "rule-del-btn";
-      delBtn.textContent = "✕";
+      delBtn.innerHTML = '<img src="icons/cross.png" class="icon-inline-sm" alt="del">';
       delBtn.title = "${t.isRu ? "Удалить правило" : "Delete rule"}";
       delBtn.addEventListener("click", () => {
         const removeIdx = userRules.indexOf(rule);

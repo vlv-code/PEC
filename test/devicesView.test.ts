@@ -16,7 +16,7 @@ const dashboardJs = readFileSync(
 
 test("Dashboard renders Devices navigation and titles without Fleet references", () => {
   const html = renderDashboardHtml({});
-  assert.match(html, /💻 Устройства/);
+  assert.match(html, /devices\.png.*Устройства/);
   assert.match(html, /id="tab-instances"/);
   assert.match(html, /Устройства корпоративной сети/);
   assert.match(html, /Список активных установок расширения и их текущий статус/);

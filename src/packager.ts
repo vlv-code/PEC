@@ -757,6 +757,8 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
             fs.copyFileSync(full, dest);
           }
         }
+      } else if (stat.isDirectory()) {
+        fs.cpSync(full, dest, { recursive: true });
       }
     }
   }
@@ -782,6 +784,8 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     const stat = fs.statSync(full);
     if (stat.isFile()) {
       zip.addLocalFile(full);
+    } else if (stat.isDirectory()) {
+      zip.addLocalFolder(full, item);
     }
   }
 

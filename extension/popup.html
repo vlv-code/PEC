@@ -67,20 +67,15 @@
       --bg: #f8fafc; --card: #ffffff; --card-inner: #f1f5f9; --border: #cbd5e1;
     }
 
-    /* Layout Terminal */
-    [data-layout="terminal"] {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    /* Layout Terminal: 0px razor-sharp retro-terminal corners matching dashboard */
+    [data-layout="terminal"],
+    [data-layout="terminal"] * {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+      border-radius: 0 !important;
     }
-    [data-layout="terminal"] .card,
-    [data-layout="terminal"] .tab-btn,
-    [data-layout="terminal"] .btn-action,
-    [data-layout="terminal"] .form-input,
-    [data-layout="terminal"] .form-select,
-    [data-layout="terminal"] .btn-primary-sm,
-    [data-layout="terminal"] .btn-sec,
-    [data-layout="terminal"] .btn-sm,
-    [data-layout="terminal"] .btn-quick-add {
-      border-radius: 4px !important;
+    [data-layout="terminal"] *::before,
+    [data-layout="terminal"] *::after {
+      border-radius: 0 !important;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -258,6 +253,46 @@
     .btn-icon-minimal:hover {
       background: var(--bg-hover, rgba(255, 255, 255, 0.08));
       border-color: var(--accent-color);
+    }
+    .btn-icon-minimal:active,
+    .btn-theme-toggle:active,
+    .btn-sm:active,
+    .btn-sec:active,
+    .btn-primary-sm:active,
+    .btn-action:active,
+    .tab-btn:active {
+      transform: translateY(1px) scale(0.95) !important;
+      filter: brightness(0.85) contrast(1.15) !important;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    /* Inline PNG icon pack */
+    .icon-inline {
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .icon-inline-lg {
+      width: 18px;
+      height: 18px;
+      vertical-align: -4px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .icon-inline-sm {
+      width: 12px;
+      height: 12px;
+      vertical-align: -1px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
     }
     .card-header {
       display: flex;
@@ -609,7 +644,7 @@
       <span class="version-tag">v1.4.0</span>
     </div>
     <div class="header-actions">
-      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme">☀️</button>
+      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme"><img src="icons/sun.png" class="icon-inline" alt="theme"></button>
       <div class="status-badge offline" id="statusPill">
         <span class="dot"></span>
         <span id="statusText">Отключен</span>
@@ -619,20 +654,20 @@
 
   <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">Главная</button>
-    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">Роутинг</button>
-    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">Инфо</button>
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus"><img src="icons/bolt.png" class="icon-inline" alt="status"> Главная</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting"><img src="icons/routing.png" class="icon-inline" alt="routing"> Роутинг</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo"><img src="icons/info.png" class="icon-inline" alt="info"> Инфо</button>
   </div>
 
   <!-- TAB 1: Main (Главная) -->
   <div class="tab-content active" id="tab-status">
     <div class="card" id="cardConnection">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="card-title">🔌 Подключение к корпоративному шлюзу</span>
+        <span class="card-title"><img src="icons/plug.png" class="icon-inline" alt="plug" style="margin-right: 4px;"> Подключение к прокси</span>
         <div class="card-header-actions">
-          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас"><span class="sync-icon">🔄</span></button>
-          <button class="btn-icon-minimal" id="btnPowerToggle" title="Включить / Выключить прокси">⏻</button>
-          <button class="btn-icon-minimal" id="btnPauseToggle" title="Приостановить прокси на 15 минут">⏸️</button>
+          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас"><span class="sync-icon"><img src="icons/sync.png" class="icon-inline" alt="sync"></span></button>
+          <button class="btn-icon-minimal" id="btnPowerToggle" title="Включить / Выключить прокси"><img src="icons/power.png" class="icon-inline" alt="power"></button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="Приостановить прокси на 15 минут"><img src="icons/pause.png" class="icon-inline" alt="pause"></button>
         </div>
       </div>
       <div class="hero-meta">
@@ -733,8 +768,8 @@
       </div>
       <pre id="logContainer" class="log-terminal"></pre>
       <div class="log-actions">
-        <button id="btnCopyLogs" class="btn-sec">Скопировать логи</button>
-        <button id="btnClearLogs" class="btn-sec">Очистить</button>
+        <button id="btnCopyLogs" class="btn-sec"><img src="icons/copy.png" class="icon-inline" alt="copy" style="margin-right: 4px;"> Скопировать логи</button>
+        <button id="btnClearLogs" class="btn-sec"><img src="icons/trash.png" class="icon-inline" alt="clear" style="margin-right: 4px;"> Очистить</button>
       </div>
     </div>
   </div>
