@@ -264,7 +264,7 @@ test("dashboard: SOCKS5 auth limitation warning is rendered in proxy modals and 
   assert.ok(dashboardJs.includes("checkSocksAuthWarning"), "dashboard.js must include checkSocksAuthWarning handler");
 });
 
-test("dashboard: placeholder warning banner and routingMode selector are present", () => {
+test("dashboard: placeholder warning banner and passwordSavedBadge are present, obsolete routingMode card removed", () => {
   const html = render(false);
 
   // 1. Placeholder warning banner (#noActiveProxyWarning)
@@ -272,17 +272,16 @@ test("dashboard: placeholder warning banner and routingMode selector are present
   assert.ok(html.includes('data-i18n="warnNoActiveProxyTitle"'), "must have data-i18n for warnNoActiveProxyTitle");
   assert.ok(html.includes('data-i18n="warnNoActiveProxyDesc"'), "must have data-i18n for warnNoActiveProxyDesc");
 
-  // 2. Routing mode radios
-  assert.ok(html.includes('id="routingModePac"'), "must have routingModePac radio");
-  assert.ok(html.includes('id="routingModeFixed"'), "must have routingModeFixed radio");
-  assert.ok(html.includes('name="proxyRoutingMode"'), "radios must share group proxyRoutingMode");
+  // 2. Obsolete routing mode radios removed from Proxy Settings
+  assert.ok(!html.includes('id="routingModePac"'), "obsolete routingModePac radio must be removed");
+  assert.ok(!html.includes('id="routingModeFixed"'), "obsolete routingModeFixed radio must be removed");
 
-  // 3. Client JS functions
-  assert.ok(dashboardJs.includes("function fetchProxyConfig("), "must declare fetchProxyConfig");
-  assert.ok(dashboardJs.includes("function onRoutingModeChanged("), "must declare onRoutingModeChanged");
-  assert.ok(dashboardJs.includes("warnNoActiveProxyTitle:"), "EN translation for warnNoActiveProxyTitle");
-  assert.ok(dashboardJs.includes("optRoutingModePac:"), "EN translation for optRoutingModePac");
-  assert.ok(dashboardJs.includes("optRoutingModeFixed:"), "EN translation for optRoutingModeFixed");
+  // 3. Password saved badge present next to rotAdminPass
+  assert.ok(html.includes('id="passwordSavedBadge"'), "must contain passwordSavedBadge");
+  assert.ok(html.includes('(Пароль сохранён на сервере)'), "must contain password saved text");
+
+  // 4. Client JS functions and badge handling
+  assert.ok(dashboardJs.includes("passwordSavedBadge"), "dashboard.js must reference passwordSavedBadge");
 });
 
 

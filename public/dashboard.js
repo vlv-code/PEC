@@ -2843,6 +2843,15 @@
         document.getElementById('rotNextRun').textContent = cfg.nextRotationAt ? new Date(cfg.nextRotationAt).toLocaleString() : 'Disabled';
         document.getElementById('rotLastRun').textContent = cfg.lastRotatedAt ? new Date(cfg.lastRotatedAt).toLocaleString() : 'None';
 
+        const passBadge = document.getElementById('passwordSavedBadge');
+        if (passBadge) {
+          if ((cfg.rotAdminPass && cfg.rotAdminPass !== '') || (cfg.adminPass && cfg.adminPass !== '')) {
+            passBadge.style.display = 'inline-block';
+          } else {
+            passBadge.style.display = 'none';
+          }
+        }
+
         renderRotationHistory(data.history || []);
       } catch (e) {
         console.error(e);

@@ -668,6 +668,7 @@
       font-weight: 600;
       font-family: var(--mono);
     }
+    .badge-success,
     .badge-online { background: rgba(16, 185, 129, 0.2); color: var(--success); }
     .badge-stale { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
     .badge-offline { background: rgba(239, 68, 68, 0.2); color: var(--danger); }

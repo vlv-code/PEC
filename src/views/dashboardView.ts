@@ -677,35 +677,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         </div>
       </div>
 
-      <!-- 1. Client Traffic Routing Mode Card -->
-      <div class="card" style="margin-bottom: 16px;">
-        <h2 data-i18n="titleRoutingMode">Client Traffic Routing Mode</h2>
-        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;" data-i18n="subRoutingMode">
-          Choose how Chrome extensions route browser traffic through upstream nodes.
-        </p>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; text-transform: none; font-weight: normal; margin-bottom: 0;">
-            <input type="radio" name="proxyRoutingMode" id="routingModePac" value="pac" checked style="width: auto; margin-top: 3px;" onchange="onRoutingModeChanged('pac')" />
-            <div>
-              <strong data-i18n="optRoutingModePac">Selective Routing via Profiles (PAC)</strong>
-              <div style="font-size: 12px; color: var(--text-muted);" data-i18n="descRoutingModePac">
-                Browser uses PAC rules to selectively proxy designated domains/subnets; all other traffic goes direct.
-              </div>
-            </div>
-          </label>
-          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; text-transform: none; font-weight: normal; margin-bottom: 0;">
-            <input type="radio" name="proxyRoutingMode" id="routingModeFixed" value="fixed" style="width: auto; margin-top: 3px;" onchange="onRoutingModeChanged('fixed')" />
-            <div>
-              <strong data-i18n="optRoutingModeFixed">Full Tunnel (All Traffic via Active Proxy)</strong>
-              <div style="font-size: 12px; color: var(--text-muted);" data-i18n="descRoutingModeFixed">
-                All browser traffic is forcibly tunneled through the currently active upstream proxy (fixed_servers mode).
-              </div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- 2. Upstream Proxy Nodes Registry Card -->
+      <!-- 1. Upstream Proxy Nodes Registry Card -->
       <div class="card" style="margin-bottom: 16px;">
         <h2>
           <span data-i18n="titleProxyRegistry">Proxy Registry</span>
@@ -763,7 +735,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
             <div>
               <label data-i18n="lblAdminPass">Admin Password</label>
-              <input type="password" id="rotAdminPass" placeholder="••••••••" />
+              <input type="password" id="rotAdminPass" placeholder="••••••••" /><span id="passwordSavedBadge" class="badge badge-success" style="display: none; margin-left: 8px;">(Пароль сохранён на сервере)</span>
             </div>
           </div>
 

@@ -202,6 +202,36 @@ function panelApiHeaders(auth: { cookie: string; csrfToken: string | null }): Re
   };
 }
 
+/**
+ * Look up an inbound by tag or remark:
+ * 1. Exact or trimmed match by tag
+ * 2. Exact or trimmed match by remark
+ * 3. Case-insensitive match by tag
+ * 4. Case-insensitive match by remark
+ */
+export function findInboundByTagOrRemark(inbounds: any[], target: string): any | undefined {
+  if (!Array.isArray(inbounds) || typeof target !== "string") return undefined;
+  const t = target.trim();
+  if (!t) return undefined;
+  const tLower = t.toLowerCase();
+
+  // 1. Exact or trimmed match by tag
+  let found = inbounds.find((i) => i && typeof i.tag === "string" && i.tag.trim() === t);
+  if (found) return found;
+
+  // 2. Exact or trimmed match by remark
+  found = inbounds.find((i) => i && typeof i.remark === "string" && i.remark.trim() === t);
+  if (found) return found;
+
+  // 3. Case-insensitive match by tag
+  found = inbounds.find((i) => i && typeof i.tag === "string" && i.tag.trim().toLowerCase() === tLower);
+  if (found) return found;
+
+  // 4. Case-insensitive match by remark
+  found = inbounds.find((i) => i && typeof i.remark === "string" && i.remark.trim().toLowerCase() === tLower);
+  return found;
+}
+
 export async function sync3xuiInboundByTag(params: {
   panelUrl: string;
   adminUser: string;
@@ -253,10 +283,7 @@ export async function sync3xuiInboundByTag(params: {
       streamSettings?: string | Record<string, unknown>;
     }> = inboundsData.obj || [];
 
-    let target = inbounds.find((i) => i.tag === params.tag);
-    if (!target) {
-      target = inbounds.find((i) => i.remark === params.tag);
-    }
+    const target = findInboundByTagOrRemark(inbounds, params.tag);
     if (!target) {
       return { ok: false, message: `Inbound with tag '${params.tag}' not found` };
     }
@@ -397,10 +424,10 @@ export async function test3xuiConnection(config: {
     const targetRemark = config.inboundRemark?.trim();
 
     if (targetTag) {
-      target = inbounds.find((i) => i.tag === targetTag) || inbounds.find((i) => i.remark === targetTag);
+      target = findInboundByTagOrRemark(inbounds, targetTag);
     }
     if (!target && targetRemark) {
-      target = inbounds.find((i) => i.tag === targetRemark) || inbounds.find((i) => i.remark === targetRemark);
+      target = findInboundByTagOrRemark(inbounds, targetRemark);
     }
 
     if (!target) {

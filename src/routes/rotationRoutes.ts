@@ -10,6 +10,8 @@ import { test3xuiConnection } from "../rotate.js";
 import { recordAudit, getClientIp } from "../audit.js";
 import { createRateLimiter } from "../middleware/security.js";
 
+import { updateRotationConfigWithPreservation } from "./configRoutes.js";
+
 export function createRotationRouter(): Router {
   const router = Router();
 
@@ -20,17 +22,22 @@ export function createRotationRouter(): Router {
   });
 
   router.get("/api/rotation/config", (_req: Request, res: Response) => {
+    const pub = getRotationConfigPublic();
     res.json({
-      config: getRotationConfigPublic(),
+      config: {
+        ...pub,
+        rotAdminPass: pub.adminPass,
+      },
       history: getRotationHistory().slice(0, 10),
     });
   });
 
   router.post("/api/rotation/config", (req: Request, res: Response) => {
     try {
-      const updated = updateRotationConfig(req.body);
+      const updated = updateRotationConfigWithPreservation(req.body);
       // never echo the real admin password back to the client
-      res.json({ ...updated, adminPass: updated.adminPass ? "********" : "" });
+      const masked = updated.adminPass ? "********" : "";
+      res.json({ ...updated, adminPass: masked, rotAdminPass: masked });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: msg });
