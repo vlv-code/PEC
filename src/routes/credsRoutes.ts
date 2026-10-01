@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import express, { Router, Request, Response } from "express";
 import { getProxyConfig, registerHeartbeat } from "../instances.js";
 import { probeProxyTcp } from "../proxies.js";
 import { resolveProfileForInstance, getProfileById, generatePacScript } from "../routing.js";
@@ -67,7 +67,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
   });
 
   // POST /api/sync
-  router.post("/api/sync", syncLimiter, async (req: Request, res: Response) => {
+  router.post("/api/sync", express.json({ limit: "16kb" }), syncLimiter, async (req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     const clientHost = getClientIp(req);
     const xExtTokenHeader = req.headers["x-ext-token"];

@@ -1,3 +1,4 @@
+import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
@@ -16,6 +17,15 @@ import {
   getBuilderConfigPath,
   getRoutingPresetsPath,
 } from "../src/storage.js";
+
+function restoreEnv(originalEnv: Record<string, string | undefined>) {
+  for (const key of Object.keys(process.env)) {
+    if (!(key in originalEnv)) {
+      delete process.env[key];
+    }
+  }
+  Object.assign(process.env, originalEnv);
+}
 
 
 test("getDataDir returns resolved DATA_DIR and ensures directory exists", () => {
@@ -84,7 +94,7 @@ test("store path helpers return default paths inside getDataDir when env vars ar
     assert.strictEqual(getBuilderConfigPath(), path.join(dataDir, "extension_build_config.json"));
     assert.strictEqual(getRoutingPresetsPath(), path.join(dataDir, "routing_presets.json"));
   } finally {
-    process.env = originalEnv;
+    restoreEnv(originalEnv);
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -120,7 +130,7 @@ test("store path helpers honor explicit environment variable overrides", () => {
     assert.strictEqual(getRoutingPresetsPath(), path.resolve(process.env.ROUTING_PRESETS_PATH));
 
   } finally {
-    process.env = originalEnv;
+    restoreEnv(originalEnv);
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

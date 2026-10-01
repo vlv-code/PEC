@@ -548,23 +548,7 @@ function writeGeneratedFile(
   }
 }
 
-export function generateExtensionFiles(
-  cfg: ExtensionBuildConfig,
-  opts?: { force?: boolean }
-): Record<string, string | Buffer> {
-  if (!fs.existsSync(EXTENSION_DIR)) {
-    fs.mkdirSync(EXTENSION_DIR, { recursive: true });
-  }
-
-  const force = Boolean(opts?.force);
-  if (force) {
-    cfg.overriddenFiles = [];
-    saveBuildConfig({ overriddenFiles: [] });
-  }
-
-  const colors = getThemeStyles(cfg);
-
-  // 1. Manifest
+export function createManifestObject(cfg: ExtensionBuildConfig): Record<string, unknown> {
   const permissions: string[] = ["webRequest", "webRequestAuthProvider", "storage", "proxy", "alarms"];
   if (cfg.webRtcProtection) {
     permissions.push("privacy");
@@ -602,6 +586,27 @@ export function generateExtensionFiles(
     };
   }
 
+  return manifest;
+}
+
+export function generateExtensionFiles(
+  cfg: ExtensionBuildConfig,
+  opts?: { force?: boolean }
+): Record<string, string | Buffer> {
+  if (!fs.existsSync(EXTENSION_DIR)) {
+    fs.mkdirSync(EXTENSION_DIR, { recursive: true });
+  }
+
+  const force = Boolean(opts?.force);
+  if (force) {
+    cfg.overriddenFiles = [];
+    saveBuildConfig({ overriddenFiles: [] });
+  }
+
+  const colors = getThemeStyles(cfg);
+
+  // 1. Manifest (Unified)
+  const manifest = createManifestObject(cfg);
   const manifestJson = JSON.stringify(manifest, null, 2);
   writeGeneratedFile("manifest.json", manifestJson, cfg, force);
 
@@ -659,37 +664,7 @@ export async function buildExtensionFiles(cfg: ExtensionBuildConfig): Promise<Re
   generateExtensionFiles(mergedCfg);
 
   const colors = getThemeStyles(mergedCfg);
-  const permissions: string[] = ["webRequest", "webRequestAuthProvider", "storage", "proxy", "alarms"];
-  if (mergedCfg.webRtcProtection) {
-    permissions.push("privacy");
-  }
-
-  const manifest: Record<string, unknown> = {
-    manifest_version: 3,
-    name: mergedCfg.name,
-    short_name: mergedCfg.shortName,
-    version: mergedCfg.version,
-    description: mergedCfg.description,
-    permissions: Array.from(new Set(permissions)),
-    host_permissions: ["<all_urls>"],
-    background: {
-      service_worker: "background.js",
-      type: "module",
-    },
-    icons: {
-      "16": "icon16.png",
-      "48": "icon48.png",
-      "128": "icon128.png",
-    },
-  };
-
-  if (mergedCfg.uiMode !== "stealth") {
-    manifest.action = {
-      default_title: mergedCfg.name,
-      default_popup: "popup.html",
-      default_icon: "icon48.png",
-    };
-  }
+  const manifest = createManifestObject(mergedCfg);
 
   const files: Record<string, string> = {
     "manifest.json": JSON.stringify(manifest, null, 2),
@@ -707,9 +682,11 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     fs.mkdirSync(UPDATES_DIR, { recursive: true });
   }
 
-  const effectiveBaseUrl = (currentBuildConfig.defaultServerUrl && !currentBuildConfig.defaultServerUrl.includes("mini-server.ic.local"))
-    ? currentBuildConfig.defaultServerUrl.trim().replace(/\/+$/, "")
-    : (baseUrl ? baseUrl.trim().replace(/\/+$/, "") : "http://localhost:3000");
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const effectiveBaseUrl = envPublicBase
+    || ((currentBuildConfig.defaultServerUrl && !currentBuildConfig.defaultServerUrl.includes("mini-server.ic.local"))
+      ? currentBuildConfig.defaultServerUrl.trim().replace(/\/+$/, "")
+      : (baseUrl ? baseUrl.trim().replace(/\/+$/, "") : "http://localhost:3000"));
 
   if (process.env.EXT_SHARED_TOKEN && currentBuildConfig.defaultToken && currentBuildConfig.defaultToken !== process.env.EXT_SHARED_TOKEN) {
     console.warn(
@@ -756,8 +733,14 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   }
 
   // Render background.js with substituted placeholders directly into UNPACKED_DIR
-  const renderedBg = renderBackgroundJs(buildConfigToPack);
-  fs.writeFileSync(path.join(UNPACKED_DIR, "background.js"), renderedBg, "utf-8");
+  // unless explicitly overridden by operator in overriddenFiles
+  const isBgOverridden = (buildConfigToPack.overriddenFiles || []).includes("background.js");
+  if (!isBgOverridden || !fs.existsSync(path.join(EXTENSION_DIR, "background.js"))) {
+    const renderedBg = renderBackgroundJs(buildConfigToPack);
+    fs.writeFileSync(path.join(UNPACKED_DIR, "background.js"), renderedBg, "utf-8");
+  } else {
+    fs.copyFileSync(path.join(EXTENSION_DIR, "background.js"), path.join(UNPACKED_DIR, "background.js"));
+  }
 
   // Copy any custom/extra non-excluded files from EXTENSION_DIR into UNPACKED_DIR
   // only if they don't already exist or are explicitly overridden by operator
@@ -770,7 +753,7 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
       if (stat.isFile()) {
         const isOverridden = (buildConfigToPack.overriddenFiles || []).includes(item);
         if (!fs.existsSync(dest) || isOverridden) {
-          if (item !== "background.js") {
+          if (item !== "background.js" || isBgOverridden) {
             fs.copyFileSync(full, dest);
           }
         }

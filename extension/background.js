@@ -19,9 +19,9 @@ const DEFAULT_SERVER_BASE = "__PEC_SERVER_BASE__";
 const DEFAULT_CREDS_URL = DEFAULT_SERVER_BASE + "/creds";
 const DEFAULT_SYNC_URL = DEFAULT_SERVER_BASE + "/api/sync";
 const FALLBACK_TOKEN = "__PEC_DEFAULT_TOKEN__";
-const SYNC_INTERVAL_MIN = 5;
-const BYPASS_TIMEOUT_MIN = 15;
-const BADGE_ENABLED = true;
+const SYNC_INTERVAL_MIN = /* __PEC_SYNC_INTERVAL_MIN__ */ 5;
+const BYPASS_TIMEOUT_MIN = /* __PEC_BYPASS_TIMEOUT_MIN__ */ 15;
+const BADGE_ENABLED = /* __PEC_BADGE_ENABLED__ */ true;
 const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
 
 // Fail fast on un-substituted build placeholders (loaded extension/ instead of dist/unpacked)

@@ -33,106 +33,8 @@ export function toPunycodeDomain(domain: string): string {
   }
 }
 
-export const GEO_PRESETS: GeoPreset[] = [
-  {
-    id: "preset:ai_services",
-    name: "AI & LLM Services (OpenAI, Claude, Perplexity, Copilot)",
-    category: "ai",
-    description: "Major AI development and chat platforms",
-    domains: [
-      "openai.com",
-      "*.openai.com",
-      "chatgpt.com",
-      "*.chatgpt.com",
-      "anthropic.com",
-      "*.anthropic.com",
-      "claude.ai",
-      "*.claude.ai",
-      "perplexity.ai",
-      "*.perplexity.ai",
-      "huggingface.co",
-      "*.huggingface.co",
-      "githubcopilot.com",
-      "*.githubcopilot.com",
-      "midjourney.com",
-      "*.midjourney.com",
-    ],
-  },
-  {
-    id: "preset:social_media",
-    name: "Global Media & Social (X/Twitter, LinkedIn, YouTube, Meta)",
-    category: "social",
-    description: "International social networks and video platforms",
-    domains: [
-      "x.com",
-      "*.x.com",
-      "twitter.com",
-      "*.twitter.com",
-      "twimg.com",
-      "*.twimg.com",
-      "instagram.com",
-      "*.instagram.com",
-      "facebook.com",
-      "*.facebook.com",
-      "linkedin.com",
-      "*.linkedin.com",
-      "youtube.com",
-      "*.youtube.com",
-      "googlevideo.com",
-      "*.googlevideo.com",
-    ],
-  },
-  {
-    id: "preset:corporate_internal",
-    name: "Corporate Intranet & Private RFC1918 Subnets",
-    category: "internal",
-    description: "Internal domains and private network ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)",
-    domains: [
-      "*.local",
-      "*.corp.local",
-      "*.internal",
-      "localhost",
-      "127.0.0.1",
-      "10.0.0.0/8",
-      "172.16.0.0/12",
-      "192.168.0.0/16",
-    ],
-  },
-  {
-    id: "preset:geosite_ru",
-    name: "Geo: Russia (.RU / .РФ / Yandex / VK / Gosuslugi)",
-    category: "ru",
-    description: "National Russian domain zone and state/banking services",
-    domains: [
-      "*.ru",
-      "*.su",
-      "*.xn--p1ai",
-      "*.yandex.ru",
-      "*.ya.ru",
-      "*.vk.com",
-      "*.mail.ru",
-      "*.gosuslugi.ru",
-      "*.sberbank.ru",
-      "*.tinkoff.ru",
-      "*.ozon.ru",
-      "*.wildberries.ru",
-    ],
-  },
-  {
-    id: "preset:ad_telemetry_block",
-    name: "Security: Ads, Trackers & Malicious Telemetry Sinkhole",
-    category: "security",
-    description: "Common tracking, telemetry, and advertising networks to sinkhole",
-    domains: [
-      "*.doubleclick.net",
-      "*.google-analytics.com",
-      "*.adservice.google.com",
-      "*.telemetry.corp",
-      "*.adnxs.com",
-      "*.scorecardresearch.com",
-    ],
-  },
-];
+import { GEO_PRESETS } from "./defaultPresets.js";
+export { GEO_PRESETS } from "./defaultPresets.js";
 
 const DEFAULT_PROFILES: RoutingProfile[] = [
   {
@@ -238,6 +140,14 @@ export function getProfileById(id: string): RoutingProfile | undefined {
   return profiles.find((p) => p.id === id);
 }
 
+function normalizeDefaultPolicy(policy: unknown): "direct" | "proxy" {
+  return policy === "proxy" ? "proxy" : "direct";
+}
+
+function normalizeAction(action: unknown): "direct" | "proxy" | "block" {
+  return action === "direct" || action === "block" ? action : "proxy";
+}
+
 export function saveProfile(profile: Partial<RoutingProfile>): RoutingProfile {
   const existingIdx = profiles.findIndex((p) => p.id === profile.id);
   const now = new Date().toISOString();
@@ -248,10 +158,24 @@ export function saveProfile(profile: Partial<RoutingProfile>): RoutingProfile {
     }
   }
 
+  const cleanDefaultPolicy = profile.defaultPolicy !== undefined
+    ? normalizeDefaultPolicy(profile.defaultPolicy)
+    : undefined;
+
+  const cleanRules = Array.isArray(profile.rules)
+    ? profile.rules.map((r) => ({
+        ...r,
+        name: String(r.name || "Rule").slice(0, 100),
+        action: normalizeAction(r.action),
+      }))
+    : undefined;
+
   if (existingIdx >= 0) {
     profiles[existingIdx] = {
       ...profiles[existingIdx],
       ...profile,
+      ...(cleanDefaultPolicy !== undefined ? { defaultPolicy: cleanDefaultPolicy } : {}),
+      ...(cleanRules !== undefined ? { rules: cleanRules } : {}),
       updatedAt: now,
     } as RoutingProfile;
     persistProfiles();
@@ -261,8 +185,8 @@ export function saveProfile(profile: Partial<RoutingProfile>): RoutingProfile {
       id: profile.id || "prof_" + crypto.randomBytes(4).toString("hex"),
       name: profile.name || "Custom Profile",
       description: profile.description || "",
-      defaultPolicy: profile.defaultPolicy || "direct",
-      rules: profile.rules || [],
+      defaultPolicy: cleanDefaultPolicy || "direct",
+      rules: cleanRules || [],
       targetScope: profile.targetScope || "all",
       targetGroup: profile.targetGroup,
       targetInstanceIds: profile.targetInstanceIds,
@@ -361,35 +285,48 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
   };
 
   const safeProfileName = toAsciiComment(String(profile.name || "Default")) || "Default";
+  const safeDefaultPolicy = profile.defaultPolicy === "proxy" ? "PROXY" : "DIRECT";
   const codeLines: string[] = [];
-  codeLines.push(`// Profile: ${safeProfileName} (Policy: Default ${profile.defaultPolicy.toUpperCase()})`);
+  codeLines.push(`// Profile: ${safeProfileName} (Policy: Default ${safeDefaultPolicy})`);
   codeLines.push(`// Generated: ${new Date().toISOString()}`);
   codeLines.push(`function FindProxyForURL(url, host) {`);
   codeLines.push(`  host = ("" + host).toLowerCase();`);
   codeLines.push(`  if (isPlainHostName(host) || host === "localhost" || host === "127.0.0.1") { return "DIRECT"; }`);
 
+  const MAX_PAC_TOTAL_ENTRIES = 10000;
+  let totalEntriesCount = 0;
+
   // Active rules
   const activeRules = profile.rules.filter((r) => r.enabled);
   for (const rule of activeRules) {
+    if (totalEntriesCount >= MAX_PAC_TOTAL_ENTRIES) break;
+
     const domains = expandRuleDomains(rule);
     if (!domains.length) continue;
 
     // Security: rule names are emitted as PAC comments and must never be able
     // to break out of the comment (newline) or inject PAC directives.
     const safeRuleName = toAsciiComment(String(rule.name || "Rule").replace(/[\r\n"'\\;]/g, " ")).slice(0, 100) || "Rule";
+    const safeAction = rule.action === "proxy" || rule.action === "block" || rule.action === "direct" ? rule.action : "proxy";
     const actionDirective =
-      rule.action === "proxy" ? proxyDirective : rule.action === "block" ? blockDirective : "DIRECT";
+      safeAction === "proxy" ? proxyDirective : safeAction === "block" ? blockDirective : "DIRECT";
 
-    codeLines.push(`\n  // Rule: ${safeRuleName} -> ${rule.action.toUpperCase()}`);
+    codeLines.push(`\n  // Rule: ${safeRuleName} -> ${safeAction.toUpperCase()}`);
 
     // Domain checks run directly; CIDR checks are collected separately and
     // emitted behind an IP-literal guard (see below).
     const domainChecks: string[] = [];
     const cidrChecks: string[] = [];
+    const seenInRule = new Set<string>();
+
     for (const rawDomain of domains) {
+      if (totalEntriesCount >= MAX_PAC_TOTAL_ENTRIES) break;
+
       // Security: Strip dangerous characters to prevent script injection in PAC
       let d = rawDomain.replace(/["'\\\r\n;]/g, "").trim().toLowerCase();
-      if (!d) continue;
+      if (!d || seenInRule.has(d)) continue;
+      seenInRule.add(d);
+      totalEntriesCount++;
 
       // Convert any IDN/Cyrillic domain to Punycode ASCII
       d = toPunycodeDomain(d);
@@ -435,7 +372,11 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
   codeLines.push(`}`);
 
   // Guarantee that the generated PAC script is 100% 7-bit ASCII (Chrome pacScript.data requirement)
-  return (codeLines.join("\n") + "\n").replace(/[^\x00-\x7F]/g, "");
+  const pacResult = (codeLines.join("\n") + "\n").replace(/[^\x00-\x7F]/g, "");
+  if (pacResult.length > 512 * 1024) {
+    console.warn(`[routing] Warning: generated PAC script size (${Math.round(pacResult.length / 1024)} KB) exceeds 512 KB recommendation`);
+  }
+  return pacResult;
 }
 
 function maskToSubnet(bits: number): string {

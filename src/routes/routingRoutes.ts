@@ -7,6 +7,42 @@ import { parseGeoSite, parseGeoIp, parsePlaintextList } from "../geodata/datPars
 import { validateSafeEndpointUrl } from "../rotate.js";
 import { recordAudit, getClientIp } from "../audit.js";
 
+async function downloadBodyWithLimit(response: globalThis.Response, maxSize: number): Promise<Buffer> {
+  const clHeader = response.headers.get("content-length");
+  if (clHeader) {
+    const cl = parseInt(clHeader, 10);
+    if (!isNaN(cl) && cl > maxSize) {
+      throw new Error(`Downloaded file exceeds limit of ${Math.round(maxSize / (1024 * 1024))}MB`);
+    }
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const ab = await response.arrayBuffer();
+    const buf = Buffer.from(ab);
+    if (buf.length > maxSize) {
+      throw new Error(`Downloaded file exceeds limit of ${Math.round(maxSize / (1024 * 1024))}MB`);
+    }
+    return buf;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      totalBytes += value.length;
+      if (totalBytes > maxSize) {
+        try { reader.cancel(); } catch {}
+        throw new Error(`Downloaded file exceeds limit of ${Math.round(maxSize / (1024 * 1024))}MB`);
+      }
+      chunks.push(value);
+    }
+  }
+  return Buffer.concat(chunks);
+}
+
 function parseGeodataBuffer(
   buffer: Buffer,
   filenameOrUrl: string,
@@ -20,19 +56,19 @@ function parseGeodataBuffer(
   if (isDat) {
     if (requestedType === "cidr" || lowerName.includes("geoip")) {
       const ipMap = parseGeoIp(buffer);
-      let entry = ipMap.get(targetTag);
-      if (!entry && ipMap.size > 0) {
-        entry = ipMap.values().next().value;
+      const entry = ipMap.get(targetTag);
+      if (!entry) {
+        throw new Error(`Tag '${targetTag}' not found in GeoIP file`);
       }
-      const entries = entry ? entry.cidrs.map((c) => `${c.ip}/${c.prefix}`) : [];
+      const entries = entry.cidrs.map((c) => `${c.ip}/${c.prefix}`);
       return { entries, inferredType: "cidr" };
     } else {
       const siteMap = parseGeoSite(buffer);
-      let entry = siteMap.get(targetTag);
-      if (!entry && siteMap.size > 0) {
-        entry = siteMap.values().next().value;
+      const entry = siteMap.get(targetTag);
+      if (!entry) {
+        throw new Error(`Tag '${targetTag}' not found in GeoSite file`);
       }
-      const entries = entry ? entry.domains.map((d) => d.value) : [];
+      const entries = entry.domains.map((d) => d.value);
       return { entries, inferredType: "domain" };
     }
   } else {
@@ -100,6 +136,12 @@ export function createRoutingRouter(): Router {
       const cleanId = id.trim();
       const presets = getRoutingPresets();
       const existingIdx = presets.findIndex((p) => p.id === cleanId);
+      if (
+        (existingIdx >= 0 && presets[existingIdx].source === "builtin") ||
+        GEO_PRESETS.some((gp) => gp.id === cleanId)
+      ) {
+        return res.status(400).json({ error: "Cannot overwrite builtin preset" });
+      }
 
       const presetItem: RoutingPresetItem = {
         id: cleanId,
@@ -186,21 +228,24 @@ export function createRoutingRouter(): Router {
 
       let response: globalThis.Response;
       try {
-        response = await fetch(url.trim(), { signal: AbortSignal.timeout(10000) });
+        response = await fetch(url.trim(), {
+          redirect: "manual",
+          signal: AbortSignal.timeout(10000),
+        });
       } catch (fetchErr: any) {
         return res.status(400).json({ error: `Failed to fetch URL: ${fetchErr?.message || fetchErr}` });
+      }
+
+      if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+        return res.status(400).json({ error: "HTTP redirects are forbidden for security reasons" });
       }
 
       if (!response.ok) {
         return res.status(400).json({ error: `Remote server returned HTTP ${response.status}` });
       }
 
-      const arrayBuf = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuf);
       const MAX_SIZE = 20 * 1024 * 1024; // 20MB
-      if (buffer.length > MAX_SIZE) {
-        return res.status(400).json({ error: "Downloaded file exceeds 20MB limit" });
-      }
+      const buffer = await downloadBodyWithLimit(response, MAX_SIZE);
 
       const { entries, inferredType } = parseGeodataBuffer(buffer, url, type, tag);
       let parsedUrlPath = "";
@@ -347,21 +392,24 @@ export function createRoutingRouter(): Router {
 
       let response: globalThis.Response;
       try {
-        response = await fetch(preset.sourceUrl, { signal: AbortSignal.timeout(10000) });
+        response = await fetch(preset.sourceUrl, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(10000),
+        });
       } catch (fetchErr: any) {
         return res.status(400).json({ error: `Failed to refresh URL: ${fetchErr?.message || fetchErr}` });
+      }
+
+      if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+        return res.status(400).json({ error: "HTTP redirects are forbidden for security reasons" });
       }
 
       if (!response.ok) {
         return res.status(400).json({ error: `Remote server returned HTTP ${response.status}` });
       }
 
-      const arrayBuf = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuf);
       const MAX_SIZE = 20 * 1024 * 1024;
-      if (buffer.length > MAX_SIZE) {
-        return res.status(400).json({ error: "Refreshed file exceeds 20MB limit" });
-      }
+      const buffer = await downloadBodyWithLimit(response, MAX_SIZE);
 
       const { entries } = parseGeodataBuffer(buffer, preset.sourceUrl, preset.type, preset.sourceTag);
       preset.entries = entries;

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { RoutingPresetItem } from "./types.js";
 import { readJsonStore, writeJsonAtomic } from "./jsonStore.js";
-import { GEO_PRESETS } from "./routing.js";
+import { GEO_PRESETS } from "./defaultPresets.js";
 
 
 export function getDataDir(): string {

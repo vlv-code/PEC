@@ -33,18 +33,19 @@ export function safeCorsMiddleware(req: Request, res: Response, next: NextFuncti
   if (isPublicResource) {
     res.setHeader("Access-Control-Allow-Origin", "*");
   } else if (origin) {
-    const rawForwarded = req.headers["x-forwarded-host"];
+    const trustProxy = Boolean(req.app?.get?.("trust proxy"));
+    const rawForwarded = trustProxy ? req.headers["x-forwarded-host"] : undefined;
     const forwardedHost = (Array.isArray(rawForwarded) ? rawForwarded[0] : rawForwarded || "").split(",")[0].trim();
     const rawHost = forwardedHost || req.headers.host || "";
     const reqHost = rawHost.split(",")[0].trim();
 
     let originAllowed = false;
-
-    if (
+    const isExtensionOrigin =
       origin.startsWith("chrome-extension://") ||
       origin.startsWith("extension://") ||
-      origin.startsWith("moz-extension://")
-    ) {
+      origin.startsWith("moz-extension://");
+
+    if (isExtensionOrigin) {
       originAllowed = true;
     } else if (reqHost) {
       try {
@@ -61,7 +62,11 @@ export function safeCorsMiddleware(req: Request, res: Response, next: NextFuncti
 
     if (originAllowed) {
       res.setHeader("Access-Control-Allow-Origin", origin);
-      res.setHeader("Access-Control-Allow-Credentials", "true");
+      // Security: extensions authenticate with X-Ext-Token and must NOT receive
+      // ambient admin credentials (cookies). Only same-host web requests get credentials.
+      if (!isExtensionOrigin) {
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+      }
       res.setHeader("Vary", "Origin");
     }
   }

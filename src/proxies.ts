@@ -226,18 +226,20 @@ export function initDefaultProxyIfNeeded(): void {
   const protocol: "socks5" | "http" | "https" =
     rawProto === "http" || rawProto === "https" ? rawProto : "socks5";
 
+  const isPlaceholder = !cfg.host || cfg.host === "10.0.0.1" || cfg.host === "0.0.0.0";
   const defaultNode: ProxyNode = {
     id: crypto.randomBytes(4).toString("hex"),
     tag: "default-proxy",
     name: `${protocol.toUpperCase()} Default`,
     type: "manual",
     protocol,
-    host: cfg.host || "127.0.0.1",
+    host: cfg.host || "10.0.0.1",
     port: cfg.port || 10809,
     username,
     password,
-    isActive: true,
-    status: "OK",
+    isActive: !isPlaceholder,
+    status: isPlaceholder ? "ERROR" : "OK",
+    errorMessage: isPlaceholder ? "Placeholder proxy host (10.0.0.1) - not configured" : undefined,
     createdAt: now,
     updatedAt: now,
   };

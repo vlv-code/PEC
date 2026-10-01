@@ -319,11 +319,13 @@
         const data = await res.json();
         cachedReleases = data;
         renderGitHubReleases(data);
+        const isUpdate = Boolean(data.updateAvailable || data.hasUpdate);
+        const latestVer = data.latestRelease ? (data.latestRelease.cleanVersion || data.latestRelease.version || data.latestRelease.tag_name || '') : '';
         if (badge && data.currentVersion) {
           badge.textContent = 'v' + data.currentVersion;
-          if (data.updateAvailable) {
+          if (isUpdate) {
             badge.className = 'badge badge-action-direct';
-            badge.title = (currentLang === 'ru' ? 'Доступна новая версия: v' : 'New version available: v') + data.latestRelease.version;
+            badge.title = (currentLang === 'ru' ? 'Доступна новая версия: v' : 'New version available: v') + latestVer;
           } else {
             badge.className = 'badge badge-online';
             badge.title = currentLang === 'ru' ? 'Актуальная версия' : 'Latest version installed';
@@ -339,6 +341,12 @@
       if (!container || !data) return;
 
       const isRu = currentLang === 'ru';
+      const isUpdate = Boolean(data.updateAvailable || data.hasUpdate);
+      const latestVer = data.latestRelease ? (data.latestRelease.cleanVersion || data.latestRelease.version || data.latestRelease.tag_name || '') : '';
+      if (data.latestRelease && !data.latestRelease.version) {
+        data.latestRelease.version = latestVer;
+      }
+
       let html = `<div style="display: flex; gap: 16px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
         <div>
           <span style="color: var(--text-muted); font-size: 11px;">${isRu ? 'Установленная версия:' : 'Installed version:'}</span>
@@ -348,11 +356,11 @@
       if (data.latestRelease) {
         html += `<div>
           <span style="color: var(--text-muted); font-size: 11px;">${isRu ? 'Последний релиз:' : 'Latest release:'}</span>
-          <strong style="color: ${data.updateAvailable ? 'var(--warning)' : 'var(--success)'}; font-family: var(--mono); font-size: 13px; margin-left: 6px;">${esc(data.latestRelease.name || ('v' + data.latestRelease.version))}</strong>
+          <strong style="color: ${isUpdate ? 'var(--warning)' : 'var(--success)'}; font-family: var(--mono); font-size: 13px; margin-left: 6px;">${esc(data.latestRelease.name || ('v' + data.latestRelease.version))}</strong>
         </div>`;
       }
 
-      if (data.updateAvailable) {
+      if (isUpdate) {
         html += `<span class="badge badge-action-direct">${isRu ? 'Доступно обновление' : 'Update Available'}</span>`;
       } else if (data.latestRelease) {
         html += `<span class="badge badge-online">${isRu ? 'Актуальная версия' : 'Up to date'}</span>`;
@@ -1291,7 +1299,7 @@
           </td>
           <td><strong>${esc(r.name)}</strong></td>
           <td><code>${esc(r.pattern)}</code></td>
-          <td><span class="badge ${badge}">${actionLabel}</span></td>
+          <td><span class="badge ${badge}">${esc(actionLabel)}</span></td>
           <td>
             <button type="button" onclick="removeRule(${idx})" class="btn-danger" style="font-size: 11px; padding: 3px 8px;">${isRu ? 'Удалить' : 'Delete'}</button>
           </td>
@@ -3036,10 +3044,11 @@
         }
       }
 
-      // 0. Warning banner for placeholder 10.0.0.1 (shown when no proxy is active)
+      // 0. Warning banner for placeholder 10.0.0.1 (shown when no proxy is active or host is placeholder)
       const warnBanner = document.getElementById('noActiveProxyWarning');
       if (warnBanner) {
-        warnBanner.style.display = active ? 'none' : 'flex';
+        const isPlaceholder = !active || active.host === '10.0.0.1' || active.status === 'ERR' || active.status === 'ERROR';
+        warnBanner.style.display = isPlaceholder ? 'flex' : 'none';
       }
     }
 

@@ -30,8 +30,13 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
   });
 
   router.post("/api/builder/config", (req: Request, res: Response) => {
+    const adminToken = getAdminToken?.();
+    if (adminToken && req.body?.defaultToken && req.body.defaultToken === adminToken) {
+      return res.status(400).json({
+        error: "defaultToken must never equal ADMIN_TOKEN - artifacts (CRX/GPO) ship the fleet token publicly.",
+      });
+    }
     const updated = saveBuildConfig(req.body);
-    warnIfAdminTokenInArtifact(updated.defaultToken);
     generateExtensionFiles(updated);
     res.json(updated);
   });

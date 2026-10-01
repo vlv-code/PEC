@@ -13,7 +13,7 @@ import {
   initDefaultProxyIfNeeded,
   probeProxyTcp,
 } from "../src/proxies.js";
-import { getProxyConfig } from "../src/instances.js";
+import { getProxyConfig, updateProxyConfig } from "../src/instances.js";
 import { getProxiesStorePath, getCredsStorePath, getProxyConfigPath } from "../src/storage.js";
 
 test("Proxy Repository: CRUD lifecycle and atomic persistence", () => {
@@ -185,17 +185,18 @@ test("Proxy Repository: initDefaultProxyIfNeeded migrates existing setup", () =>
   if (fs.existsSync(storePath)) {
     fs.unlinkSync(storePath);
   }
+  updateProxyConfig({ host: "10.0.0.1", port: 10809 });
 
   initDefaultProxyIfNeeded();
 
   const proxies = getAllProxies();
   assert.strictEqual(proxies.length, 1);
   const def = proxies[0];
-  assert.strictEqual(def.isActive, true);
+  assert.strictEqual(def.isActive, false); // placeholder host (10.0.0.1) is not activated by default
   assert.ok(def.name);
   assert.ok(def.tag);
-  assert.strictEqual(def.host, getProxyConfig().host);
-  assert.strictEqual(def.port, getProxyConfig().port);
+  assert.strictEqual(def.host, "10.0.0.1");
+  assert.strictEqual(def.port, 10809);
 
   // Running it again does not duplicate
   initDefaultProxyIfNeeded();

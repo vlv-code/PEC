@@ -439,8 +439,10 @@ function initPopup() {
     });
   }
 
+  const MAX_USER_RULES = 100;
+
   function saveUserRules(rules) {
-    userRules = rules;
+    userRules = (rules || []).slice(0, MAX_USER_RULES);
     renderUserRules(userRules);
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ action: "SAVE_USER_RULES", type: "SAVE_USER_RULES", rules: userRules });
@@ -453,14 +455,14 @@ function initPopup() {
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ action: "GET_USER_RULES", type: "GET_USER_RULES" }, (res) => {
         if (!chrome.runtime.lastError && res && Array.isArray(res.userRules)) {
-          userRules = res.userRules;
+          userRules = res.userRules.slice(0, MAX_USER_RULES);
           renderUserRules(userRules);
         }
       });
     } else if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
       chrome.storage.local.get(["pecUserRules"], (res) => {
         if (res && Array.isArray(res.pecUserRules)) {
-          userRules = res.pecUserRules;
+          userRules = res.pecUserRules.slice(0, MAX_USER_RULES);
           renderUserRules(userRules);
         }
       });
@@ -476,6 +478,9 @@ function initPopup() {
       existing.action = act;
       existing.enabled = true;
     } else {
+      if (userRules.length >= MAX_USER_RULES) {
+        return;
+      }
       userRules.push({ pattern: p, action: act, enabled: true });
     }
     saveUserRules(userRules);

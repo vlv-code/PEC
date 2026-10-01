@@ -35,9 +35,9 @@ const DEFAULT_SERVER_BASE = "__PEC_SERVER_BASE__";
 const DEFAULT_CREDS_URL = DEFAULT_SERVER_BASE + "/creds";
 const DEFAULT_SYNC_URL = DEFAULT_SERVER_BASE + "/api/sync";
 const FALLBACK_TOKEN = "__PEC_DEFAULT_TOKEN__";
-const SYNC_INTERVAL_MIN = 5;
-const BYPASS_TIMEOUT_MIN = 15;
-const BADGE_ENABLED = true;
+const SYNC_INTERVAL_MIN = /* __PEC_SYNC_INTERVAL_MIN__ */ 5;
+const BYPASS_TIMEOUT_MIN = /* __PEC_BYPASS_TIMEOUT_MIN__ */ 15;
+const BADGE_ENABLED = /* __PEC_BADGE_ENABLED__ */ true;
 const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
 
 // Fail fast on un-substituted build placeholders (loaded extension/ instead of dist/unpacked)
@@ -1026,6 +1026,9 @@ export function renderBackgroundJs(cfg: {
   return BACKGROUND_TEMPLATE
     .replace(/"__PEC_SERVER_BASE__"/g, JSON.stringify(serverBase))
     .replace(/"__PEC_DEFAULT_TOKEN__"/g, JSON.stringify(String(cfg.defaultToken || "")))
+    .replace(/\/\*\s*__PEC_SYNC_INTERVAL_MIN__\s*\*\/[^\n;]+/g, String(syncInterval))
+    .replace(/\/\*\s*__PEC_BYPASS_TIMEOUT_MIN__\s*\*\/[^\n;]+/g, String(bypassTimeout))
+    .replace(/\/\*\s*__PEC_BADGE_ENABLED__\s*\*\/[^\n;]+/g, String(badgeEnabled))
     .replace(/const SYNC_INTERVAL_MIN = [^;]+;/g, `const SYNC_INTERVAL_MIN = ${syncInterval};`)
     .replace(/const BYPASS_TIMEOUT_MIN = [^;]+;/g, `const BYPASS_TIMEOUT_MIN = ${bypassTimeout};`)
     .replace(/const BADGE_ENABLED = [^;]+;/g, `const BADGE_ENABLED = ${badgeEnabled};`)
@@ -2308,8 +2311,10 @@ function initPopup() {
     });
   }
 
+  const MAX_USER_RULES = 100;
+
   function saveUserRules(rules) {
-    userRules = rules;
+    userRules = (rules || []).slice(0, MAX_USER_RULES);
     renderUserRules(userRules);
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ action: "SAVE_USER_RULES", type: "SAVE_USER_RULES", rules: userRules });
@@ -2322,14 +2327,14 @@ function initPopup() {
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ action: "GET_USER_RULES", type: "GET_USER_RULES" }, (res) => {
         if (!chrome.runtime.lastError && res && Array.isArray(res.userRules)) {
-          userRules = res.userRules;
+          userRules = res.userRules.slice(0, MAX_USER_RULES);
           renderUserRules(userRules);
         }
       });
     } else if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
       chrome.storage.local.get(["pecUserRules"], (res) => {
         if (res && Array.isArray(res.pecUserRules)) {
-          userRules = res.pecUserRules;
+          userRules = res.pecUserRules.slice(0, MAX_USER_RULES);
           renderUserRules(userRules);
         }
       });
@@ -2345,6 +2350,9 @@ function initPopup() {
       existing.action = act;
       existing.enabled = true;
     } else {
+      if (userRules.length >= MAX_USER_RULES) {
+        return;
+      }
       userRules.push({ pattern: p, action: act, enabled: true });
     }
     saveUserRules(userRules);

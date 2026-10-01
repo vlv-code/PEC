@@ -162,7 +162,7 @@ export function registerHeartbeat(data: {
   const now = new Date().toISOString();
   const meta = persistentMeta[cleanId] || {};
 
-  const effectiveGroup = data.group || meta.group || existing?.group || "Default Fleet";
+  const effectiveGroup = String(data.group || meta.group || existing?.group || "Default Fleet").slice(0, 64);
   const effectiveProfileId = meta.assignedProfileId || existing?.assignedProfileId;
   const resolvedProfile = effectiveProfileId
     ? getProfileById(effectiveProfileId)
@@ -177,7 +177,7 @@ export function registerHeartbeat(data: {
     lastSync: now,
     syncCount: (existing?.syncCount || 0) + 1,
     status: "ONLINE",
-    activeProxyMode: data.activeProxyMode || existing?.activeProxyMode || getProxyConfig().protocol,
+    activeProxyMode: String(data.activeProxyMode || existing?.activeProxyMode || getProxyConfig().protocol).slice(0, 64),
     group: effectiveGroup,
     assignedProfileId: effectiveProfileId,
     appliedProfileName: resolvedProfile?.name || "Default Profile",
