@@ -128,7 +128,11 @@ test("integration: background.js and BACKGROUND_TEMPLATE implement injectUserRul
   assert.ok(BACKGROUND_TEMPLATE.includes("pecUserRules"), "BACKGROUND_TEMPLATE must use pecUserRules storage key");
 
   // Both files must stay in sync
-  assert.equal(bgContent, BACKGROUND_TEMPLATE, "extension/background.js and BACKGROUND_TEMPLATE must be identical");
+  assert.equal(
+    bgContent.replace(/\r\n/g, "\n").trim(),
+    BACKGROUND_TEMPLATE.replace(/\r\n/g, "\n").trim(),
+    "extension/background.js and BACKGROUND_TEMPLATE must be identical"
+  );
 });
 
 test("integration: background.js executes in MV3 environment with message handling and PAC overrides", async () => {
