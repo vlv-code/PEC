@@ -174,6 +174,7 @@
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c];
       });
     }
+    const escapeHtml = esc;
 
     function t(key, fallback) {
       const dict = (typeof I18N !== 'undefined' && I18N[currentLang]) || {};
@@ -389,7 +390,7 @@
         btnLogoutTitle: 'Log out',
         btnCustomizationTitle: 'Appearance & Themes',
         popoverTitle: 'Appearance',
-        lblHdrFleet: 'Connected Fleet:',
+        lblHdrFleet: 'Connected Devices:',
         lblHdrUser: 'Current User:',
         lblHdrProfile: 'Active PAC Profile:',
         lblHdrRot: 'Next Rotation:',
@@ -398,7 +399,8 @@
         btnKillSwitchOn: 'Kill-Switch: ON (Active)',
         tabBtnRouting: 'Routing & GeoBases',
         tabBtnBuilder: 'Extension Constructor Studio',
-        tabBtnFleet: 'Fleet & Target Assignment',
+        tabBtnFleet: '💻 Devices',
+        tabBtnInstances: '💻 Devices',
         tabBtnGpo: 'GPO Deployment',
         tabBtnRotation: 'Proxy Settings',
         tabBtnProxySettings: 'Proxy Settings',
@@ -431,8 +433,8 @@
         optPolicyDirect: 'DIRECT by Default (Selective Proxy)',
         optPolicyProxy: 'PROXY by Default (Full Tunnel)',
         lblTargetScope: 'Deployment Target Scope',
-        optScopeAll: 'All Fleet (Global Default)',
-        optScopeGroup: 'Target AD / Fleet Group',
+        optScopeAll: 'All Devices (Global Default)',
+        optScopeGroup: 'Target AD / Device Group',
         optScopeInstances: 'Specific Selected Instances',
         lblTargetGroup: 'Target Group Name',
         phTargetGroup: 'e.g. SEC-Proxy-VPN-VIP or Dev-Team',
@@ -531,18 +533,20 @@
         btnDownloadCrx: 'Download .CRX',
         btnDownloadZip: 'Download .ZIP',
 
-        // Tab 3: Fleet
-        titleFleetInstances: 'Connected Extension Instances',
-        subFleetInstances: 'Assign specific profiles or groups to instances, or monitor live sync activity:',
+        // Tab 3: Devices
+        titleFleetInstances: 'Corporate Network Devices',
+        subFleetInstances: 'Active extension installations and their current status:',
+        titleRegisteredDevices: 'Registered Devices',
         thInstId: 'Instance ID',
         thInstIp: 'IP Address',
         thInstVer: 'Version',
-        thInstGroup: 'Fleet Group',
+        thInstGroup: 'Device Group',
         thInstProfile: 'Assigned Profile',
         thInstSyncs: 'Syncs',
         thInstStatus: 'Status',
         thInstAssign: 'Assign',
-        txtNoFleet: 'No active instances connected yet.',
+        thInstActions: 'Actions',
+        txtNoFleet: 'No registered devices connected yet.',
 
         // Tab 4: GPO
         titleExtPackageInfo: 'Extension Identifiers & Package Info',
@@ -709,7 +713,7 @@
         btnLogoutTitle: 'Выйти',
         btnCustomizationTitle: 'Внешний вид и темы',
         popoverTitle: 'Внешний вид',
-        lblHdrFleet: 'Подключенный флот:',
+        lblHdrFleet: 'Подключенные устройства:',
         lblHdrUser: 'Текущий пользователь:',
         lblHdrProfile: 'Активный PAC профиль:',
         lblHdrRot: 'Следующая ротация:',
@@ -718,7 +722,8 @@
         btnKillSwitchOn: 'Kill-Switch: ВКЛ (Авария)',
         tabBtnRouting: 'Маршрутизация и Гео-базы',
         tabBtnBuilder: 'Конструктор расширения',
-        tabBtnFleet: 'Флот и устройства',
+        tabBtnFleet: '💻 Устройства',
+        tabBtnInstances: '💻 Устройства',
         tabBtnGpo: 'GPO & Реестр Windows',
         tabBtnRotation: 'Настройки прокси',
         tabBtnProxySettings: 'Настройки прокси',
@@ -751,8 +756,8 @@
         optPolicyDirect: 'DIRECT по умолчанию (Выборочный прокси)',
         optPolicyProxy: 'PROXY по умолчанию (Полный туннель)',
         lblTargetScope: 'Целевая область применения',
-        optScopeAll: 'Весь флот (Глобально по умолчанию)',
-        optScopeGroup: 'Целевая группа AD / Флота',
+        optScopeAll: 'Все устройства (Глобально по умолчанию)',
+        optScopeGroup: 'Целевая группа AD / Устройства',
         optScopeInstances: 'Отдельные выбранные устройства',
         lblTargetGroup: 'Имя целевой группы',
         phTargetGroup: 'напр. SEC-Proxy-VPN-VIP или Dev-Team',
@@ -851,18 +856,20 @@
         btnDownloadCrx: 'Скачать .CRX',
         btnDownloadZip: 'Скачать .ZIP',
 
-        // Tab 3: Fleet
-        titleFleetInstances: 'Подключенные экземпляры расширения',
-        subFleetInstances: 'Назначайте профили или группы устройствам, отслеживайте статус синхронизации:',
+        // Tab 3: Devices
+        titleFleetInstances: 'Устройства корпоративной сети',
+        subFleetInstances: 'Список активных установок расширения и их текущий статус',
+        titleRegisteredDevices: 'Зарегистрированные устройства',
         thInstId: 'ID экземпляра',
         thInstIp: 'IP адрес',
         thInstVer: 'Версия',
-        thInstGroup: 'Группа флота',
+        thInstGroup: 'Группа устройств',
         thInstProfile: 'Назначенный профиль',
         thInstSyncs: 'Синхронизаций',
         thInstStatus: 'Статус',
         thInstAssign: 'Назначить',
-        txtNoFleet: 'Пока нет подключенных активных устройств.',
+        thInstActions: 'Действия',
+        txtNoFleet: 'Зарегистрированные устройства отсутствуют',
 
         // Tab 4: GPO
         titleExtPackageInfo: 'Идентификаторы расширения и сведения о пакете',
@@ -1113,13 +1120,18 @@
       if (!document.getElementById(targetId)) {
         if (name === 'rotation') targetId = 'tab-proxy-settings';
         else if (name === 'proxy-settings') targetId = 'tab-rotation';
+        else if (name === 'fleet') targetId = 'tab-instances';
+        else if (name === 'instances') targetId = 'tab-fleet';
       }
       const pane = document.getElementById(targetId);
       if (pane) pane.classList.add('active');
 
       const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
         const oc = b.getAttribute('onclick') || '';
-        return oc.includes(name) || ((name === 'rotation' || name === 'proxy-settings') && (oc.includes('rotation') || oc.includes('proxy-settings')));
+        const id = b.id || '';
+        return oc.includes(name) ||
+          ((name === 'rotation' || name === 'proxy-settings') && (oc.includes('rotation') || oc.includes('proxy-settings'))) ||
+          ((name === 'fleet' || name === 'instances') && (oc.includes('fleet') || oc.includes('instances') || id === 'tab-instances' || id === 'tabBtnFleet'));
       });
       if (btn) btn.classList.add('active');
     }
@@ -1390,7 +1402,7 @@
           body: JSON.stringify(currentProfile)
         });
         if (res.ok) {
-          toast('Routing profile saved! Deployed to matching fleet instances.', 'success');
+          toast(currentLang === 'ru' ? 'Профиль маршрутизации сохранен! Применен к соответствующим устройствам.' : 'Routing profile saved! Deployed to matching devices.', 'success');
           setUnsavedRouting(false);
           loadProfiles();
         } else {
@@ -2606,47 +2618,89 @@
       }
     }
 
-    // ----------------- Fleet & Instances -----------------
-    async function fetchFleet() {
+    // ----------------- Devices & Instances -----------------
+    async function loadInstances() {
       try {
         const res = await adminFetch('/api/instances');
         const data = await res.json();
         const isRu = currentLang === 'ru';
-        document.getElementById('badgeFleetOnline').textContent = data.online + (isRu ? ' онлайн' : ' online');
-
-        const tbody = document.getElementById('fleetTableBody');
-        if (!data.instances || !data.instances.length) {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'Пока нет подключенных устройств. Расширения синхронизируются через <code>/api/sync</code> каждые 5 мин.' : 'No instances connected yet. Extensions sync via <code>/api/sync</code> every 5 min.') + '</td></tr>';
-          return;
+        const badge = document.getElementById('badgeFleetOnline');
+        if (badge) {
+          badge.textContent = data.online + (isRu ? ' онлайн' : ' online');
         }
-
-        const profileOptions = allProfiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
-
-        tbody.innerHTML = data.instances.map(inst => {
-          let badge = 'badge-online';
-          if (inst.status === 'STALE') badge = 'badge-stale';
-          else if (inst.status === 'OFFLINE') badge = 'badge-offline';
-
-          return `<tr>
-            <td><code>${esc(inst.instanceId)}</code></td>
-            <td style="font-family: var(--mono);">${esc(inst.ip)}</td>
-            <td>v${esc(inst.version)}</td>
-            <td><code>${esc(inst.group || (isRu ? 'Основной флот' : 'Default Fleet'))}</code></td>
-            <td><span class="badge badge-action-proxy">${esc(inst.appliedProfileName || (isRu ? 'По умолчанию' : 'Default'))}</span></td>
-            <td>${esc(inst.syncCount)}</td>
-            <td><span class="badge ${badge}">${esc(inst.status)}</span></td>
-            <td>
-              <select onchange="assignProfileToInstance('${esc(inst.instanceId)}', this.value)" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
-                <option value="">${isRu ? 'По умолчанию (Авто)' : 'Default (Auto)'}</option>
-                ${profileOptions}
-              </select>
-            </td>
-          </tr>`;
-        }).join('');
+        renderInstancesTable(data.instances || []);
       } catch (e) {
         console.error(e);
       }
     }
+
+    async function fetchFleet() {
+      return loadInstances();
+    }
+
+    function renderInstancesTable(instances) {
+      const isRu = currentLang === 'ru';
+      const tbody = document.getElementById('fleetTableBody');
+      if (!tbody) return;
+      if (!instances || !instances.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'Пока нет подключенных устройств. Расширения синхронизируются через <code>/api/sync</code> каждые 5 мин.' : 'No instances connected yet. Extensions sync via <code>/api/sync</code> every 5 min.') + '</td></tr>';
+        return;
+      }
+
+      const profileOptions = allProfiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+
+      tbody.innerHTML = instances.map(inst => {
+        let badge = 'badge-online';
+        if (inst.status === 'STALE') badge = 'badge-stale';
+        else if (inst.status === 'OFFLINE') badge = 'badge-offline';
+
+        return `<tr>
+          <td><code>${esc(inst.instanceId)}</code></td>
+          <td style="font-family: var(--mono);">${esc(inst.ip)}</td>
+          <td>v${esc(inst.version)}</td>
+          <td><code>${esc(inst.group || (isRu ? 'Основная группа' : 'Default Group'))}</code></td>
+          <td><span class="badge badge-action-proxy">${esc(inst.appliedProfileName || (isRu ? 'По умолчанию' : 'Default'))}</span></td>
+          <td>${esc(inst.syncCount)}</td>
+          <td><span class="badge ${badge}">${esc(inst.status)}</span></td>
+          <td>
+            <select onchange="assignProfileToInstance('${esc(inst.instanceId)}', this.value)" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
+              <option value="">${isRu ? 'По умолчанию (Авто)' : 'Default (Auto)'}</option>
+              ${profileOptions}
+            </select>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-danger btn-delete-instance" data-id="${escapeHtml(inst.instanceId)}" title="Удалить устройство">🗑️</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function deleteInstance(id) {
+      if (!confirm("Удалить устройство " + id + "?")) return;
+      try {
+        const res = await adminFetch('/api/instances/' + encodeURIComponent(id), {
+          method: 'DELETE'
+        });
+        if (res.ok || res.status === 200) {
+          toast(currentLang === 'ru' ? 'Устройство успешно удалено' : 'Device deleted successfully', 'success');
+          loadInstances();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          toast('Delete error: ' + (errData.error || res.statusText), 'error');
+        }
+      } catch (err) {
+        toast('Delete error: ' + err, 'error');
+      }
+    }
+
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest('.btn-delete-instance');
+      if (!btn) return;
+      const id = btn.getAttribute('data-id');
+      if (id) {
+        deleteInstance(id);
+      }
+    });
 
     async function assignProfileToInstance(instanceId, profileId) {
       try {
@@ -2655,7 +2709,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ instanceId, profileId })
         });
-        fetchFleet();
+        loadInstances();
       } catch (e) {
         toast('Assignment error: ' + e, 'error');
       }

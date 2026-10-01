@@ -10,7 +10,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Corp Proxy Fleet & Extension Studio</title>
+  <title>Corp Proxy Devices & Extension Studio</title>
   <meta name="description" content="Central manager for selective proxy routing, GeoBases, extension constructor studio, and 3x-ui rotating authentication." />
   <link rel="stylesheet" href="/dashboard.css">
 </head>
@@ -132,7 +132,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     <!-- Top quick overview banner -->
     <div class="banner">
       <div>
-        <strong id="lblHdrFleet" data-i18n="lblHdrFleet">Подключенный флот:</strong> <span id="hdrFleetCount">0 активных</span> &bull; 
+        <strong id="lblHdrFleet" data-i18n="lblHdrFleet">Подключенные устройства:</strong> <span id="hdrFleetCount">0 активных</span> &bull; 
         <strong id="lblHdrUser" data-i18n="lblHdrUser">Текущий пользователь:</strong> <code id="hdrUser">corp-user</code> &bull; 
         <strong id="lblHdrProfile" data-i18n="lblHdrProfile">Активный PAC профиль:</strong> <span id="hdrActiveProfile" style="color: var(--primary);">Direct Default</span> &bull;
         <strong id="lblHdrRot" data-i18n="lblHdrRot">Следующая ротация:</strong> <span id="hdrNextRot">Расчет...</span>
@@ -147,7 +147,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     <div class="tabs-nav">
       <button id="tabBtnRouting" class="tab-btn active" onclick="switchTab('routing')" data-i18n="tabBtnRouting">Routing & GeoBases</button>
       <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder">Extension Constructor Studio</button>
-      <button id="tabBtnFleet" class="tab-btn" onclick="switchTab('fleet')" data-i18n="tabBtnFleet">Fleet & Target Assignment</button>
+      <button id="tab-instances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances">💻 Устройства</button>
       <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo">GPO Deployment</button>
       <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings">Proxy Settings</button>
       <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs">Audit & Tester</button>
@@ -183,8 +183,8 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div>
               <label data-i18n="lblTargetScope">Deployment Target Scope</label>
               <select id="profTargetScope" style="margin-bottom: 0;">
-                <option value="all" data-i18n="optScopeAll">All Fleet (Global Default)</option>
-                <option value="group" data-i18n="optScopeGroup">Target AD / Fleet Group</option>
+                <option value="all" data-i18n="optScopeAll">All Devices (Global Default)</option>
+                <option value="group" data-i18n="optScopeGroup">Target AD / Device Group</option>
                 <option value="instances" data-i18n="optScopeInstances">Specific Selected Instances</option>
               </select>
             </div>
@@ -589,17 +589,18 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       </div>
     </div>
 
-    <!-- ==================== TAB 3: FLEET & TARGET ASSIGNMENT ==================== -->
-    <div id="tab-fleet" class="tab-pane">
+    <!-- ==================== TAB 3: DEVICES & TARGET ASSIGNMENT ==================== -->
+    <div id="tab-instances" class="tab-pane">
       <div class="card">
         <h2>
-          <span data-i18n="titleFleetInstances">Connected Extension Instances</span>
+          <span data-i18n="titleFleetInstances">Устройства корпоративной сети</span>
           <span id="badgeFleetOnline" class="badge badge-online">0 online</span>
         </h2>
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;" data-i18n="subFleetInstances">
-          Assign specific profiles or groups to instances, or monitor live sync activity:
+          Список активных установок расширения и их текущий статус
         </p>
 
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;" data-i18n="titleRegisteredDevices">Зарегистрированные устройства</div>
         <div class="table-container">
           <table>
             <thead>
@@ -607,15 +608,16 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <th data-i18n="thInstId">Instance ID</th>
                 <th data-i18n="thInstIp">IP Address</th>
                 <th data-i18n="thInstVer">Version</th>
-                <th data-i18n="thInstGroup">Fleet Group</th>
+                <th data-i18n="thInstGroup">Группа устройств</th>
                 <th data-i18n="thInstProfile">Assigned Profile</th>
                 <th data-i18n="thInstSyncs">Syncs</th>
                 <th data-i18n="thInstStatus">Status</th>
                 <th data-i18n="thInstAssign">Assign</th>
+                <th data-i18n="thInstActions">Действия</th>
               </tr>
             </thead>
             <tbody id="fleetTableBody">
-              <tr><td colspan="8" style="text-align: center; color: var(--text-muted);" data-i18n="txtNoFleet">No active instances connected yet.</td></tr>
+              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);" data-i18n="txtNoFleet">Зарегистрированные устройства отсутствуют</td></tr>
             </tbody>
           </table>
         </div>
