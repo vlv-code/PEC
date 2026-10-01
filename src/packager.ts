@@ -297,8 +297,18 @@ function getThemeStyles(cfg: ExtensionBuildConfig) {
   };
 }
 
+function escapeSvgAttr(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function generateSvgIcon(cfg: ExtensionBuildConfig, colors: { primary: string; bg: string }): string {
   if (cfg.customIconDataUrl) {
+    const safeHref = escapeSvgAttr(cfg.customIconDataUrl);
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -308,7 +318,7 @@ function generateSvgIcon(cfg: ExtensionBuildConfig, colors: { primary: string; b
   </defs>
   <rect width="128" height="128" rx="28" fill="url(#bgGrad)" />
   <rect x="6" y="6" width="116" height="116" rx="24" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.15"/>
-  <image href="${cfg.customIconDataUrl}" x="16" y="16" width="96" height="96" preserveAspectRatio="xMidYMid meet"/>
+  <image href="${safeHref}" x="16" y="16" width="96" height="96" preserveAspectRatio="xMidYMid meet"/>
 </svg>`;
   }
 
@@ -383,7 +393,9 @@ export function parseDataUrlBuffer(dataUrl?: string): Buffer | null {
   try {
     const comma = dataUrl.indexOf(",");
     if (comma !== -1) {
-      return Buffer.from(dataUrl.slice(comma + 1), "base64");
+      const b64 = dataUrl.slice(comma + 1);
+      const buf = Buffer.from(b64, "base64");
+      return buf.length > 0 ? buf : null;
     }
   } catch {}
   return null;

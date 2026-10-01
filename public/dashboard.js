@@ -1959,9 +1959,9 @@
         document.getElementById('bldSupportUrl').value = cfg.supportUrl || 'mailto:it-support@corp.local';
 
         if (cfg.uiMode) {
-          highlightTemplateChip(cfg.uiMode);
+          highlightTemplateChip(cfg.uiMode, false);
         } else if (cfg.presetTemplate) {
-          highlightTemplateChip(cfg.presetTemplate);
+          highlightTemplateChip(cfg.presetTemplate, false);
         }
         if (cfg.presetStyle) {
           highlightStyleChip(cfg.presetStyle);
@@ -1997,7 +1997,7 @@
       }
     }
 
-    function applyUiModePreset(mode) {
+    function applyUiModePreset(mode, triggerSave = true) {
       const uiModeEl = document.getElementById('bldUiMode');
       if (uiModeEl) uiModeEl.value = mode;
 
@@ -2020,23 +2020,25 @@
         if (desc) desc.textContent = 'Обычный режим: интерактивный попап с информацией о подключении, маршрутизации и управлением.';
       }
 
-      onConfigChangeLive();
+      if (triggerSave) {
+        onConfigChangeLive();
+      }
     }
     window.applyUiModePreset = applyUiModePreset;
 
-    function highlightTemplateChip(preset) {
+    function highlightTemplateChip(preset, triggerSave = false) {
       if (preset === 'enterprise-invisible' || preset === 'stealth') {
-        applyUiModePreset('stealth');
+        applyUiModePreset('stealth', triggerSave);
       } else {
-        applyUiModePreset('popup');
+        applyUiModePreset('popup', triggerSave);
       }
     }
 
     async function applyTemplatePreset(preset) {
       if (preset === 'enterprise-invisible' || preset === 'stealth') {
-        applyUiModePreset('stealth');
+        applyUiModePreset('stealth', true);
       } else {
-        applyUiModePreset('popup');
+        applyUiModePreset('popup', true);
       }
     }
     window.applyTemplatePreset = applyTemplatePreset;

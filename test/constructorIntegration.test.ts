@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { buildExtensionFiles, saveBuildConfig, getBuildConfig, generateExtensionFiles } from "../src/packager.js";
+import { buildExtensionFiles, saveBuildConfig, getBuildConfig, generateExtensionFiles, parseDataUrlBuffer } from "../src/packager.js";
 import { ExtensionBuildConfig } from "../src/types.js";
 import { renderDashboardHtml } from "../src/views/dashboardView.js";
 
@@ -161,5 +161,33 @@ test("generateExtensionFiles generates icon files from customIconDataUrl or emoj
   assert.ok(filesWithCustom["icon128.png"], "icon128.png is generated");
   assert.ok(filesWithCustom["icon.png"], "icon.png is generated");
 });
+
+test("parseDataUrlBuffer returns null for empty, blank, or invalid base64 data URLs", () => {
+  assert.equal(parseDataUrlBuffer(""), null);
+  assert.equal(parseDataUrlBuffer(undefined), null);
+  assert.equal(parseDataUrlBuffer("data:image/png;base64,"), null);
+  assert.equal(parseDataUrlBuffer("not-a-data-url"), null);
+});
+
+test("generateExtensionFiles escapes customIconDataUrl in SVG preview to prevent attribute injection", () => {
+  const maliciousDataUrl = 'data:image/png;base64,abc" onmouseover="alert(1)"';
+  const files = generateExtensionFiles({
+    name: "Injection Test",
+    shortName: "Inject",
+    version: "1.0.0",
+    customIconDataUrl: maliciousDataUrl,
+  });
+
+  const svg = files["icon.svg"] as string;
+  assert.ok(svg.includes("&quot;"), "quotes must be escaped in SVG href");
+  assert.doesNotMatch(svg, /href="[^"]*"[^>]*onmouseover/);
+});
+
+test("dashboard.js applyUiModePreset accepts triggerSave parameter to avoid extraneous save on initial load", () => {
+  const js = fs.readFileSync(path.resolve(process.cwd(), "public/dashboard.js"), "utf-8");
+  assert.match(js, /function\s+applyUiModePreset\s*\(\s*mode\s*,\s*triggerSave\s*=\s*true\s*\)/);
+  assert.match(js, /highlightTemplateChip\s*\(\s*cfg\.uiMode\s*,\s*false\s*\)/);
+});
+
 
 
