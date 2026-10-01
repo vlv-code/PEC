@@ -298,25 +298,21 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             Configure functional archetypes, visual styles, security leak guards, and user capabilities:
           </p>
 
-          <!-- 1. Archetype Presets -->
+          <!-- 1. Interface Mode -->
           <div style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px;">
-            <label style="margin-bottom: 8px;" data-i18n="lblArchetypePresets">1. Functional Archetype Presets</label>
+            <label style="margin-bottom: 8px;" data-i18n="lblArchetypePresets">1. Режим интерфейса</label>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="preset-chip active" id="chip-self-service" onclick="applyTemplatePreset('self-service-pro')">
+              <button type="button" class="preset-chip active" id="chip-popup" onclick="applyUiModePreset('popup')">
                 <span>👤</span>
-                <span data-i18n="chipSelfService">Self-Service Pro</span>
+                <span data-i18n="chipPopupMode">Обычный режим</span>
               </button>
-              <button type="button" class="preset-chip" id="chip-kiosk" onclick="applyTemplatePreset('kiosk-restricted')">
-                <span>🔒</span>
-                <span data-i18n="chipKiosk">Kiosk / Restricted</span>
-              </button>
-              <button type="button" class="preset-chip" id="chip-stealth" onclick="applyTemplatePreset('enterprise-invisible')">
+              <button type="button" class="preset-chip" id="chip-stealth" onclick="applyUiModePreset('stealth')">
                 <span>👻</span>
-                <span data-i18n="chipStealth">Stealth Agent</span>
+                <span data-i18n="chipStealthMode">Скрытый агент</span>
               </button>
             </div>
             <p id="presetDescText" style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
-              Self-Service Pro: Interactive popup with connection details, routing overview, manual sync, and temporary user bypass.
+              Обычный режим: интерактивный попап с информацией о подключении, маршрутизации и управлением.
             </p>
           </div>
 
@@ -383,6 +379,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </div>
 
           <!-- 3. Identity & Branding -->
+          <input type="hidden" id="bldUiMode" value="popup" />
           <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
             <div>
               <label data-i18n="lblExtName">Extension Name</label>
@@ -394,39 +391,10 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div>
               <label data-i18n="lblVersion">Version</label>
               <input type="text" id="bldVersion" oninput="onConfigChangeLive()" placeholder="1.2.0" />
-            </div>
-            <div>
-              <label data-i18n="lblUiMode">UI Mode</label>
-              <select id="bldUiMode" onchange="onConfigChangeLive()">
-                <option value="popup" data-i18n="optUiPopup">Interactive Popup UI</option>
-                <option value="stealth" data-i18n="optUiStealth">Silent / Stealth Enterprise Worker</option>
-              </select>
-            </div>
-            <div>
-              <label data-i18n="lblIconType">Vector Icon Type</label>
-              <select id="bldIconType" onchange="onConfigChangeLive()">
-                <option value="shield">🛡️ Shield Security</option>
-                <option value="lock">🔒 Lock Encrypted</option>
-                <option value="globe">🌐 Global Network</option>
-                <option value="bolt">⚡ Lightning Bolt</option>
-                <option value="server">🖥️ Gateway Server</option>
-                <option value="key">🔑 Auth Token Key</option>
-              </select>
-            </div>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-            <div>
-              <label data-i18n="lblBrandColor">Brand Theme Color</label>
-              <input type="text" id="bldThemeColor" oninput="onConfigChangeLive()" placeholder="#0284c7" />
-            </div>
-            <div>
-              <label data-i18n="lblIconEmoji">Icon Emoji</label>
-              <input type="text" id="bldEmoji" oninput="onConfigChangeLive()" placeholder="🛡️" />
             </div>
             <div>
               <label data-i18n="lblSyncInterval">Sync Interval</label>
@@ -436,6 +404,28 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <option value="30" data-i18n="optSync30">Every 30 minutes</option>
                 <option value="60" data-i18n="optSync60">Every 1 hour</option>
               </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; margin-top: 10px;">
+            <div>
+              <label data-i18n="lblBrandColor">Brand Theme Color</label>
+              <input type="text" id="bldThemeColor" oninput="onConfigChangeLive()" placeholder="#0284c7" />
+            </div>
+            <div>
+              <label data-i18n="lblIconCustom">Иконка расширения (Emoji или изображение)</label>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="bldEmoji" oninput="onConfigChangeLive()" placeholder="🛡️" style="width: 50px; text-align: center; font-size: 18px;" />
+                <input type="file" id="iconFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;" onchange="onIconFileSelected(event)" />
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('iconFileInput').click()" style="display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; height: 34px;">
+                  <span>📁</span>
+                  <span data-i18n="btnUploadIcon">Загрузить изображение</span>
+                </button>
+                <div id="customIconPreviewBox" style="display: none; align-items: center; gap: 6px;">
+                  <img id="customIconPreviewImg" src="" alt="Icon preview" style="width: 28px; height: 28px; border-radius: 6px; object-fit: contain; border: 1px solid var(--border);" />
+                  <button type="button" class="btn btn-sm" onclick="clearCustomIcon()" title="Удалить иконку" style="padding: 2px 6px; font-size: 11px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;">✕</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -532,7 +522,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div class="preview-canvas">
               <!-- Popup Window Box -->
               <div class="popup-frame-box" id="popupFrameBox">
-                <iframe id="previewFrame" sandbox="allow-scripts" style="width: 100%; height: 470px; border: none;" title="Extension Popup Preview"></iframe>
+                <iframe id="previewFrame" sandbox="allow-scripts" style="height: 470px; border: none; overflow: hidden;" scrolling="no" title="Extension Popup Preview"></iframe>
               </div>
 
               <!-- Stealth Mode Fallback Card -->

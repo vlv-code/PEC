@@ -118,8 +118,8 @@ export interface ExtensionBuildConfig {
   serverUrl?: string;
   token?: string;
   locale?: "ru" | "en";
-  uiMode?: "stealth" | "popup";
-  presetTemplate?: "self-service-pro" | "kiosk-restricted" | "enterprise-invisible";
+  uiMode?: "popup" | "stealth";
+  presetTemplate?: "self-service-pro" | "enterprise-invisible";
   presetStyle?: "cyber-blue" | "dark-obsidian" | "emerald-sentinel" | "sunset-amber" | "minimal-light";
   uiLayout?: "console" | "terminal";
   colorPalette?: "cyber" | "obsidian" | "nord" | "emerald" | "light";
@@ -128,6 +128,7 @@ export interface ExtensionBuildConfig {
   themeBackground?: string;
   themeCard?: string;
   iconEmoji?: string;
+  customIconDataUrl?: string;
   iconType?: "shield" | "lock" | "globe" | "bolt" | "server" | "key";
   webRtcProtection?: boolean;
   dnsLeakProtection?: boolean;

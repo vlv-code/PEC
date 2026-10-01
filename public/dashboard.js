@@ -468,10 +468,11 @@
         // Tab 2: Extension Constructor Studio
         titleBuilder: 'Extension Constructor & Customizer',
         subBuilder: 'Configure functional archetypes, visual styles, security leak guards, and user capabilities:',
-        lblArchetypePresets: '1. Functional Archetype Presets',
-        chipSelfService: 'Self-Service Pro',
-        chipKiosk: 'Kiosk / Restricted',
-        chipStealth: 'Stealth Agent',
+        lblArchetypePresets: '1. Interface Mode',
+        chipPopupMode: 'Interactive Popup',
+        chipStealthMode: 'Stealth Agent',
+        btnUploadIcon: 'Upload Image',
+        lblIconCustom: 'Extension Icon (Emoji or Image)',
         lblThemePalettes: '2. UI Layout & Color Palette',
         lblStudioLayout: 'Interface Layout:',
         lblStudioPalette: 'Color Palette:',
@@ -787,10 +788,11 @@
         // Tab 2: Extension Constructor Studio
         titleBuilder: 'Конструктор и кастомизатор расширения',
         subBuilder: 'Настройка функциональных архетипов, визуального стиля, защиты от утечек и возможностей пользователя:',
-        lblArchetypePresets: '1. Функциональные конфигурационные архетипы',
-        chipSelfService: 'Self-Service Pro',
-        chipKiosk: 'Киоск / Ограниченный',
-        chipStealth: 'Скрытый агент (Stealth)',
+        lblArchetypePresets: '1. Режим интерфейса',
+        chipPopupMode: 'Обычный режим',
+        chipStealthMode: 'Скрытый агент',
+        btnUploadIcon: 'Загрузить изображение',
+        lblIconCustom: 'Иконка расширения (Emoji или изображение)',
         lblThemePalettes: '2. Макет и цветовая палитра',
         lblStudioLayout: 'Макет интерфейса:',
         lblStudioPalette: 'Цветовая палитра:',
@@ -1869,6 +1871,58 @@
     window.setStudioPalette = setStudioPalette;
     window.setStudioThemeMode = setStudioThemeMode;
 
+    let currentCustomIconDataUrl = '';
+
+    function setCustomIconDataUrl(dataUrl, triggerSave = true) {
+      currentCustomIconDataUrl = dataUrl || '';
+      const previewBox = document.getElementById('customIconPreviewBox');
+      const previewImg = document.getElementById('customIconPreviewImg');
+      if (currentCustomIconDataUrl) {
+        if (previewImg) previewImg.src = currentCustomIconDataUrl;
+        if (previewBox) previewBox.style.display = 'inline-flex';
+      } else {
+        if (previewImg) previewImg.src = '';
+        if (previewBox) previewBox.style.display = 'none';
+        const fileInput = document.getElementById('iconFileInput');
+        if (fileInput) fileInput.value = '';
+      }
+      if (triggerSave) {
+        onConfigChangeLive();
+      }
+    }
+
+    window.clearCustomIcon = function() {
+      setCustomIconDataUrl('', true);
+    };
+
+    window.onIconFileSelected = function(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const rawUrl = evt.target.result;
+        const img = new Image();
+        img.onload = function() {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 128, 128);
+            const pngDataUrl = canvas.toDataURL('image/png');
+            setCustomIconDataUrl(pngDataUrl, true);
+          } catch (err) {
+            setCustomIconDataUrl(rawUrl, true);
+          }
+        };
+        img.onerror = function() {
+          setCustomIconDataUrl(rawUrl, true);
+        };
+        img.src = rawUrl;
+      };
+      reader.readAsDataURL(file);
+    };
+
     async function loadBuilderConfig() {
       try {
         const res = await adminFetch('/api/builder/config');
@@ -1878,9 +1932,15 @@
         document.getElementById('bldShortName').value = cfg.shortName || 'CorpProxy';
         document.getElementById('bldVersion').value = cfg.version || '1.2.0';
         document.getElementById('bldUiMode').value = cfg.uiMode || 'popup';
-        document.getElementById('bldIconType').value = cfg.iconType || 'shield';
+        const iconTypeEl = document.getElementById('bldIconType');
+        if (iconTypeEl) iconTypeEl.value = cfg.iconType || 'shield';
         document.getElementById('bldThemeColor').value = cfg.themeColor || '#0284c7';
         document.getElementById('bldEmoji').value = cfg.iconEmoji || '🛡️';
+        if (cfg.customIconDataUrl) {
+          setCustomIconDataUrl(cfg.customIconDataUrl, false);
+        } else {
+          setCustomIconDataUrl('', false);
+        }
         document.getElementById('bldDesc').value = cfg.description || 'Enterprise Chrome extension for automatic proxy synchronization';
         const srvInput = document.getElementById('bldServerUrl');
         if (srvInput) {
@@ -1898,7 +1958,9 @@
         document.getElementById('bldBypassTimeout').value = cfg.bypassTimeoutMinutes || 15;
         document.getElementById('bldSupportUrl').value = cfg.supportUrl || 'mailto:it-support@corp.local';
 
-        if (cfg.presetTemplate) {
+        if (cfg.uiMode) {
+          highlightTemplateChip(cfg.uiMode);
+        } else if (cfg.presetTemplate) {
           highlightTemplateChip(cfg.presetTemplate);
         }
         if (cfg.presetStyle) {
@@ -1935,65 +1997,49 @@
       }
     }
 
-    function highlightTemplateChip(preset) {
-      activeTemplatePreset = preset;
-      ['chip-self-service', 'chip-kiosk', 'chip-stealth'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.remove('active');
-      });
-      const badge = document.getElementById('bldPresetBadge');
+    function applyUiModePreset(mode) {
+      const uiModeEl = document.getElementById('bldUiMode');
+      if (uiModeEl) uiModeEl.value = mode;
+
+      const chipPopup = document.getElementById('chip-popup') || document.getElementById('chip-self-service');
+      const chipStealth = document.getElementById('chip-stealth');
       const desc = document.getElementById('presetDescText');
+      const badge = document.getElementById('bldPresetBadge');
 
-      if (preset === 'self-service-pro') {
-        const el = document.getElementById('chip-self-service');
-        if (el) el.classList.add('active');
-        if (badge) badge.textContent = 'Self-Service Pro';
-        if (desc) desc.textContent = 'Self-Service Pro: Interactive popup with full connection metrics, routing inspection, manual force sync, and user temporary bypass.';
-      } else if (preset === 'kiosk-restricted') {
-        const el = document.getElementById('chip-kiosk');
-        if (el) el.classList.add('active');
-        if (badge) badge.textContent = 'Kiosk / Restricted';
-        if (desc) desc.textContent = 'Kiosk / Restricted: Read-only popup view without bypass controls or sensitive host exposure. Locked for managed kiosks and students.';
-      } else if (preset === 'enterprise-invisible') {
-        const el = document.getElementById('chip-stealth');
-        if (el) el.classList.add('active');
+      if (mode === 'stealth') {
+        if (chipPopup) chipPopup.classList.remove('active');
+        if (chipStealth) chipStealth.classList.add('active');
+        activeTemplatePreset = 'enterprise-invisible';
         if (badge) badge.textContent = 'Stealth Agent';
-        if (desc) desc.textContent = 'Stealth Agent: Runs silently in the background without any popup UI, enforcing corporate PAC policies quietly.';
+        if (desc) desc.textContent = 'Скрытый агент: фоновая служба без окна popup, применяет правила PAC незаметно.';
+      } else {
+        if (chipPopup) chipPopup.classList.add('active');
+        if (chipStealth) chipStealth.classList.remove('active');
+        activeTemplatePreset = 'self-service-pro';
+        if (badge) badge.textContent = 'Self-Service Pro';
+        if (desc) desc.textContent = 'Обычный режим: интерактивный попап с информацией о подключении, маршрутизации и управлением.';
       }
-    }
 
-    function highlightStyleChip(style) {
-      activeStylePreset = style;
-      ['chip-style-cyber-blue', 'chip-style-dark-obsidian', 'chip-style-emerald-sentinel', 'chip-style-sunset-amber', 'chip-style-minimal-light'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.remove('active');
-      });
-      const target = document.getElementById('chip-style-' + style);
-      if (target) target.classList.add('active');
+      onConfigChangeLive();
+    }
+    window.applyUiModePreset = applyUiModePreset;
+
+    function highlightTemplateChip(preset) {
+      if (preset === 'enterprise-invisible' || preset === 'stealth') {
+        applyUiModePreset('stealth');
+      } else {
+        applyUiModePreset('popup');
+      }
     }
 
     async function applyTemplatePreset(preset) {
-      highlightTemplateChip(preset);
-
-      if (preset === 'self-service-pro') {
-        document.getElementById('bldUiMode').value = 'popup';
-        document.getElementById('bldAllowBypass').checked = true;
-        document.getElementById('bldIpGeo').checked = true;
-        document.getElementById('bldBadge').checked = true;
-      } else if (preset === 'kiosk-restricted') {
-        document.getElementById('bldUiMode').value = 'popup';
-        document.getElementById('bldAllowBypass').checked = false;
-        document.getElementById('bldIpGeo').checked = false;
-        document.getElementById('bldBadge').checked = true;
-      } else if (preset === 'enterprise-invisible') {
-        document.getElementById('bldUiMode').value = 'stealth';
-        document.getElementById('bldAllowBypass').checked = false;
-        document.getElementById('bldBadge').checked = true;
+      if (preset === 'enterprise-invisible' || preset === 'stealth') {
+        applyUiModePreset('stealth');
+      } else {
+        applyUiModePreset('popup');
       }
-
-      await saveBuilderConfigOnly(false);
-      await regenerateTemplatesFromConfig();
     }
+    window.applyTemplatePreset = applyTemplatePreset;
 
     async function applyStylePreset(style) {
       highlightStyleChip(style);
@@ -2160,7 +2206,13 @@
       const themeColor = document.getElementById('bldThemeColor').value || '#0284c7';
       const iconEmoji = document.getElementById('bldEmoji').value || '🛡️';
 
-      if (iconGlyphEl) iconGlyphEl.textContent = iconEmoji;
+      if (iconGlyphEl) {
+        if (currentCustomIconDataUrl) {
+          iconGlyphEl.innerHTML = '<img src="' + currentCustomIconDataUrl + '" style="width:16px;height:16px;border-radius:3px;vertical-align:middle;object-fit:contain;" />';
+        } else {
+          iconGlyphEl.textContent = iconEmoji;
+        }
+      }
 
       if (badgeEl) {
         if (liveSimState.bypassActive) {
@@ -2186,6 +2238,9 @@
         if (previewBox) previewBox.style.display = 'block';
         if (stealthNotice) stealthNotice.style.display = 'none';
       }
+
+      const previewFrame = document.getElementById('previewFrame');
+      if (previewFrame) previewFrame.style.overflow = 'hidden';
 
       let htmlContent = extensionFiles['popup.html'] || '<div style="color:#fff;padding:20px;">No popup.html generated</div>';
       let jsContent = extensionFiles['popup.js'] || '';
@@ -2318,6 +2373,11 @@
         // Report the document dimensions to the parent so the sandboxed preview
         // iframe can size itself to the popup content (a real Chrome popup
         // sizes to content; the sandbox blocks the parent from measuring).
+        'try {' +
+          'var _noScrollStyle = document.createElement("style");' +
+          '_noScrollStyle.textContent = "html, body { overflow: hidden !important; scrollbar-width: none !important; -ms-overflow-style: none !important; } ::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }";' +
+          'document.head.appendChild(_noScrollStyle);' +
+        '} catch (e) {}' +
         'function __postPreviewSize() {' +
           'try {' +
             'var w = Math.max(380, document.body ? document.body.scrollWidth : 380);' +
@@ -2385,6 +2445,7 @@
         if (typeof e.data.width === 'number') {
           pf.style.width = Math.max(380, Math.min(600, Math.round(e.data.width))) + 'px';
         }
+        pf.style.overflow = 'hidden';
       }
     });
 
@@ -2434,10 +2495,11 @@
         name: document.getElementById('bldName').value.trim(),
         shortName: document.getElementById('bldShortName').value.trim(),
         version: document.getElementById('bldVersion').value.trim(),
-        uiMode: document.getElementById('bldUiMode').value,
-        iconType: document.getElementById('bldIconType').value,
+        uiMode: document.getElementById('bldUiMode') ? document.getElementById('bldUiMode').value : 'popup',
+        iconType: document.getElementById('bldIconType') ? document.getElementById('bldIconType').value : undefined,
         themeColor: document.getElementById('bldThemeColor').value.trim(),
         iconEmoji: document.getElementById('bldEmoji').value.trim(),
+        customIconDataUrl: currentCustomIconDataUrl || undefined,
         description: document.getElementById('bldDesc').value.trim(),
         defaultServerUrl: document.getElementById('bldServerUrl')
           ? document.getElementById('bldServerUrl').value.trim()

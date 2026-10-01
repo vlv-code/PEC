@@ -298,6 +298,20 @@ function getThemeStyles(cfg: ExtensionBuildConfig) {
 }
 
 function generateSvgIcon(cfg: ExtensionBuildConfig, colors: { primary: string; bg: string }): string {
+  if (cfg.customIconDataUrl) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${colors.primary}"/>
+      <stop offset="100%" stop-color="${colors.bg}"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bgGrad)" />
+  <rect x="6" y="6" width="116" height="116" rx="24" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.15"/>
+  <image href="${cfg.customIconDataUrl}" x="16" y="16" width="96" height="96" preserveAspectRatio="xMidYMid meet"/>
+</svg>`;
+  }
+
   const glyphMap: Record<string, string> = {
     shield: `<path d="M64 20 L102 36 C102 72 84 98 64 108 C44 98 26 72 26 36 Z" fill="none" stroke="#ffffff" stroke-width="8" stroke-linejoin="round"/>
              <path d="M64 42 L80 58 L60 78 L48 66" fill="none" stroke="${colors.primary}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`,
@@ -364,13 +378,24 @@ function pngChunk(type: string, data: Buffer): Buffer {
   return Buffer.concat([len, body, crcBuf]);
 }
 
+export function parseDataUrlBuffer(dataUrl?: string): Buffer | null {
+  if (!dataUrl || typeof dataUrl !== "string") return null;
+  try {
+    const comma = dataUrl.indexOf(",");
+    if (comma !== -1) {
+      return Buffer.from(dataUrl.slice(comma + 1), "base64");
+    }
+  } catch {}
+  return null;
+}
+
 /**
- * Generate a valid 128x128 RGBA PNG icon in pure Node.js.
+ * Generate a valid RGBA PNG icon in pure Node.js (defaults to 128x128).
  * Chrome Manifest V3 strictly requires PNG icons (SVG causes "Could not decode image" install error).
  */
-export function generatePngIcon(primaryHex = "#00f0ff", bgHex = "#0a1020"): Buffer {
-  const width = 128;
-  const height = 128;
+export function generatePngIcon(primaryHex = "#00f0ff", bgHex = "#0a1020", size = 128): Buffer {
+  const width = size;
+  const height = size;
   const pR = parseInt(primaryHex.slice(1, 3), 16) || 0;
   const pG = parseInt(primaryHex.slice(3, 5), 16) || 240;
   const pB = parseInt(primaryHex.slice(5, 7), 16) || 255;
@@ -390,6 +415,7 @@ export function generatePngIcon(primaryHex = "#00f0ff", bgHex = "#0a1020"): Buff
 
   const rowSize = 1 + width * 4;
   const raw = Buffer.alloc(height * rowSize);
+  const scale = size / 128;
 
   for (let y = 0; y < height; y++) {
     const rowOffset = y * rowSize;
@@ -402,8 +428,8 @@ export function generatePngIcon(primaryHex = "#00f0ff", bgHex = "#0a1020"): Buff
     for (let x = 0; x < width; x++) {
       const px = rowOffset + 1 + x * 4;
       let inCard = false;
-      const margin = 8;
-      const rad = 24;
+      const margin = Math.max(1, Math.round(8 * scale));
+      const rad = Math.max(2, Math.round(24 * scale));
       const left = margin + rad;
       const right = width - margin - rad;
       const top = margin + rad;
@@ -424,14 +450,15 @@ export function generatePngIcon(primaryHex = "#00f0ff", bgHex = "#0a1020"): Buff
         continue;
       }
 
-      const dx = Math.abs(x - 64);
-      const isShieldTop = y >= 34 && y <= 60 && dx <= 30;
-      const isShieldBottom = y > 60 && y <= 94 && dx <= 30 * (1 - (y - 60) / 38);
+      const dx = Math.abs(x - 64 * scale);
+      const isShieldTop = y >= 34 * scale && y <= 60 * scale && dx <= 30 * scale;
+      const isShieldBottom = y > 60 * scale && y <= 94 * scale && dx <= 30 * scale * (1 - (y - 60 * scale) / Math.max(1, 38 * scale));
       const inShield = isShieldTop || isShieldBottom;
 
       const isShieldInner =
         inShield &&
-        ((y >= 40 && y <= 58 && dx <= 24) || (y > 58 && y <= 88 && dx <= 24 * (1 - (y - 58) / 34)));
+        ((y >= 40 * scale && y <= 58 * scale && dx <= 24 * scale) ||
+         (y > 58 * scale && y <= 88 * scale && dx <= 24 * scale * (1 - (y - 58 * scale) / Math.max(1, 34 * scale))));
 
       if (inShield && !isShieldInner) {
         raw[px] = 255;
@@ -509,7 +536,10 @@ function writeGeneratedFile(
   }
 }
 
-export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force?: boolean }) {
+export function generateExtensionFiles(
+  cfg: ExtensionBuildConfig,
+  opts?: { force?: boolean }
+): Record<string, string | Buffer> {
   if (!fs.existsSync(EXTENSION_DIR)) {
     fs.mkdirSync(EXTENSION_DIR, { recursive: true });
   }
@@ -530,10 +560,10 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
 
   const manifest: Record<string, unknown> = {
     manifest_version: 3,
-    name: cfg.name,
-    short_name: cfg.shortName,
-    version: cfg.version,
-    description: cfg.description,
+    name: cfg.name || "PEC - Proxy Extension Corp",
+    short_name: cfg.shortName || "PEC Corp",
+    version: cfg.version || "1.4.0",
+    description: cfg.description || "",
     permissions: Array.from(new Set(permissions)),
     host_permissions: ["<all_urls>"],
     background: {
@@ -545,56 +575,62 @@ export function generateExtensionFiles(cfg: ExtensionBuildConfig, opts?: { force
     // webRequestAuthProvider (proxy auth interception) shipped in Chrome 108;
     // declaring 96 previously allowed installs where auth silently broke.
     minimum_chrome_version: "108",
-    // Chrome strictly requires PNG format for extension icons (SVG is rejected by Blink)
     icons: {
-      16: "icon.png",
-      48: "icon.png",
-      128: "icon.png",
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png",
     },
   };
 
-  if (cfg.uiMode === "popup") {
+  if (cfg.uiMode !== "stealth") {
     manifest.action = {
-      default_title: cfg.name,
+      default_title: cfg.name || "PEC - Proxy Extension Corp",
       default_popup: "popup.html",
-      default_icon: "icon.png",
+      default_icon: "icon48.png",
     };
   }
 
-  writeGeneratedFile("manifest.json", JSON.stringify(manifest, null, 2), cfg, force);
+  const manifestJson = JSON.stringify(manifest, null, 2);
+  writeGeneratedFile("manifest.json", manifestJson, cfg, force);
 
   // 2. Icon (both PNG for Chrome runtime and SVG for Studio vector preview/editor)
-  writeGeneratedFile("icon.png", generatePngIcon(colors.primary, colors.bg), cfg, force);
-  writeGeneratedFile("icon.svg", generateSvgIcon(cfg, colors), cfg, force);
+  const customBuf = parseDataUrlBuffer(cfg.customIconDataUrl);
+  const icon16 = customBuf || generatePngIcon(colors.primary, colors.bg, 16);
+  const icon48 = customBuf || generatePngIcon(colors.primary, colors.bg, 48);
+  const icon128 = customBuf || generatePngIcon(colors.primary, colors.bg, 128);
+  const iconPng = icon128;
+  const iconSvg = generateSvgIcon(cfg, colors);
 
-  // 2b. Service worker template + managed storage schema. These are shipped
-  // even into a fresh extension directory (Docker volume) - previously a
-  // fresh volume produced an extension zip without background.js at all.
-  // The file on disk keeps its __PEC_*__ placeholders; substitution happens
-  // at ZIP time (see packageExtension) so config changes apply on rebuild.
+  writeGeneratedFile("icon.png", iconPng, cfg, force);
+  writeGeneratedFile("icon16.png", icon16, cfg, force);
+  writeGeneratedFile("icon48.png", icon48, cfg, force);
+  writeGeneratedFile("icon128.png", icon128, cfg, force);
+  writeGeneratedFile("icon.svg", iconSvg, cfg, force);
+
+  // 2b. Service worker template + managed storage schema.
   writeGeneratedFile("background.js", BACKGROUND_TEMPLATE, cfg, force);
   writeGeneratedFile("managed_schema.json", MANAGED_SCHEMA_TEMPLATE, cfg, force);
 
-  // 3. Popup HTML & JS (if interactive mode)
-  if (cfg.uiMode === "popup") {
-    const popupHtml = renderPopupHtml(cfg, colors);
-    writeGeneratedFile("popup.html", popupHtml, cfg, force);
+  // 3. Popup HTML & JS
+  // Always render into memory and disk so the Studio preview and editor always have content
+  const popupHtml = renderPopupHtml(cfg, colors);
+  writeGeneratedFile("popup.html", popupHtml, cfg, force);
 
-    const popupJs = renderPopupJs(cfg);
-    writeGeneratedFile("popup.js", popupJs, cfg, force);
-  } else {
-    // Stealth mode: remove popup files if they exist
-    const popH = path.join(UNPACKED_DIR, "popup.html");
-    const popJ = path.join(UNPACKED_DIR, "popup.js");
-    if (fs.existsSync(popH)) fs.unlinkSync(popH);
-    if (fs.existsSync(popJ)) fs.unlinkSync(popJ);
-    if (force || process.env.PEC_KEEP_EXTENSION_DIR === "1") {
-      const extPopH = path.join(EXTENSION_DIR, "popup.html");
-      const extPopJ = path.join(EXTENSION_DIR, "popup.js");
-      if (fs.existsSync(extPopH)) fs.unlinkSync(extPopH);
-      if (fs.existsSync(extPopJ)) fs.unlinkSync(extPopJ);
-    }
-  }
+  const popupJs = renderPopupJs(cfg);
+  writeGeneratedFile("popup.js", popupJs, cfg, force);
+
+  return {
+    "manifest.json": manifestJson,
+    "icon.png": iconPng,
+    "icon16.png": icon16,
+    "icon48.png": icon48,
+    "icon128.png": icon128,
+    "icon.svg": iconSvg,
+    "background.js": BACKGROUND_TEMPLATE,
+    "managed_schema.json": MANAGED_SCHEMA_TEMPLATE,
+    "popup.html": popupHtml,
+    "popup.js": popupJs,
+  };
 }
 
 export async function buildExtensionFiles(cfg: ExtensionBuildConfig): Promise<Record<string, string>> {
@@ -629,17 +665,17 @@ export async function buildExtensionFiles(cfg: ExtensionBuildConfig): Promise<Re
       type: "module",
     },
     icons: {
-      "16": "icon.png",
-      "48": "icon.png",
-      "128": "icon.png",
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png",
     },
   };
 
-  if (mergedCfg.uiMode === "popup") {
+  if (mergedCfg.uiMode !== "stealth") {
     manifest.action = {
       default_title: mergedCfg.name,
       default_popup: "popup.html",
-      default_icon: "icon.png",
+      default_icon: "icon48.png",
     };
   }
 
@@ -647,12 +683,9 @@ export async function buildExtensionFiles(cfg: ExtensionBuildConfig): Promise<Re
     "manifest.json": JSON.stringify(manifest, null, 2),
     "background.js": BACKGROUND_TEMPLATE,
     "managed_schema.json": MANAGED_SCHEMA_TEMPLATE,
+    "popup.html": renderPopupHtml(mergedCfg, colors),
+    "popup.js": renderPopupJs(mergedCfg),
   };
-
-  if (mergedCfg.uiMode !== "stealth") {
-    files["popup.html"] = renderPopupHtml(mergedCfg, colors);
-    files["popup.js"] = renderPopupJs(mergedCfg);
-  }
 
   return files;
 }
@@ -738,6 +771,12 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     if (isExcludedFromPackage(f)) {
       try { fs.rmSync(path.join(UNPACKED_DIR, f), { recursive: true, force: true }); } catch {}
     }
+  }
+
+  // In stealth mode, package without popup.html and popup.js
+  if (buildConfigToPack.uiMode === "stealth") {
+    try { fs.rmSync(path.join(UNPACKED_DIR, "popup.html"), { force: true }); } catch {}
+    try { fs.rmSync(path.join(UNPACKED_DIR, "popup.js"), { force: true }); } catch {}
   }
 
   // Create ZIP directly from the clean UNPACKED_DIR

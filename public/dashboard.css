@@ -942,7 +942,15 @@
       height: 580px;
       border: none;
       display: block;
+      overflow: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
       transition: width 0.2s ease, height 0.2s ease;
+    }
+    .popup-frame-box iframe::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
     }
     .preset-chip {
       padding: 6px 10px;

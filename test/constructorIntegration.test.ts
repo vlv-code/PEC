@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { buildExtensionFiles, saveBuildConfig, getBuildConfig } from "../src/packager.js";
+import { buildExtensionFiles, saveBuildConfig, getBuildConfig, generateExtensionFiles } from "../src/packager.js";
 import { ExtensionBuildConfig } from "../src/types.js";
+import { renderDashboardHtml } from "../src/views/dashboardView.js";
 
 test("packager accepts uiLayout, colorPalette, and defaultThemeMode and renders into popup", async () => {
   const cfg: ExtensionBuildConfig = {
@@ -112,4 +113,53 @@ test("dashboard.js handles PREVIEW_RESIZE with both width and height", () => {
   assert.match(js, /pf\.style\.width\s*=\s*Math\.max\(380,\s*Math\.min\(600/);
   assert.match(js, /pf\.style\.height\s*=\s*Math\.max\(180,\s*Math\.min\(850/);
 });
+
+test("Extension Studio provides popup and stealth modes without kiosk", () => {
+  const html = renderDashboardHtml({});
+  assert.match(html, /Обычный режим/);
+  assert.match(html, /Скрытый агент/);
+  assert.doesNotMatch(html, /Режим киоска/i);
+  assert.doesNotMatch(html, /Kiosk \/ Restricted/i);
+});
+
+test("generateExtensionFiles always generates popup.html and popup.js in memory even in stealth mode", () => {
+  const files = generateExtensionFiles({
+    name: "Test Ext",
+    shortName: "Test",
+    version: "1.0.0",
+    serverUrl: "https://proxy.example.com",
+    uiMode: "stealth"
+  });
+
+  assert.ok(files, "generateExtensionFiles returns an object with files");
+  assert.ok(files["popup.html"], "popup.html is present in memory for preview");
+  assert.ok(files["popup.js"], "popup.js is present in memory for preview");
+});
+
+test("generateExtensionFiles omits action from manifest in stealth mode", () => {
+  const files = generateExtensionFiles({
+    name: "Stealth Ext",
+    shortName: "Stealth",
+    version: "1.0.0",
+    uiMode: "stealth"
+  });
+  const manifest = JSON.parse(files["manifest.json"] as string);
+  assert.equal(manifest.action, undefined, "manifest.action must be omitted in stealth mode");
+});
+
+test("generateExtensionFiles generates icon files from customIconDataUrl or emoji", () => {
+  const sampleDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const filesWithCustom = generateExtensionFiles({
+    name: "Custom Icon Ext",
+    shortName: "Custom",
+    version: "1.0.0",
+    customIconDataUrl: sampleDataUrl,
+  });
+
+  assert.ok(filesWithCustom["icon16.png"], "icon16.png is generated");
+  assert.ok(filesWithCustom["icon48.png"], "icon48.png is generated");
+  assert.ok(filesWithCustom["icon128.png"], "icon128.png is generated");
+  assert.ok(filesWithCustom["icon.png"], "icon.png is generated");
+});
+
 
