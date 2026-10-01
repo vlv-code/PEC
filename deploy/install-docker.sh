@@ -45,8 +45,13 @@ if [ ! -f "$INSTALL_DIR/.env" ]; then
 NODE_ENV=production
 PORT=3000
 HOST=0.0.0.0
+DATA_DIR=/app/data
 EXT_SHARED_TOKEN=${SECURE_TOKEN}
 ADMIN_TOKEN=${ADMIN_SEC_TOKEN}
+XUI_PANEL_URL=
+XUI_ADMIN_USER=admin
+XUI_ADMIN_PASS=
+XUI_INBOUND_REMARK=squid-in
 EOF
     echo -e "${GREEN}[+] Сгенерирован защищенный токен расширения:${NC} ${YELLOW}${SECURE_TOKEN}${NC}"
     echo -e "${GREEN}[+] Сгенерирован админ-токен:${NC} ${YELLOW}${ADMIN_SEC_TOKEN}${NC}"

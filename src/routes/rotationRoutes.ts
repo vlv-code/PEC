@@ -67,7 +67,10 @@ export function createRotationRouter(): Router {
       const testConfig = {
         panelUrl: req.body?.panelUrl || current.panelUrl,
         adminUser: req.body?.adminUser || current.adminUser,
-        adminPass: req.body?.adminPass !== undefined ? req.body.adminPass : current.adminPass,
+        adminPass:
+          req.body?.adminPass !== undefined && req.body.adminPass !== ""
+            ? req.body.adminPass
+            : current.adminPass,
         inboundRemark: req.body?.inboundRemark || current.inboundRemark,
         timeoutSec: 7,
       };

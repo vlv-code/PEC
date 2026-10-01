@@ -4,6 +4,7 @@ import { getRotationConfig } from "../scheduler.js";
 import { getActiveInstances, getProxyConfig } from "../instances.js";
 import { getAllProfiles } from "../routing.js";
 import { recordAudit, getClientIp, getAuditLogs } from "../audit.js";
+import { getActiveProxy } from "../proxies.js";
 
 export function createSystemRouter(options: {
   port: number;
@@ -22,9 +23,16 @@ export function createSystemRouter(options: {
   });
 
   const handleIpEcho = (req: Request, res: Response) => {
+    const active = getActiveProxy();
+    const proxyHost =
+      active?.host && active.host !== "10.0.0.1" && active.host !== "0.0.0.0" ? active.host : undefined;
     res.json({
-      ip: getClientIp(req),
-      note: "Egress IP as observed by the PEC server",
+      ip: proxyHost || getClientIp(req),
+      clientIp: getClientIp(req),
+      proxyHost,
+      proxyPort: active?.port,
+      proxyProtocol: active?.protocol,
+      note: proxyHost ? "Remote proxy node host" : "Egress IP as observed by the PEC server",
       timestamp: new Date().toISOString(),
     });
   };

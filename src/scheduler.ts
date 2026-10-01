@@ -1,5 +1,6 @@
 import "./loadEnv.js";
 import fs from "node:fs";
+import path from "node:path";
 import crypto from "node:crypto";
 import { RotationConfig, RotationHistoryItem } from "./types.js";
 import { executeRotation, validateSafeEndpointUrl } from "./rotate.js";
@@ -31,6 +32,32 @@ function normalizeIntervalMinutes(value: unknown): number {
   return n;
 }
 
+// Helper to sync updated rotation secrets back to .env if present
+function syncSecretsToEnv(vars: Record<string, string | undefined>): void {
+  try {
+    const envPath = path.resolve(".env");
+    if (!fs.existsSync(envPath)) return;
+    let content = fs.readFileSync(envPath, "utf-8");
+    let changed = false;
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined) continue;
+      const regex = new RegExp(`^${k}=.*$`, "m");
+      if (regex.test(content)) {
+        content = content.replace(regex, `${k}=${v}`);
+        changed = true;
+      } else {
+        content += `\n${k}=${v}`;
+        changed = true;
+      }
+    }
+    if (changed) {
+      fs.writeFileSync(envPath, content, { encoding: "utf-8", mode: 0o600 });
+    }
+  } catch {
+    // Non-fatal if .env is read-only in container
+  }
+}
+
 const DEFAULT_CONFIG: RotationConfig = {
   enabled: true,
   intervalMinutes: parseInt(process.env.ROTATION_INTERVAL_MIN || "1440", 10), // default 24h
@@ -43,19 +70,87 @@ const DEFAULT_CONFIG: RotationConfig = {
   lastStatus: "Idle",
 };
 
-let currentConfig: RotationConfig = { ...DEFAULT_CONFIG };
+function loadInitialConfig(): RotationConfig {
+  let loaded: Partial<RotationConfig> = {};
+
+  // 1. Primary config file
+  try {
+    if (fs.existsSync(ROTATION_CONFIG_FILE)) {
+      const raw = fs.readFileSync(ROTATION_CONFIG_FILE, "utf-8");
+      loaded = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn("[scheduler] Error reading rotation_config.json:", e);
+  }
+
+  // 2. Secondary backup secrets store
+  const secretsFile = path.join(path.dirname(ROTATION_CONFIG_FILE), ".rotation_secrets.json");
+  if (!loaded.adminPass && fs.existsSync(secretsFile)) {
+    try {
+      const secRaw = fs.readFileSync(secretsFile, "utf-8");
+      const secData = JSON.parse(secRaw);
+      if (secData && secData.adminPass) {
+        loaded.adminPass = secData.adminPass;
+      }
+      if (secData && secData.panelUrl && (!loaded.panelUrl || loaded.panelUrl.includes("3xui-host"))) {
+        loaded.panelUrl = secData.panelUrl;
+      }
+      if (secData && secData.adminUser && !loaded.adminUser) {
+        loaded.adminUser = secData.adminUser;
+      }
+    } catch {}
+  }
+
+  // 3. Fallback to ./data/.rotation_secrets.json if running in a different dir
+  const fallbackSecrets = path.resolve("./data/.rotation_secrets.json");
+  if (!loaded.adminPass && fs.existsSync(fallbackSecrets)) {
+    try {
+      const fbRaw = fs.readFileSync(fallbackSecrets, "utf-8");
+      const fbData = JSON.parse(fbRaw);
+      if (fbData && fbData.adminPass) {
+        loaded.adminPass = fbData.adminPass;
+      }
+    } catch {}
+  }
+
+  // 4. Merge: Never let an empty adminPass or placeholder panelUrl wipe out environment variables
+  const finalPass =
+    (loaded.adminPass && loaded.adminPass.trim()) ||
+    (process.env.XUI_ADMIN_PASS && process.env.XUI_ADMIN_PASS.trim()) ||
+    DEFAULT_CONFIG.adminPass ||
+    "";
+
+  const finalPanel =
+    (loaded.panelUrl && !loaded.panelUrl.includes("3xui-host") && loaded.panelUrl.trim()) ||
+    (process.env.XUI_PANEL_URL && !process.env.XUI_PANEL_URL.includes("3xui-host") && process.env.XUI_PANEL_URL.trim()) ||
+    loaded.panelUrl ||
+    DEFAULT_CONFIG.panelUrl;
+
+  const finalUser =
+    (loaded.adminUser && loaded.adminUser.trim()) ||
+    (process.env.XUI_ADMIN_USER && process.env.XUI_ADMIN_USER.trim()) ||
+    DEFAULT_CONFIG.adminUser ||
+    "admin";
+
+  const finalRemark =
+    (loaded.inboundRemark && loaded.inboundRemark.trim()) ||
+    (process.env.XUI_INBOUND_REMARK && process.env.XUI_INBOUND_REMARK.trim()) ||
+    DEFAULT_CONFIG.inboundRemark ||
+    "squid-in";
+
+  return {
+    ...DEFAULT_CONFIG,
+    ...loaded,
+    adminPass: finalPass,
+    panelUrl: finalPanel,
+    adminUser: finalUser,
+    inboundRemark: finalRemark,
+  };
+}
+
+let currentConfig: RotationConfig = loadInitialConfig();
 let timerHandle: NodeJS.Timeout | null = null;
 let rotationHistory: RotationHistoryItem[] = [];
-
-// Load persisted configuration
-try {
-  if (fs.existsSync(ROTATION_CONFIG_FILE)) {
-    const raw = fs.readFileSync(ROTATION_CONFIG_FILE, "utf-8");
-    currentConfig = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
-  }
-} catch (e) {
-  console.warn("[scheduler] Error reading rotation_config.json:", e);
-}
 
 // Load persisted history
 try {
@@ -63,10 +158,6 @@ try {
     const raw = fs.readFileSync(HISTORY_FILE, "utf-8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      // Cap on load as well: the push path only pops a single entry, so an
-      // oversized store (written by an older version or by hand) would keep
-      // getRotationHistory() above the documented limit of 50 until enough
-      // new rotations push the surplus out.
       rotationHistory = parsed.slice(0, MAX_HISTORY_ENTRIES);
     }
   }
@@ -75,7 +166,35 @@ try {
 function saveState() {
   try {
     writeJsonAtomic(ROTATION_CONFIG_FILE, currentConfig);
+    // Secondary persistent backup
+    const secretsFile = path.join(path.dirname(ROTATION_CONFIG_FILE), ".rotation_secrets.json");
+    if (currentConfig.adminPass) {
+      writeJsonAtomic(secretsFile, {
+        adminPass: currentConfig.adminPass,
+        adminUser: currentConfig.adminUser,
+        panelUrl: currentConfig.panelUrl,
+        inboundRemark: currentConfig.inboundRemark,
+      });
+      // Also backup in ./data if different
+      const fallbackSecrets = path.resolve("./data/.rotation_secrets.json");
+      if (secretsFile !== fallbackSecrets) {
+        try {
+          writeJsonAtomic(fallbackSecrets, {
+            adminPass: currentConfig.adminPass,
+            adminUser: currentConfig.adminUser,
+            panelUrl: currentConfig.panelUrl,
+            inboundRemark: currentConfig.inboundRemark,
+          });
+        } catch {}
+      }
+    }
     writeJsonAtomic(HISTORY_FILE, rotationHistory.slice(0, MAX_HISTORY_ENTRIES));
+    syncSecretsToEnv({
+      XUI_PANEL_URL: currentConfig.panelUrl,
+      XUI_ADMIN_USER: currentConfig.adminUser,
+      XUI_ADMIN_PASS: currentConfig.adminPass,
+      XUI_INBOUND_REMARK: currentConfig.inboundRemark,
+    });
   } catch (err) {
     console.error("[scheduler] Error persisting state:", err);
   }

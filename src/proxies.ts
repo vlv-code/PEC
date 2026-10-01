@@ -56,7 +56,7 @@ export function getProxyById(id: string): ProxyNode | undefined {
 export function getActiveProxy(): ProxyNode | undefined {
   const storePath = getProxiesStorePath();
   const list = readJsonStore<ProxyNode[]>(storePath) || [];
-  const found = list.find((p) => p.isActive);
+  const found = list.find((p) => p.isActive && p.host && p.host !== "10.0.0.1" && p.host !== "0.0.0.0");
   return found ? { ...found } : undefined;
 }
 

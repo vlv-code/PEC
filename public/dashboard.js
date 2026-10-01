@@ -2907,12 +2907,15 @@
     async function test3xui() {
       const out = document.getElementById('test3xuiResult');
       out.textContent = 'Testing connection to 3x-ui API...';
+      const enteredPass = document.getElementById('rotAdminPass').value;
       const payload = {
         panelUrl: document.getElementById('rotPanelUrl').value.trim(),
         adminUser: document.getElementById('rotAdminUser').value.trim(),
-        adminPass: document.getElementById('rotAdminPass').value,
         inboundRemark: document.getElementById('rotRemark').value.trim()
       };
+      if (enteredPass && enteredPass.trim()) {
+        payload.adminPass = enteredPass.trim();
+      }
 
       try {
         const res = await adminFetch('/api/3xui/test', {

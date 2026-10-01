@@ -57,15 +57,15 @@ export function injectUserRulesIntoPac(
     else if (pacText.includes("HTTPS ")) proto = "https";
   }
 
-  // Find the proxy directive already in use in pacText (e.g. 'PROXY host:port; DIRECT' or 'SOCKS5 host:port; DIRECT')
-  const pacDirMatch = pacText.match(/return\s+"((?:SOCKS5|HTTPS|PROXY)\s+(?!127\.0\.0\.1:0)[^"]+)";/i);
+  // Find the proxy directive already in use in pacText (excluding placeholder / sinkhole IPs)
+  const pacDirMatch = pacText.match(/return\s+"((?:SOCKS5|HTTPS|PROXY)\s+(?!127\.0\.0\.1|10\.0\.0\.1|0\.0\.0\.0)[^"]+)";/i);
   let defaultProxyDirective = pacDirMatch ? pacDirMatch[1] : "";
 
   if (!defaultProxyDirective && proxyServer) {
     if (proto === "socks5") {
-      defaultProxyDirective = `SOCKS5 ${proxyServer}; DIRECT`;
+      defaultProxyDirective = `SOCKS5 ${proxyServer}`;
     } else if (proto === "https") {
-      defaultProxyDirective = `HTTPS ${proxyServer}; DIRECT`;
+      defaultProxyDirective = `HTTPS ${proxyServer}`;
     } else {
       defaultProxyDirective = `PROXY ${proxyServer}`;
     }
@@ -73,14 +73,19 @@ export function injectUserRulesIntoPac(
     defaultProxyDirective = "DIRECT";
   }
 
+  // If the host script provides a fallback suffix (; DIRECT), ensure defaultProxyDirective also inherits it
+  if (pacText.includes("; DIRECT") && !defaultProxyDirective.includes("; DIRECT") && defaultProxyDirective !== "DIRECT") {
+    defaultProxyDirective += "; DIRECT";
+  }
+
   let ruleLines = "  // === USER OVERRIDES BEGIN ===\n";
   ruleLines += "  host = (\"\" + host).toLowerCase();\n";
   for (const r of activeRules) {
-    let rawPattern = r.pattern.trim().toLowerCase();
+    let rawPattern = r.pattern ? r.pattern.trim() : "";
     // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
     if (rawPattern.includes("://")) {
       try {
-        rawPattern = new URL(rawPattern).hostname.toLowerCase();
+        rawPattern = new URL(rawPattern).hostname;
       } catch {
         rawPattern = rawPattern.replace(/^[a-z]+:\/\//i, "").split("/")[0].split(":")[0];
       }
@@ -158,14 +163,17 @@ export function injectUserRulesIntoPac(
     }
 
     let condition = "";
+    const lower = cleanPattern.toLowerCase();
     if (cleanPattern.startsWith("*.")) {
-      condition = `shExpMatch(host, "${cleanPattern}") || host === "${cleanPattern.slice(2)}"`;
+      const root = cleanPattern.slice(2);
+      condition = `shExpMatch(host, "${lower}") || host === "${root.toLowerCase()}" || dnsDomainIs(host, ".${cleanPattern.slice(2)}")`;
     } else if (cleanPattern.startsWith(".")) {
-      condition = `shExpMatch(host, "*.${cleanPattern.slice(1)}") || host === "${cleanPattern.slice(1)}"`;
+      const root = cleanPattern.slice(1);
+      condition = `shExpMatch(host, "*.${root.toLowerCase()}") || host === "${root.toLowerCase()}" || dnsDomainIs(host, ".${cleanPattern.slice(1)}")`;
     } else if (!cleanPattern.includes("*") && !cleanPattern.includes("/")) {
-      condition = `host === "${cleanPattern}" || dnsDomainIs(host, ".${cleanPattern}") || shExpMatch(host, "*.${cleanPattern}")`;
+      condition = `host === "${lower}" || dnsDomainIs(host, ".${cleanPattern}") || shExpMatch(host, "*.${lower}")`;
     } else {
-      condition = `shExpMatch(host, "${cleanPattern}")`;
+      condition = `shExpMatch(host, "${lower}")`;
     }
 
     ruleLines += `  if (${condition}) { return "${actionStr}"; }\n`;

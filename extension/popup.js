@@ -549,9 +549,21 @@ function initPopup() {
       const startMs = Date.now();
       const base = window.__pecServerBase || "";
       try {
-        let res = await fetch(base + "/api/ip-echo").catch(() => null);
+        const c1 = new AbortController();
+        const t1 = setTimeout(() => c1.abort(), 4000);
+        let res = await fetch("https://api.ipify.org?format=json", { signal: c1.signal, cache: "no-store" }).catch(() => null);
+        clearTimeout(t1);
         if (!res || !res.ok) {
-          res = await fetch(base + "/ip-echo").catch(() => null);
+          const c2 = new AbortController();
+          const t2 = setTimeout(() => c2.abort(), 4000);
+          res = await fetch("https://icanhazip.com", { signal: c2.signal, cache: "no-store" }).catch(() => null);
+          clearTimeout(t2);
+        }
+        if (!res || !res.ok) {
+          res = await fetch(base + "/api/ip-echo", { cache: "no-store" }).catch(() => null);
+        }
+        if (!res || !res.ok) {
+          res = await fetch(base + "/ip-echo", { cache: "no-store" }).catch(() => null);
         }
         const latencyMs = Date.now() - startMs;
         if (pingVal) {

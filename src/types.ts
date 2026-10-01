@@ -22,7 +22,7 @@ export interface RoutingRule {
 export interface GeoPreset {
   id: string;
   name: string;
-  category: "ai" | "social" | "ru" | "internal" | "security";
+  category: "ai" | "social" | "ru" | "internal" | "security" | "diagnostics";
   description: string;
   domains: string[];
 }

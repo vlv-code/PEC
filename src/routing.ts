@@ -62,6 +62,14 @@ const DEFAULT_PROFILES: RoutingProfile[] = [
         enabled: true,
       },
       {
+        id: "r_ip_check",
+        name: "Route IP & Network Diagnostics to Proxy",
+        targetType: "preset",
+        pattern: "preset:ip_check",
+        action: "proxy",
+        enabled: true,
+      },
+      {
         id: "r3",
         name: "Block Telemetry & Trackers",
         targetType: "preset",
