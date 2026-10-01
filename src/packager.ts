@@ -742,23 +742,28 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     fs.copyFileSync(path.join(EXTENSION_DIR, "background.js"), path.join(UNPACKED_DIR, "background.js"));
   }
 
+  // Render manifest.json directly into UNPACKED_DIR based on build config to pack
+  const isManifestOverridden = (buildConfigToPack.overriddenFiles || []).includes("manifest.json");
+  if (!isManifestOverridden || !fs.existsSync(path.join(EXTENSION_DIR, "manifest.json"))) {
+    const manifestObj = createManifestObject(buildConfigToPack);
+    fs.writeFileSync(path.join(UNPACKED_DIR, "manifest.json"), JSON.stringify(manifestObj, null, 2), "utf-8");
+  } else {
+    fs.copyFileSync(path.join(EXTENSION_DIR, "manifest.json"), path.join(UNPACKED_DIR, "manifest.json"));
+  }
+
   // Copy any custom/extra non-excluded files from EXTENSION_DIR into UNPACKED_DIR
-  // only if they don't already exist or are explicitly overridden by operator
   if (fs.existsSync(EXTENSION_DIR)) {
     for (const item of fs.readdirSync(EXTENSION_DIR)) {
       if (isExcludedFromPackage(item)) continue;
+      if (item === "manifest.json" && !isManifestOverridden) continue;
+      if (item === "background.js" && !isBgOverridden) continue;
       const full = path.join(EXTENSION_DIR, item);
       const dest = path.join(UNPACKED_DIR, item);
       const stat = fs.statSync(full);
       if (stat.isFile()) {
-        const isOverridden = (buildConfigToPack.overriddenFiles || []).includes(item);
-        if (!fs.existsSync(dest) || isOverridden) {
-          if (item !== "background.js" || isBgOverridden) {
-            fs.copyFileSync(full, dest);
-          }
-        }
+        fs.copyFileSync(full, dest);
       } else if (stat.isDirectory()) {
-        fs.cpSync(full, dest, { recursive: true });
+        fs.cpSync(full, dest, { recursive: true, force: true });
       }
     }
   }

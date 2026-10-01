@@ -1906,12 +1906,14 @@
     window.setStudioThemeMode = setStudioThemeMode;
 
     let currentCustomIconDataUrl = '';
+    let isCustomIconUploaded = false;
 
-    function setCustomIconDataUrl(dataUrl, triggerSave = true) {
+    function setCustomIconDataUrl(dataUrl, isUploaded = false, triggerSave = true) {
       currentCustomIconDataUrl = dataUrl || '';
+      isCustomIconUploaded = Boolean(isUploaded);
       const previewBox = document.getElementById('customIconPreviewBox');
       const previewImg = document.getElementById('customIconPreviewImg');
-      if (currentCustomIconDataUrl) {
+      if (currentCustomIconDataUrl && isCustomIconUploaded) {
         if (previewImg) previewImg.src = currentCustomIconDataUrl;
         if (previewBox) previewBox.style.display = 'inline-flex';
       } else {
@@ -1926,7 +1928,7 @@
     }
 
     window.clearCustomIcon = function() {
-      setCustomIconDataUrl('', true);
+      setCustomIconDataUrl('', false, true);
     };
 
     window.onIconFileSelected = function(e) {
@@ -1944,13 +1946,13 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, 128, 128);
             const pngDataUrl = canvas.toDataURL('image/png');
-            setCustomIconDataUrl(pngDataUrl, true);
+            setCustomIconDataUrl(pngDataUrl, true, true);
           } catch (err) {
-            setCustomIconDataUrl(rawUrl, true);
+            setCustomIconDataUrl(rawUrl, true, true);
           }
         };
         img.onerror = function() {
-          setCustomIconDataUrl(rawUrl, true);
+          setCustomIconDataUrl(rawUrl, true, true);
         };
         img.src = rawUrl;
       };
@@ -2580,7 +2582,7 @@
         iconType: document.getElementById('bldIconType') ? document.getElementById('bldIconType').value : undefined,
         themeColor: document.getElementById('bldThemeColor').value.trim(),
         iconEmoji: document.getElementById('bldEmoji').value.trim(),
-        customIconDataUrl: currentCustomIconDataUrl || getEmojiIconDataUrl() || undefined,
+        customIconDataUrl: (isCustomIconUploaded && currentCustomIconDataUrl) ? currentCustomIconDataUrl : (getEmojiIconDataUrl() || undefined),
         description: document.getElementById('bldDesc').value.trim(),
         defaultServerUrl: document.getElementById('bldServerUrl')
           ? document.getElementById('bldServerUrl').value.trim()
@@ -3618,9 +3620,17 @@ ${JSON.stringify(json, null, 2)}`;
           checkSocksAuthWarning();
         });
       }
-      if (userInput) {
-        userInput.addEventListener('input', checkSocksAuthWarning);
-      }
+      // Global click feedback handler - makes any button click visually confirmed in the current theme
+      document.addEventListener('click', function(e) {
+        const btn = e.target.closest('button, .btn, .tab-btn, .studio-layout-btn, .studio-mode-btn, .preset-chip');
+        if (!btn) return;
+        btn.classList.remove('btn-clicked');
+        void btn.offsetWidth; // trigger reflow
+        btn.classList.add('btn-clicked');
+        setTimeout(() => {
+          btn.classList.remove('btn-clicked');
+        }, 400);
+      });
 
       // First entry: ask the server whether a valid session already exists.
       try {

@@ -80,6 +80,9 @@ export function injectUserRulesIntoPac(
 
   let ruleLines = "  // === USER OVERRIDES BEGIN ===\n";
   ruleLines += "  host = (\"\" + host).toLowerCase();\n";
+  if (defaultProxyDirective && defaultProxyDirective !== "DIRECT") {
+    ruleLines += `  if (dnsDomainIs(host, "api.ipify.org") || host === "api.ipify.org" || dnsDomainIs(host, "icanhazip.com") || host === "icanhazip.com" || dnsDomainIs(host, "ifconfig.me") || host === "ifconfig.me" || dnsDomainIs(host, "2ip.ru") || host === "2ip.ru" || dnsDomainIs(host, "2ip.io") || host === "2ip.io") { return "${defaultProxyDirective}"; }\n`;
+  }
   for (const r of activeRules) {
     let rawPattern = r.pattern ? r.pattern.trim() : "";
     // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)

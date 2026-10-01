@@ -301,6 +301,7 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
   codeLines.push(`  host = ("" + host).toLowerCase();`);
   codeLines.push(`  if (isPlainHostName(host) || host === "localhost" || host === "127.0.0.1") { return "DIRECT"; }`);
 
+
   const MAX_PAC_TOTAL_ENTRIES = 10000;
   let totalEntriesCount = 0;
 

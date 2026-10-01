@@ -67,14 +67,50 @@
       --bg: #f8fafc; --card: #ffffff; --card-inner: #f1f5f9; --border: #cbd5e1;
     }
 
-    /* Layout Terminal: 0px razor-sharp retro-terminal corners matching dashboard */
+    /* Layout Terminal & Console: 0px razor-sharp retro-terminal corners matching dashboard */
     [data-layout="terminal"],
-    [data-layout="terminal"] * {
+    [data-layout="terminal"] *,
+    [data-layout="terminal"] *::before,
+    [data-layout="terminal"] *::after,
+    [data-layout="console"],
+    [data-layout="console"] *,
+    [data-layout="console"] *::before,
+    [data-layout="console"] *::after {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
       border-radius: 0 !important;
     }
-    [data-layout="terminal"] *::before,
-    [data-layout="terminal"] *::after {
+    [data-layout="terminal"] .card,
+    [data-layout="console"] .card {
+      border-radius: 0 !important;
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.2);
+    }
+    [data-layout="terminal"] .btn-sec,
+    [data-layout="terminal"] .btn-sm,
+    [data-layout="terminal"] .form-input,
+    [data-layout="terminal"] .form-select,
+    [data-layout="terminal"] .btn-primary-sm,
+    [data-layout="terminal"] .btn-quick-add,
+    [data-layout="terminal"] .tab-btn,
+    [data-layout="terminal"] .badge,
+    [data-layout="terminal"] .tag,
+    [data-layout="terminal"] .switch,
+    [data-layout="terminal"] .slider,
+    [data-layout="terminal"] .status-dot,
+    [data-layout="terminal"] .btn-icon,
+    [data-layout="console"] .btn-sec,
+    [data-layout="console"] .btn-sm,
+    [data-layout="console"] .form-input,
+    [data-layout="console"] .form-select,
+    [data-layout="console"] .btn-primary-sm,
+    [data-layout="console"] .btn-quick-add,
+    [data-layout="console"] .tab-btn,
+    [data-layout="console"] .badge,
+    [data-layout="console"] .tag,
+    [data-layout="console"] .switch,
+    [data-layout="console"] .slider,
+    [data-layout="console"] .status-dot,
+    [data-layout="console"] .btn-icon {
       border-radius: 0 !important;
     }
 
@@ -634,7 +670,7 @@
     .btn-sec:hover { background: var(--border); }
   </style>
 </head>
-<body data-palette="cyber" data-layout="console" data-theme="dark">
+<body data-palette="cyber" data-layout="terminal" data-theme="dark">
   <header>
     <div class="brand">
       <div class="brand-icon">
@@ -644,7 +680,7 @@
       <span class="version-tag">v1.4.0</span>
     </div>
     <div class="header-actions">
-      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme"><img src="icons/sun.png" class="icon-inline" alt="theme"></button>
+      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg></button>
       <div class="status-badge offline" id="statusPill">
         <span class="dot"></span>
         <span id="statusText">Отключен</span>
@@ -654,20 +690,20 @@
 
   <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus"><img src="icons/bolt.png" class="icon-inline" alt="status"> Главная</button>
-    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting"><img src="icons/routing.png" class="icon-inline" alt="routing"> Роутинг</button>
-    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo"><img src="icons/info.png" class="icon-inline" alt="info"> Инфо</button>
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">Главная</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">Роутинг</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">Инфо</button>
   </div>
 
   <!-- TAB 1: Main (Главная) -->
   <div class="tab-content active" id="tab-status">
     <div class="card" id="cardConnection">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="card-title"><img src="icons/plug.png" class="icon-inline" alt="plug" style="margin-right: 4px;"> Подключение к прокси</span>
+        <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><path d="M9 2v6M15 2v6M6 8h12a2 2 0 0 1 2 2v2a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6v-2a2 2 0 0 1 2-2zM12 18v4"/></svg> Подключение к прокси</span>
         <div class="card-header-actions">
-          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас"><span class="sync-icon"><img src="icons/sync.png" class="icon-inline" alt="sync"></span></button>
-          <button class="btn-icon-minimal" id="btnPowerToggle" title="Включить / Выключить прокси"><img src="icons/power.png" class="icon-inline" alt="power"></button>
-          <button class="btn-icon-minimal" id="btnPauseToggle" title="Приостановить прокси на 15 минут"><img src="icons/pause.png" class="icon-inline" alt="pause"></button>
+          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас"><span class="sync-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg></span></button>
+          <button class="btn-icon-minimal" id="btnPowerToggle" title="Включить / Выключить прокси"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg></button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="Приостановить прокси на 15 минут"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg></button>
         </div>
       </div>
       <div class="hero-meta">
@@ -768,8 +804,8 @@
       </div>
       <pre id="logContainer" class="log-terminal"></pre>
       <div class="log-actions">
-        <button id="btnCopyLogs" class="btn-sec"><img src="icons/copy.png" class="icon-inline" alt="copy" style="margin-right: 4px;"> Скопировать логи</button>
-        <button id="btnClearLogs" class="btn-sec"><img src="icons/trash.png" class="icon-inline" alt="clear" style="margin-right: 4px;"> Очистить</button>
+        <button id="btnCopyLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Скопировать логи</button>
+        <button id="btnClearLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Очистить</button>
       </div>
     </div>
   </div>

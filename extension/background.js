@@ -66,7 +66,7 @@ let recentLogs = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecCredsCache"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
@@ -78,6 +78,9 @@ try {
       }
       if (res && typeof res.pecEnabled === "boolean") {
         currentProxyState.enabled = res.pecEnabled;
+      }
+      if (res && res.pecCredsCache && res.pecCredsCache.user && res.pecCredsCache.pass) {
+        memoryCredsCache = res.pecCredsCache;
       }
     });
   }
@@ -295,6 +298,9 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer, proxyProtocol) 
   const nl = String.fromCharCode(10);
   let ruleLines = "  // === USER OVERRIDES BEGIN ===" + nl;
   ruleLines += '  host = ("" + host).toLowerCase();' + nl;
+  if (defaultProxyDirective && defaultProxyDirective !== "DIRECT") {
+    ruleLines += '  if (dnsDomainIs(host, "api.ipify.org") || host === "api.ipify.org" || dnsDomainIs(host, "icanhazip.com") || host === "icanhazip.com" || dnsDomainIs(host, "ifconfig.me") || host === "ifconfig.me" || dnsDomainIs(host, "2ip.ru") || host === "2ip.ru" || dnsDomainIs(host, "2ip.io") || host === "2ip.io") { return "' + defaultProxyDirective + '"; }' + nl;
+  }
   for (const r of activeRules) {
     let rawPattern = (r.pattern ? r.pattern.trim() : "");
     // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
@@ -576,7 +582,7 @@ async function applyPacScript(pacUrl, config) {
   if (currentProxyState.proxyReachable === false) {
     updateBadge("ERR", "#ef4444");
   } else {
-    updateBadge("pac", "#0284c7");
+    updateBadge("P", "#0284c7");
   }
   await verifyAppliedProxySettings("pac_script");
 }
@@ -617,7 +623,7 @@ async function applyProxyConfig(config) {
         value: { mode: "direct" },
         scope: "regular",
       });
-      updateBadge("DIR", "#f59e0b");
+      updateBadge("D", "#f59e0b");
       await verifyAppliedProxySettings("direct");
       return;
     }
@@ -656,7 +662,7 @@ async function applyProxyConfig(config) {
     if (currentProxyState.proxyReachable === false) {
       updateBadge("ERR", "#ef4444");
     } else {
-      updateBadge(scheme === "socks5" ? "S5" : "PRX", "#10b981");
+      updateBadge(scheme === "socks5" ? "S" : "P", "#10b981");
     }
     await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
@@ -690,7 +696,7 @@ async function expireBypass() {
 }
 
 // Synchronize with server (fetches creds & config)
-async function syncWithServer(forceRefresh = false) {
+async function syncWithServer(forceRefresh = false, applyConfig = true) {
   const now = Date.now();
   if (!forceRefresh && memoryCredsCache && now - memoryCredsCache.fetchedAt < TTL_MS) {
     return memoryCredsCache;
@@ -752,6 +758,11 @@ async function syncWithServer(forceRefresh = false) {
               pass: payload.creds.pass,
               fetchedAt: Date.now(),
             };
+            try {
+              if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+                chrome.storage.local.set({ pecCredsCache: memoryCredsCache });
+              }
+            } catch (e) {}
             syncSuccessful = true;
           }
 
@@ -786,7 +797,7 @@ async function syncWithServer(forceRefresh = false) {
               logEvent("warn", "Configured proxy " + (currentProxyState.host || "") + ":" + currentProxyState.port + " is unreachable from server");
             }
 
-            if (autoConfigureProxy) {
+            if (autoConfigureProxy && applyConfig) {
               await applyProxyConfig(payload.config);
             }
           }
@@ -825,6 +836,11 @@ async function syncWithServer(forceRefresh = false) {
           pass: data.pass,
           fetchedAt: Date.now(),
         };
+        try {
+          if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+            chrome.storage.local.set({ pecCredsCache: memoryCredsCache });
+          }
+        } catch (e) {}
         currentProxyState.online = true;
         currentProxyState.lastSync = Date.now();
         persistProxyState();
@@ -862,8 +878,17 @@ chrome.webRequest.onAuthRequired.addListener(
       return;
     }
 
+    // Fast path: if credentials already in cache and not a retry, supply immediately
+    const now = Date.now();
+    if (attempts === 1 && memoryCredsCache && memoryCredsCache.user && memoryCredsCache.pass && (now - (memoryCredsCache.fetchedAt || 0) < TTL_MS)) {
+      logEvent("info", "Supplied cached proxy auth credentials for requestId=" + details.requestId);
+      asyncCallback({ authCredentials: { username: memoryCredsCache.user, password: memoryCredsCache.pass } });
+      return;
+    }
+
     const forceRefresh = attempts > 1;
-    syncWithServer(forceRefresh)
+    // CRITICAL: applyConfig must be FALSE during onAuthRequired to avoid resetting the proxy mid-request!
+    syncWithServer(forceRefresh, false)
       .then((creds) => {
         if (!creds || !creds.user || !creds.pass) {
           throw new Error("No valid credentials returned");

@@ -82,7 +82,7 @@ let recentLogs = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecCredsCache"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
@@ -94,6 +94,9 @@ try {
       }
       if (res && typeof res.pecEnabled === "boolean") {
         currentProxyState.enabled = res.pecEnabled;
+      }
+      if (res && res.pecCredsCache && res.pecCredsCache.user && res.pecCredsCache.pass) {
+        memoryCredsCache = res.pecCredsCache;
       }
     });
   }
@@ -311,6 +314,9 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer, proxyProtocol) 
   const nl = String.fromCharCode(10);
   let ruleLines = "  // === USER OVERRIDES BEGIN ===" + nl;
   ruleLines += '  host = ("" + host).toLowerCase();' + nl;
+  if (defaultProxyDirective && defaultProxyDirective !== "DIRECT") {
+    ruleLines += '  if (dnsDomainIs(host, "api.ipify.org") || host === "api.ipify.org" || dnsDomainIs(host, "icanhazip.com") || host === "icanhazip.com" || dnsDomainIs(host, "ifconfig.me") || host === "ifconfig.me" || dnsDomainIs(host, "2ip.ru") || host === "2ip.ru" || dnsDomainIs(host, "2ip.io") || host === "2ip.io") { return "' + defaultProxyDirective + '"; }' + nl;
+  }
   for (const r of activeRules) {
     let rawPattern = (r.pattern ? r.pattern.trim() : "");
     // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
@@ -592,7 +598,7 @@ async function applyPacScript(pacUrl, config) {
   if (currentProxyState.proxyReachable === false) {
     updateBadge("ERR", "#ef4444");
   } else {
-    updateBadge("pac", "#0284c7");
+    updateBadge("P", "#0284c7");
   }
   await verifyAppliedProxySettings("pac_script");
 }
@@ -633,7 +639,7 @@ async function applyProxyConfig(config) {
         value: { mode: "direct" },
         scope: "regular",
       });
-      updateBadge("DIR", "#f59e0b");
+      updateBadge("D", "#f59e0b");
       await verifyAppliedProxySettings("direct");
       return;
     }
@@ -672,7 +678,7 @@ async function applyProxyConfig(config) {
     if (currentProxyState.proxyReachable === false) {
       updateBadge("ERR", "#ef4444");
     } else {
-      updateBadge(scheme === "socks5" ? "S5" : "PRX", "#10b981");
+      updateBadge(scheme === "socks5" ? "S" : "P", "#10b981");
     }
     await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
@@ -706,7 +712,7 @@ async function expireBypass() {
 }
 
 // Synchronize with server (fetches creds & config)
-async function syncWithServer(forceRefresh = false) {
+async function syncWithServer(forceRefresh = false, applyConfig = true) {
   const now = Date.now();
   if (!forceRefresh && memoryCredsCache && now - memoryCredsCache.fetchedAt < TTL_MS) {
     return memoryCredsCache;
@@ -768,6 +774,11 @@ async function syncWithServer(forceRefresh = false) {
               pass: payload.creds.pass,
               fetchedAt: Date.now(),
             };
+            try {
+              if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+                chrome.storage.local.set({ pecCredsCache: memoryCredsCache });
+              }
+            } catch (e) {}
             syncSuccessful = true;
           }
 
@@ -802,7 +813,7 @@ async function syncWithServer(forceRefresh = false) {
               logEvent("warn", "Configured proxy " + (currentProxyState.host || "") + ":" + currentProxyState.port + " is unreachable from server");
             }
 
-            if (autoConfigureProxy) {
+            if (autoConfigureProxy && applyConfig) {
               await applyProxyConfig(payload.config);
             }
           }
@@ -841,6 +852,11 @@ async function syncWithServer(forceRefresh = false) {
           pass: data.pass,
           fetchedAt: Date.now(),
         };
+        try {
+          if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+            chrome.storage.local.set({ pecCredsCache: memoryCredsCache });
+          }
+        } catch (e) {}
         currentProxyState.online = true;
         currentProxyState.lastSync = Date.now();
         persistProxyState();
@@ -878,8 +894,17 @@ chrome.webRequest.onAuthRequired.addListener(
       return;
     }
 
+    // Fast path: if credentials already in cache and not a retry, supply immediately
+    const now = Date.now();
+    if (attempts === 1 && memoryCredsCache && memoryCredsCache.user && memoryCredsCache.pass && (now - (memoryCredsCache.fetchedAt || 0) < TTL_MS)) {
+      logEvent("info", "Supplied cached proxy auth credentials for requestId=" + details.requestId);
+      asyncCallback({ authCredentials: { username: memoryCredsCache.user, password: memoryCredsCache.pass } });
+      return;
+    }
+
     const forceRefresh = attempts > 1;
-    syncWithServer(forceRefresh)
+    // CRITICAL: applyConfig must be FALSE during onAuthRequired to avoid resetting the proxy mid-request!
+    syncWithServer(forceRefresh, false)
       .then((creds) => {
         if (!creds || !creds.user || !creds.pass) {
           throw new Error("No valid credentials returned");
@@ -1254,14 +1279,50 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       --bg: #f8fafc; --card: #ffffff; --card-inner: #f1f5f9; --border: #cbd5e1;
     }
 
-    /* Layout Terminal: 0px razor-sharp retro-terminal corners matching dashboard */
+    /* Layout Terminal & Console: 0px razor-sharp retro-terminal corners matching dashboard */
     [data-layout="terminal"],
-    [data-layout="terminal"] * {
+    [data-layout="terminal"] *,
+    [data-layout="terminal"] *::before,
+    [data-layout="terminal"] *::after,
+    [data-layout="console"],
+    [data-layout="console"] *,
+    [data-layout="console"] *::before,
+    [data-layout="console"] *::after {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
       border-radius: 0 !important;
     }
-    [data-layout="terminal"] *::before,
-    [data-layout="terminal"] *::after {
+    [data-layout="terminal"] .card,
+    [data-layout="console"] .card {
+      border-radius: 0 !important;
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.2);
+    }
+    [data-layout="terminal"] .btn-sec,
+    [data-layout="terminal"] .btn-sm,
+    [data-layout="terminal"] .form-input,
+    [data-layout="terminal"] .form-select,
+    [data-layout="terminal"] .btn-primary-sm,
+    [data-layout="terminal"] .btn-quick-add,
+    [data-layout="terminal"] .tab-btn,
+    [data-layout="terminal"] .badge,
+    [data-layout="terminal"] .tag,
+    [data-layout="terminal"] .switch,
+    [data-layout="terminal"] .slider,
+    [data-layout="terminal"] .status-dot,
+    [data-layout="terminal"] .btn-icon,
+    [data-layout="console"] .btn-sec,
+    [data-layout="console"] .btn-sm,
+    [data-layout="console"] .form-input,
+    [data-layout="console"] .form-select,
+    [data-layout="console"] .btn-primary-sm,
+    [data-layout="console"] .btn-quick-add,
+    [data-layout="console"] .tab-btn,
+    [data-layout="console"] .badge,
+    [data-layout="console"] .tag,
+    [data-layout="console"] .switch,
+    [data-layout="console"] .slider,
+    [data-layout="console"] .status-dot,
+    [data-layout="console"] .btn-icon {
       border-radius: 0 !important;
     }
 
@@ -1831,7 +1892,7 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       <span class="version-tag">v${safeCfg.version || "1.4.0"}</span>
     </div>
     <div class="header-actions">
-      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme"><img src="icons/sun.png" class="icon-inline" alt="theme"></button>
+      <button id="btnThemeToggle" class="btn-theme-toggle" title="${t.toggleTheme || "Переключить тему (День / Ночь)"}" aria-label="Toggle theme"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg></button>
       <div class="status-badge offline" id="statusPill">
         <span class="dot"></span>
         <span id="statusText">${t.offline}</span>
@@ -1841,20 +1902,20 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
 
   <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus"><img src="icons/bolt.png" class="icon-inline" alt="status"> ${t.tabConn || "Главная"}</button>
-    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting"><img src="icons/routing.png" class="icon-inline" alt="routing"> ${t.tabRules || "Роутинг"}</button>
-    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo"><img src="icons/info.png" class="icon-inline" alt="info"> ${t.tabDiag || "Инфо"}</button>
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">${t.tabConn || "Главная"}</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">${t.tabRules || "Роутинг"}</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">${t.tabDiag || "Инфо"}</button>
   </div>
 
   <!-- TAB 1: Main (Главная) -->
   <div class="tab-content active" id="tab-status">
     <div class="card" id="cardConnection">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="card-title"><img src="icons/plug.png" class="icon-inline" alt="plug" style="margin-right: 4px;"> ${t.connGateway || "Подключение к прокси"}</span>
+        <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><path d="M9 2v6M15 2v6M6 8h12a2 2 0 0 1 2 2v2a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6v-2a2 2 0 0 1 2-2zM12 18v4"/></svg> ${t.connGateway || "Подключение к прокси"}</span>
         <div class="card-header-actions">
-          <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}"><span class="sync-icon"><img src="icons/sync.png" class="icon-inline" alt="sync"></span></button>
-          <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}"><img src="icons/power.png" class="icon-inline" alt="power"></button>
-          <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || "Приостановить прокси на 15 минут"}"><img src="icons/pause.png" class="icon-inline" alt="pause"></button>
+          <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}"><span class="sync-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg></span></button>
+          <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg></button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || "Приостановить прокси на 15 минут"}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg></button>
         </div>
       </div>
       <div class="hero-meta">
@@ -1955,8 +2016,8 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       </div>
       <pre id="logContainer" class="log-terminal"></pre>
       <div class="log-actions">
-        <button id="btnCopyLogs" class="btn-sec"><img src="icons/copy.png" class="icon-inline" alt="copy" style="margin-right: 4px;"> ${t.copyLogs}</button>
-        <button id="btnClearLogs" class="btn-sec"><img src="icons/trash.png" class="icon-inline" alt="clear" style="margin-right: 4px;"> ${t.clearLogs}</button>
+        <button id="btnCopyLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> ${t.copyLogs}</button>
+        <button id="btnClearLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> ${t.clearLogs}</button>
       </div>
     </div>
   </div>
@@ -2168,8 +2229,9 @@ function applyTheme(theme) {
   }
   const btnThemeToggle = typeof document !== "undefined" && document.getElementById ? document.getElementById("btnThemeToggle") : null;
   if (btnThemeToggle) {
-    const iconName = isLight ? "moon.png" : "sun.png";
-    btnThemeToggle.innerHTML = '<img src="icons/' + iconName + '" class="icon-inline" alt="theme">';
+    btnThemeToggle.innerHTML = isLight
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
     btnThemeToggle.title = isLight ? "${t.isRu ? "Переключить на темную тему" : "Switch to dark theme"}" : "${t.isRu ? "Переключить на светлую тему" : "Switch to light theme"}";
   }
 }
@@ -2267,7 +2329,7 @@ function initPopup() {
       if (!syncIcon) {
         const span = document.createElement("span");
         span.className = "sync-icon";
-        span.innerHTML = '<img src="icons/sync.png" class="icon-inline" alt="sync">';
+        span.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>';
         btnSyncNow.textContent = "";
         btnSyncNow.appendChild(span);
         syncIcon = span;
@@ -2411,7 +2473,7 @@ function initPopup() {
 
       const delBtn = document.createElement("button");
       delBtn.className = "rule-del-btn";
-      delBtn.innerHTML = '<img src="icons/cross.png" class="icon-inline-sm" alt="del">';
+      delBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
       delBtn.title = "${t.isRu ? "Удалить правило" : "Delete rule"}";
       delBtn.addEventListener("click", () => {
         const removeIdx = userRules.indexOf(rule);

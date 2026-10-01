@@ -203,7 +203,7 @@
     body[data-layout="terminal"] {
       font-family: var(--mono) !important;
       letter-spacing: -0.2px;
-      background-image: radial-gradient(rgba(56, 189, 248, 0.05) 1px, transparent 0);
+      background-image: radial-gradient(rgba(var(--primary-rgb), 0.05) 1px, transparent 0);
       background-size: 24px 24px;
     }
     body[data-layout="terminal"] * {
@@ -212,7 +212,7 @@
     }
     body[data-layout="terminal"] .card {
       border: 1px solid var(--primary);
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.12);
+      box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.12);
       background: rgba(10, 15, 28, 0.95);
     }
     body[data-layout="terminal"] .card h2::before {
@@ -220,7 +220,7 @@
       color: var(--primary);
     }
     body[data-layout="terminal"] .card > div[style*="background: var(--card-inner)"] {
-      border: 1px solid rgba(56, 189, 248, 0.2) !important;
+      border: 1px solid rgba(var(--primary-rgb), 0.2) !important;
       background: #040812 !important;
       border-radius: 0px !important;
     }
@@ -232,9 +232,9 @@
     }
     body[data-layout="terminal"] .tab-btn.active {
       border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.18);
+      background: rgba(var(--primary-rgb), 0.18);
       color: var(--primary);
-      box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+      box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.2);
     }
     body[data-layout="terminal"] input, 
     body[data-layout="terminal"] select, 
@@ -247,12 +247,12 @@
     body[data-layout="terminal"] select:focus, 
     body[data-layout="terminal"] textarea:focus {
       border-color: var(--primary);
-      box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+      box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.3);
     }
     body[data-layout="terminal"] button,
     body[data-layout="terminal"] .btn {
       border: 1px solid var(--primary) !important;
-      background: rgba(56, 189, 248, 0.05) !important;
+      background: rgba(var(--primary-rgb), 0.05) !important;
       color: var(--primary) !important;
       text-transform: uppercase;
       font-size: 11px;
@@ -307,7 +307,7 @@
     body[data-layout="terminal"] .banner {
       border: 1px solid var(--border);
       border-left: 4px solid var(--primary);
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.08);
+      box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.08);
     }
     body[data-layout="terminal"] .preset-card {
       border: 1px solid var(--border);
@@ -323,8 +323,8 @@
     }
     body[data-layout="terminal"] .preset-chip.active {
       border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.2);
-      box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+      background: rgba(var(--primary-rgb), 0.2);
+      box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.3);
     }
     body[data-layout="terminal"] .table-container table {
       border: 1px solid var(--border);
@@ -340,10 +340,10 @@
     }
     body[data-layout="terminal"] .browser-mock {
       border: 1px solid var(--primary);
-      box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+      box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.15);
     }
     body[data-layout="terminal"] pre {
-      border: 1px solid rgba(56, 189, 248, 0.2);
+      border: 1px solid rgba(var(--primary-rgb), 0.2);
       background: #03060d !important;
     }
 
@@ -369,7 +369,7 @@
       border-color: var(--primary);
     }
     .btn-icon.active {
-      background: rgba(56, 189, 248, 0.12);
+      background: rgba(var(--primary-rgb), 0.12);
       color: var(--primary);
       border-color: var(--primary);
     }
@@ -405,13 +405,13 @@
     }
     .popover-layout-btn:hover {
       border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.1);
+      background: rgba(var(--primary-rgb), 0.1);
     }
     .popover-layout-btn.active {
-      background: rgba(56, 189, 248, 0.28) !important;
+      background: rgba(var(--primary-rgb), 0.28) !important;
       border-color: var(--primary) !important;
       color: #ffffff !important;
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.4), inset 0 0 0 1px var(--primary) !important;
+      box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.4), inset 0 0 0 1px var(--primary) !important;
       font-weight: 700 !important;
     }
     .popover-theme-dot {
@@ -447,7 +447,7 @@
       border-radius: 0px !important;
       font-family: var(--mono);
       border-color: var(--primary);
-      box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+      box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.2);
     }
     body[data-layout="terminal"] .popover-layout-btn,
     body[data-layout="terminal"] .btn-icon {
@@ -555,9 +555,9 @@
     .tab-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.15); }
     .tab-btn.active {
       color: #ffffff !important;
-      background: rgba(56, 189, 248, 0.22) !important;
+      background: rgba(var(--primary-rgb), 0.22) !important;
       border-color: var(--primary) !important;
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.3), inset 0 -2px 0 var(--primary) !important;
+      box-shadow: 0 0 14px rgba(var(--primary-rgb), 0.3), inset 0 -2px 0 var(--primary) !important;
       font-weight: 700;
     }
 
@@ -592,9 +592,9 @@
 
     /* Button Click Pulse & Active States */
     @keyframes btnClickPulse {
-      0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.8); }
-      50% { box-shadow: 0 0 0 6px rgba(56, 189, 248, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+      0% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.8); }
+      50% { box-shadow: 0 0 0 6px rgba(var(--primary-rgb), 0); }
+      100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0); }
     }
     .btn-clicked {
       animation: btnClickPulse 0.3s ease-out !important;
@@ -783,13 +783,13 @@
     .badge-online { background: rgba(16, 185, 129, 0.2); color: var(--success); }
     .badge-stale { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
     .badge-offline { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
-    .badge-action-proxy { background: rgba(56, 189, 248, 0.2); color: var(--primary); }
+    .badge-action-proxy { background: rgba(var(--primary-rgb), 0.2); color: var(--primary); }
     .badge-action-direct { background: rgba(16, 185, 129, 0.2); color: var(--success); }
     .badge-action-block { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
 
     .banner {
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.2);
+      background: rgba(var(--primary-rgb), 0.08);
+      border: 1px solid rgba(var(--primary-rgb), 0.2);
       border-radius: 10px;
       padding: 12px 18px;
       margin-bottom: 20px;
@@ -827,13 +827,13 @@
       border-radius: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      background: rgba(56, 189, 248, 0.15);
-      border: 1px solid rgba(56, 189, 248, 0.4);
+      background: rgba(var(--primary-rgb), 0.15);
+      border: 1px solid rgba(var(--primary-rgb), 0.4);
       color: var(--primary);
     }
     .preset-in-profile-badge.action-proxy {
-      background: rgba(56, 189, 248, 0.15);
-      border-color: rgba(56, 189, 248, 0.4);
+      background: rgba(var(--primary-rgb), 0.15);
+      border-color: rgba(var(--primary-rgb), 0.4);
       color: #38bdf8;
     }
     .preset-in-profile-badge.action-direct {
@@ -868,7 +868,7 @@
     .btn-reorder-up:hover:not(:disabled),
     .btn-reorder-down:hover:not(:disabled) {
       border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.15);
+      background: rgba(var(--primary-rgb), 0.15);
       color: var(--primary);
     }
     .btn-reorder-up:disabled,
@@ -1078,8 +1078,8 @@
       transition: all 0.15s;
       color: var(--text);
     }
-    .preset-chip:hover { border-color: var(--primary); background: rgba(56, 189, 248, 0.1); }
-    .preset-chip.active { border-color: var(--primary); background: rgba(56, 189, 248, 0.2); color: var(--primary); }
+    .preset-chip:hover { border-color: var(--primary); background: rgba(var(--primary-rgb), 0.1); }
+    .preset-chip.active { border-color: var(--primary); background: rgba(var(--primary-rgb), 0.2); color: var(--primary); }
     .color-swatch {
       width: 14px;
       height: 14px;
@@ -1134,9 +1134,9 @@
     }
     .studio-mode-btn.active {
       border-color: var(--primary) !important;
-      background: rgba(56, 189, 248, 0.28) !important;
+      background: rgba(var(--primary-rgb), 0.28) !important;
       color: #ffffff !important;
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4), inset 0 0 0 1px var(--primary) !important;
+      box-shadow: 0 0 14px rgba(var(--primary-rgb), 0.4), inset 0 0 0 1px var(--primary) !important;
       font-weight: 700 !important;
     }
 
