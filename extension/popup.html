@@ -383,7 +383,9 @@
       color: var(--primary);
     }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .spin { animation: spin 0.8s linear infinite; }
+    button.btn-icon-minimal.spin, button.spin { animation: none !important; }
+    .sync-icon { display: inline-block; line-height: 1; transform-origin: center center; }
+    .sync-icon.spin, span.spin { display: inline-block; animation: spin 0.8s linear infinite; transform-origin: center center; }
     .action-label {
       white-space: nowrap;
       overflow: hidden;
@@ -628,7 +630,7 @@
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
         <span class="card-title">🔌 Подключение к корпоративному шлюзу</span>
         <div class="card-header-actions">
-          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас">🔄</button>
+          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас"><span class="sync-icon">🔄</span></button>
           <button class="btn-icon-minimal" id="btnPowerToggle" title="Включить / Выключить прокси">⏻</button>
           <button class="btn-icon-minimal" id="btnPauseToggle" title="Приостановить прокси на 15 минут">⏸️</button>
         </div>

@@ -270,17 +270,54 @@ async function verifyAppliedProxySettings(expectedMode) {
 
 // Injects user-defined routing rules (PROXY or DIRECT) ahead of corporate PAC rules
 // inside FindProxyForURL(url, host).
-function injectUserRulesIntoPac(pacText, userRules, proxyServer) {
+function injectUserRulesIntoPac(pacText, userRules, proxyServer, proxyProtocol) {
   if (!pacText || typeof pacText !== "string") return pacText;
   if (!Array.isArray(userRules) || userRules.length === 0) return pacText;
 
   const activeRules = userRules.filter((r) => r && r.enabled && r.pattern && typeof r.pattern === "string" && r.pattern.trim());
   if (activeRules.length === 0) return pacText;
 
+  // Detect proxy protocol if specified or if pacText contains SOCKS5/HTTPS directives
+  let proto = (proxyProtocol || "").toLowerCase();
+  if (!proto || proto === "pac") {
+    if (pacText.indexOf("SOCKS5 ") !== -1) proto = "socks5";
+    else if (pacText.indexOf("HTTPS ") !== -1) proto = "https";
+  }
+
+  // Find the proxy directive already in use in pacText (e.g. 'PROXY host:port; DIRECT' or 'SOCKS5 host:port; DIRECT')
+  const pacDirMatch = pacText.match(/return\\s+"((?:SOCKS5|HTTPS|PROXY)\\s+(?!127\\.0\\.0\\.1:0)[^"]+)";/i);
+  let defaultProxyDirective = pacDirMatch ? pacDirMatch[1] : "";
+
+  if (!defaultProxyDirective && proxyServer) {
+    if (proto === "socks5") {
+      defaultProxyDirective = "SOCKS5 " + proxyServer + "; DIRECT";
+    } else if (proto === "https") {
+      defaultProxyDirective = "HTTPS " + proxyServer + "; DIRECT";
+    } else {
+      defaultProxyDirective = "PROXY " + proxyServer;
+    }
+  } else if (!defaultProxyDirective) {
+    defaultProxyDirective = "DIRECT";
+  }
+
   const nl = String.fromCharCode(10);
   let ruleLines = "  // === USER OVERRIDES BEGIN ===" + nl;
+  ruleLines += '  host = ("" + host).toLowerCase();' + nl;
   for (const r of activeRules) {
-    const rawPattern = r.pattern.trim();
+    let rawPattern = (r.pattern || "").trim().toLowerCase();
+    // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
+    if (rawPattern.indexOf("://") !== -1) {
+      try {
+        rawPattern = new URL(rawPattern).hostname.toLowerCase();
+      } catch (e) {
+        rawPattern = rawPattern.replace(/^[a-z]+:\\/\\//i, "").split("/")[0].split(":")[0];
+      }
+    } else if (rawPattern.indexOf("/") !== -1) {
+      rawPattern = rawPattern.split("/")[0].trim();
+    }
+    if (rawPattern.indexOf(":") !== -1 && rawPattern.indexOf("]") === -1) {
+      rawPattern = rawPattern.split(":")[0].trim();
+    }
     // Sanitize pattern: strip newlines, quotes and backslashes
     let cleanPattern = rawPattern.replace(/["\\\\\\r\\n]/g, "");
     if (!cleanPattern) continue;
@@ -338,9 +375,15 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer) {
       if (!cleanPattern) continue;
     }
 
-    const actionStr = r.action === "PROXY"
-      ? (proxyServer ? "PROXY " + proxyServer : "DIRECT")
-      : "DIRECT";
+    const actionUpper = String(r.action || "PROXY").toUpperCase();
+    let actionStr = defaultProxyDirective;
+    if (actionUpper === "DIRECT") {
+      actionStr = "DIRECT";
+    } else if (actionUpper === "BLOCK") {
+      actionStr = "PROXY 127.0.0.1:0";
+    } else {
+      actionStr = defaultProxyDirective;
+    }
 
     let condition = "";
     if (cleanPattern.startsWith("*.")) {
@@ -417,8 +460,9 @@ async function applyPacScript(pacUrl, config) {
         if (stored && Array.isArray(stored.pecUserRules) && stored.pecUserRules.length > 0) {
           const proxyHost = (config && config.host) || currentProxyState.host || "";
           const proxyPort = (config && config.port) || currentProxyState.port || 10809;
+          const proxyProto = (config && config.protocol) || (lastConfig && lastConfig.protocol) || currentProxyState.protocol || "http";
           const proxyServer = proxyHost ? proxyHost + ":" + proxyPort : "";
-          pacText = injectUserRulesIntoPac(pacText, stored.pecUserRules, proxyServer);
+          pacText = injectUserRulesIntoPac(pacText, stored.pecUserRules, proxyServer, proxyProto);
           logEvent("info", "Injected " + stored.pecUserRules.length + " user routing overrides into PAC");
         }
       }
@@ -1510,7 +1554,9 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       color: var(--primary);
     }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .spin { animation: spin 0.8s linear infinite; }
+    button.btn-icon-minimal.spin, button.spin { animation: none !important; }
+    .sync-icon { display: inline-block; line-height: 1; transform-origin: center center; }
+    .sync-icon.spin, span.spin { display: inline-block; animation: spin 0.8s linear infinite; transform-origin: center center; }
     .action-label {
       white-space: nowrap;
       overflow: hidden;
@@ -1755,7 +1801,7 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
         <span class="card-title">${t.connGateway || "🔌 Подключение к корпоративному шлюзу"}</span>
         <div class="card-header-actions">
-          <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}">🔄</button>
+          <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}"><span class="sync-icon">🔄</span></button>
           <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}">⏻</button>
           <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || "Приостановить прокси на 15 минут"}">⏸️</button>
         </div>
@@ -2150,8 +2196,16 @@ function initPopup() {
   if (btnSyncNow) {
     btnSyncNow.addEventListener("click", () => {
       btnSyncNow.disabled = true;
-      const syncIcon = btnSyncNow.querySelector(".sync-icon") || btnSyncNow;
-      if (syncIcon) syncIcon.classList.add("spin");
+      let syncIcon = btnSyncNow.querySelector(".sync-icon");
+      if (!syncIcon) {
+        const span = document.createElement("span");
+        span.className = "sync-icon";
+        span.textContent = btnSyncNow.textContent || "🔄";
+        btnSyncNow.textContent = "";
+        btnSyncNow.appendChild(span);
+        syncIcon = span;
+      }
+      syncIcon.classList.add("spin");
       const startMs = Date.now();
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "SYNC_NOW", type: "SYNC_NOW" }, (res) => {
@@ -2342,10 +2396,24 @@ function initPopup() {
   }
 
   function addRule(pattern, action) {
-    const p = (pattern || "").trim();
+    let p = (pattern || "").trim().toLowerCase();
+    if (!p) return;
+    // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
+    if (p.indexOf("://") !== -1) {
+      try {
+        p = new URL(p).hostname.toLowerCase();
+      } catch (e) {
+        p = p.replace(/^[a-z]+:\\/\\//i, "").split("/")[0].split(":")[0];
+      }
+    } else if (p.indexOf("/") !== -1) {
+      p = p.split("/")[0].trim();
+    }
+    if (p.indexOf(":") !== -1 && p.indexOf("]") === -1) {
+      p = p.split(":")[0].trim();
+    }
     if (!p) return;
     const act = (action || "PROXY").toUpperCase();
-    const existing = userRules.find(r => r.pattern.toLowerCase() === p.toLowerCase());
+    const existing = userRules.find(r => r.pattern.toLowerCase() === p);
     if (existing) {
       existing.action = act;
       existing.enabled = true;

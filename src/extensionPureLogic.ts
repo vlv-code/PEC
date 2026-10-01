@@ -41,7 +41,8 @@ export function pacRevisionOf(pacText: string): string {
 export function injectUserRulesIntoPac(
   pacText: string,
   userRules: Array<{ pattern: string; action: string; enabled: boolean }>,
-  proxyServer: string
+  proxyServer: string,
+  proxyProtocol?: string
 ): string {
   if (!pacText || typeof pacText !== "string") return pacText;
   if (!Array.isArray(userRules) || userRules.length === 0) return pacText;
@@ -49,9 +50,46 @@ export function injectUserRulesIntoPac(
   const activeRules = userRules.filter((r) => r && r.enabled && r.pattern && typeof r.pattern === "string" && r.pattern.trim());
   if (activeRules.length === 0) return pacText;
 
+  // Detect proxy protocol if specified or if pacText contains SOCKS5/HTTPS directives
+  let proto = (proxyProtocol || "").toLowerCase();
+  if (!proto) {
+    if (pacText.includes("SOCKS5 ")) proto = "socks5";
+    else if (pacText.includes("HTTPS ")) proto = "https";
+  }
+
+  // Find the proxy directive already in use in pacText (e.g. 'PROXY host:port; DIRECT' or 'SOCKS5 host:port; DIRECT')
+  const pacDirMatch = pacText.match(/return\s+"((?:SOCKS5|HTTPS|PROXY)\s+(?!127\.0\.0\.1:0)[^"]+)";/i);
+  let defaultProxyDirective = pacDirMatch ? pacDirMatch[1] : "";
+
+  if (!defaultProxyDirective && proxyServer) {
+    if (proto === "socks5") {
+      defaultProxyDirective = `SOCKS5 ${proxyServer}; DIRECT`;
+    } else if (proto === "https") {
+      defaultProxyDirective = `HTTPS ${proxyServer}; DIRECT`;
+    } else {
+      defaultProxyDirective = `PROXY ${proxyServer}`;
+    }
+  } else if (!defaultProxyDirective) {
+    defaultProxyDirective = "DIRECT";
+  }
+
   let ruleLines = "  // === USER OVERRIDES BEGIN ===\n";
+  ruleLines += "  host = (\"\" + host).toLowerCase();\n";
   for (const r of activeRules) {
-    const rawPattern = r.pattern.trim();
+    let rawPattern = r.pattern.trim().toLowerCase();
+    // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
+    if (rawPattern.includes("://")) {
+      try {
+        rawPattern = new URL(rawPattern).hostname.toLowerCase();
+      } catch {
+        rawPattern = rawPattern.replace(/^[a-z]+:\/\//i, "").split("/")[0].split(":")[0];
+      }
+    } else if (rawPattern.includes("/")) {
+      rawPattern = rawPattern.split("/")[0].trim();
+    }
+    if (rawPattern.includes(":") && !rawPattern.includes("]")) {
+      rawPattern = rawPattern.split(":")[0].trim();
+    }
     // Sanitize pattern: strip newlines, quotes and backslashes
     let cleanPattern = rawPattern.replace(/["\\\r\n]/g, "");
     if (!cleanPattern) continue;
@@ -109,9 +147,15 @@ export function injectUserRulesIntoPac(
       if (!cleanPattern) continue;
     }
 
-    const actionStr = r.action === "PROXY"
-      ? (proxyServer ? `PROXY ${proxyServer}` : "DIRECT")
-      : "DIRECT";
+    const actionUpper = String(r.action || "PROXY").toUpperCase();
+    let actionStr = defaultProxyDirective;
+    if (actionUpper === "DIRECT") {
+      actionStr = "DIRECT";
+    } else if (actionUpper === "BLOCK") {
+      actionStr = "PROXY 127.0.0.1:0";
+    } else {
+      actionStr = defaultProxyDirective;
+    }
 
     let condition = "";
     if (cleanPattern.startsWith("*.")) {

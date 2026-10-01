@@ -278,8 +278,16 @@ function initPopup() {
   if (btnSyncNow) {
     btnSyncNow.addEventListener("click", () => {
       btnSyncNow.disabled = true;
-      const syncIcon = btnSyncNow.querySelector(".sync-icon") || btnSyncNow;
-      if (syncIcon) syncIcon.classList.add("spin");
+      let syncIcon = btnSyncNow.querySelector(".sync-icon");
+      if (!syncIcon) {
+        const span = document.createElement("span");
+        span.className = "sync-icon";
+        span.textContent = btnSyncNow.textContent || "🔄";
+        btnSyncNow.textContent = "";
+        btnSyncNow.appendChild(span);
+        syncIcon = span;
+      }
+      syncIcon.classList.add("spin");
       const startMs = Date.now();
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "SYNC_NOW", type: "SYNC_NOW" }, (res) => {
@@ -470,10 +478,24 @@ function initPopup() {
   }
 
   function addRule(pattern, action) {
-    const p = (pattern || "").trim();
+    let p = (pattern || "").trim().toLowerCase();
+    if (!p) return;
+    // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
+    if (p.indexOf("://") !== -1) {
+      try {
+        p = new URL(p).hostname.toLowerCase();
+      } catch (e) {
+        p = p.replace(/^[a-z]+:\/\//i, "").split("/")[0].split(":")[0];
+      }
+    } else if (p.indexOf("/") !== -1) {
+      p = p.split("/")[0].trim();
+    }
+    if (p.indexOf(":") !== -1 && p.indexOf("]") === -1) {
+      p = p.split(":")[0].trim();
+    }
     if (!p) return;
     const act = (action || "PROXY").toUpperCase();
-    const existing = userRules.find(r => r.pattern.toLowerCase() === p.toLowerCase());
+    const existing = userRules.find(r => r.pattern.toLowerCase() === p);
     if (existing) {
       existing.action = act;
       existing.enabled = true;
