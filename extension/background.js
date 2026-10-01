@@ -27,7 +27,7 @@ const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
 // Fail fast on un-substituted build placeholders (loaded extension/ instead of dist/unpacked)
 if (DEFAULT_SERVER_BASE.startsWith("__" + "PEC_")) {
   console.error(
-    "[corp-proxy] FATAL: server URL placeholder was not substituted. " +
+    "[PEC] FATAL: server URL placeholder was not substituted. " +
     "You probably loaded the raw extension/ template directory instead of the " +
     "built dist/unpacked/ output. Proxy sync is DISABLED."
   );
@@ -102,7 +102,7 @@ function logEvent(level, message, data) {
   if (recentLogs.length > MAX_LOGS) {
     recentLogs.shift();
   }
-  const prefix = "[corp-proxy][" + entry.level.toUpperCase() + "]";
+  const prefix = "[PEC][" + entry.level.toUpperCase() + "]";
   if (entry.level === "error") {
     console.error(prefix, message, data !== undefined ? data : "");
   } else if (entry.level === "warn") {
@@ -197,10 +197,10 @@ async function applyWebRtcProtection() {
         value: "disable_non_proxied_udp",
         scope: "regular",
       });
-      console.log("[corp-proxy] WebRTC IP leak protection enforced.");
+      console.log("[PEC] WebRTC IP leak protection enforced.");
       logEvent("info", "WebRTC IP leak protection enforced (disable_non_proxied_udp)");
     } catch (e) {
-      console.warn("[corp-proxy] Could not set WebRTC IP handling policy:", e);
+      console.warn("[PEC] Could not set WebRTC IP handling policy:", e);
       logEvent("warn", "Could not set WebRTC IP handling policy: " + (e && e.message ? e.message : e));
     }
   }
@@ -234,20 +234,20 @@ async function verifyAppliedProxySettings(expectedMode) {
     const mode = details && details.value ? details.value.mode : "(unset)";
     const control = details && details.levelOfControl ? details.levelOfControl : "(unknown)";
     if (mode === expectedMode && control === "controlled_by_this_extension") {
-      console.log("[corp-proxy] Proxy verified: mode=" + mode + ", control=" + control + " - config is LIVE in the browser.");
+      console.log("[PEC] Proxy verified: mode=" + mode + ", control=" + control + " - config is LIVE in the browser.");
       logEvent("info", "Proxy verified: mode=" + mode + ", control=" + control + " (active)");
     } else if (control === "controlled_by_other_extensions" || control === "not_controllable") {
-      console.warn("[corp-proxy] Proxy NOT in effect: mode=" + mode + ", control=" + control +
+      console.warn("[PEC] Proxy NOT in effect: mode=" + mode + ", control=" + control +
         " - the proxy setting is owned by " +
         (control === "not_controllable" ? "an enterprise policy" : "another extension") +
         ", our config is ignored.");
       logEvent("error", "Proxy NOT active: owned by " + (control === "not_controllable" ? "enterprise policy" : "another extension") + " (" + control + ")");
     } else {
-      console.warn("[corp-proxy] Proxy NOT verified: mode=" + mode + ", control=" + control);
+      console.warn("[PEC] Proxy NOT verified: mode=" + mode + ", control=" + control);
       logEvent("warn", "Proxy NOT verified: mode=" + mode + ", control=" + control);
     }
   } catch (err) {
-    console.warn("[corp-proxy] Verification read failed:", err && err.message ? err.message : err);
+    console.warn("[PEC] Verification read failed:", err && err.message ? err.message : err);
     logEvent("warn", "Verification read failed: " + (err && err.message ? err.message : err));
   }
 }
@@ -381,15 +381,15 @@ async function applyPacScript(pacUrl, config) {
       if (text && text.indexOf("FindProxyForURL") !== -1) {
         pacText = text;
       } else {
-        console.warn("[corp-proxy] PAC endpoint returned an invalid script (no FindProxyForURL).");
+        console.warn("[PEC] PAC endpoint returned an invalid script (no FindProxyForURL).");
         logEvent("warn", "PAC endpoint returned invalid script (no FindProxyForURL), falling back to URL mode");
       }
     } else {
-      console.warn("[corp-proxy] PAC download failed: HTTP " + res.status + " - falling back to URL mode.");
+      console.warn("[PEC] PAC download failed: HTTP " + res.status + " - falling back to URL mode.");
       logEvent("warn", "PAC download failed: HTTP " + res.status + " - falling back to URL mode");
     }
   } catch (err) {
-    console.warn("[corp-proxy] PAC download error - falling back to URL mode:", err && err.message ? err.message : err);
+    console.warn("[PEC] PAC download error - falling back to URL mode:", err && err.message ? err.message : err);
     logEvent("warn", "PAC download error (" + (err && err.message ? err.message : err) + ") - falling back to URL mode");
   }
 
@@ -407,7 +407,7 @@ async function applyPacScript(pacUrl, config) {
         }
       }
     } catch (injectErr) {
-      console.warn("[corp-proxy] Failed to inject user rules into PAC:", injectErr);
+      console.warn("[PEC] Failed to inject user rules into PAC:", injectErr);
       logEvent("warn", "Failed to inject user rules into PAC: " + (injectErr && injectErr.message ? injectErr.message : injectErr));
     }
   }
@@ -483,7 +483,7 @@ async function applyPacScript(pacUrl, config) {
 
   const useInline = pacText !== null;
   const pacRev = useInline ? pacRevisionOf(pacText) : null;
-  console.log("[corp-proxy] Applying PAC " + (useInline
+  console.log("[PEC] Applying PAC " + (useInline
     ? "(inline, " + pacText.length + " bytes, generated " + pacRev + ") from " + pacUrl
     : "(URL fallback - browser fetches it) " + pacUrl));
   logEvent("info", "Applying PAC " + (useInline
@@ -502,7 +502,7 @@ async function applyPacScript(pacUrl, config) {
     });
   } catch (setErr) {
     if (useInline) {
-      console.warn("[corp-proxy] Inline PAC installation failed (" + (setErr && setErr.message ? setErr.message : setErr) + "), falling back to URL mode:", pacUrl);
+      console.warn("[PEC] Inline PAC installation failed (" + (setErr && setErr.message ? setErr.message : setErr) + "), falling back to URL mode:", pacUrl);
       logEvent("warn", "Inline PAC installation failed, falling back to URL mode: " + (setErr && setErr.message ? setErr.message : setErr));
       await chrome.proxy.settings.set({
         value: {
@@ -553,7 +553,7 @@ async function applyProxyConfig(config) {
   try {
     const isEnabled = (effectiveConfig.enabled !== false) && currentProxyState.enabled !== false;
     if (currentProxyState.bypassActive || effectiveConfig.killSwitch || !isEnabled || effectiveConfig.protocol === "direct") {
-      console.log("[corp-proxy] Routing set to DIRECT.");
+      console.log("[PEC] Routing set to DIRECT.");
       logEvent("info", "Proxy set to DIRECT (bypass=" + currentProxyState.bypassActive + ", enabled=" + isEnabled + ")");
       await chrome.proxy.settings.set({
         value: { mode: "direct" },
@@ -579,7 +579,7 @@ async function applyProxyConfig(config) {
     const scheme = schemeMap[effectiveConfig.protocol] || "http";
     const bypassList = Array.isArray(effectiveConfig.bypassList) ? effectiveConfig.bypassList : ["<local>"];
 
-    console.log("[corp-proxy] Applying " + scheme.toUpperCase() + " Proxy: " + effectiveConfig.host + ":" + effectiveConfig.port);
+    console.log("[PEC] Applying " + scheme.toUpperCase() + " Proxy: " + effectiveConfig.host + ":" + effectiveConfig.port);
     logEvent("info", "Applying " + scheme.toUpperCase() + " Proxy: " + effectiveConfig.host + ":" + effectiveConfig.port);
     await chrome.proxy.settings.set({
       value: {
@@ -602,7 +602,7 @@ async function applyProxyConfig(config) {
     }
     await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
-    console.error("[corp-proxy] Error applying proxy settings:", err);
+    console.error("[PEC] Error applying proxy settings:", err);
     logEvent("error", "Error applying proxy settings: " + (err && err.message ? err.message : err));
     updateBadge("ERR", "#ef4444");
   }
@@ -614,19 +614,19 @@ if (chrome.proxy && chrome.proxy.onProxyError && chrome.proxy.onProxyError.addLi
   chrome.proxy.onProxyError.addListener((details) => {
     const errDesc = details && details.error ? details.error : "unknown";
     const fatal = details && details.fatal;
-    console.warn("[corp-proxy] onProxyError:", errDesc, fatal ? "(FATAL - request failed)" : "(recovered)");
+    console.warn("[PEC] onProxyError:", errDesc, fatal ? "(FATAL - request failed)" : "(recovered)");
     logEvent("error", "Proxy network/PAC error: " + errDesc + (fatal ? " (FATAL - request failed)" : " (recovered)"), details);
   });
 }
 
 // Re-enable proxy after the temporary bypass window elapsed
 async function expireBypass() {
-  console.log("[corp-proxy] Bypass window elapsed - re-enabling proxy.");
+  console.log("[PEC] Bypass window elapsed - re-enabling proxy.");
   logEvent("info", "Temporary bypass window expired - re-enabling proxy");
   currentProxyState.bypassActive = false;
   currentProxyState.bypassExpiresAt = null;
   syncWithServer(true).catch(function (e) {
-    console.warn("[corp-proxy] Re-sync after bypass expiry failed:", e);
+    console.warn("[PEC] Re-sync after bypass expiry failed:", e);
     logEvent("warn", "Re-sync after bypass expiry failed: " + (e && e.message ? e.message : e));
   });
 }
@@ -732,11 +732,11 @@ async function syncWithServer(forceRefresh = false) {
           }
         } else {
           const statusMsg = "HTTP " + res.status + (res.statusText ? " " + res.statusText : "");
-          console.warn("[corp-proxy] Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
+          console.warn("[PEC] Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
           logEvent("warn", "Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
         }
       } catch (err) {
-        console.warn("[corp-proxy] Sync endpoint error, trying fallback /creds:", err);
+        console.warn("[PEC] Sync endpoint error, trying fallback /creds:", err);
         logEvent("warn", "Sync endpoint error, trying fallback /creds: " + (err && err.message ? err.message : err));
       }
 
@@ -795,7 +795,7 @@ chrome.webRequest.onAuthRequired.addListener(
     seenRequests.set(details.requestId, attempts);
 
     if (attempts > MAX_AUTH_ATTEMPTS) {
-      console.warn("[corp-proxy] Max auth attempts exceeded for requestId=" + details.requestId);
+      console.warn("[PEC] Max auth attempts exceeded for requestId=" + details.requestId);
       logEvent("warn", "Max auth attempts exceeded for requestId=" + details.requestId);
       seenRequests.delete(details.requestId);
       asyncCallback({ cancel: true });
@@ -812,7 +812,7 @@ chrome.webRequest.onAuthRequired.addListener(
         asyncCallback({ authCredentials: { username: creds.user, password: creds.pass } });
       })
       .catch((err) => {
-        console.error("[corp-proxy] onAuthRequired error:", err);
+        console.error("[PEC] onAuthRequired error:", err);
         logEvent("error", "onAuthRequired error: " + (err && err.message ? err.message : err));
         seenRequests.delete(details.requestId);
         asyncCallback({});
@@ -916,7 +916,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // Schedule automatic re-enable - "temporary bypass" must actually be temporary.
       currentProxyState.bypassExpiresAt = Date.now() + BYPASS_TIMEOUT_MIN * 60 * 1000;
       chrome.alarms.create(ALARM_BYPASS_EXPIRE, { delayInMinutes: Math.max(0.5, BYPASS_TIMEOUT_MIN) });
-      console.log("[corp-proxy] Bypass enabled for " + BYPASS_TIMEOUT_MIN + " minutes.");
+      console.log("[PEC] Bypass enabled for " + BYPASS_TIMEOUT_MIN + " minutes.");
     } else {
       currentProxyState.bypassExpiresAt = null;
       chrome.alarms.clear(ALARM_BYPASS_EXPIRE);
@@ -938,7 +938,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // Alarm handler: periodic sync + bypass expiry
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_SYNC) {
-    syncWithServer(false).catch((e) => console.warn("[corp-proxy] Periodic sync error:", e));
+    syncWithServer(false).catch((e) => console.warn("[PEC] Periodic sync error:", e));
   } else if (alarm.name === ALARM_BYPASS_EXPIRE) {
     expireBypass();
   }
@@ -956,4 +956,4 @@ chrome.alarms.get(ALARM_BYPASS_EXPIRE, (alarm) => {
 
 // Initialize on service worker start
 applyWebRtcProtection();
-syncWithServer(false).catch((e) => console.warn("[corp-proxy] Initial boot sync warning:", e));
+syncWithServer(false).catch((e) => console.warn("[PEC] Initial boot sync warning:", e));

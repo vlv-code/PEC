@@ -43,7 +43,7 @@ const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
 // Fail fast on un-substituted build placeholders (loaded extension/ instead of dist/unpacked)
 if (DEFAULT_SERVER_BASE.startsWith("__" + "PEC_")) {
   console.error(
-    "[corp-proxy] FATAL: server URL placeholder was not substituted. " +
+    "[PEC] FATAL: server URL placeholder was not substituted. " +
     "You probably loaded the raw extension/ template directory instead of the " +
     "built dist/unpacked/ output. Proxy sync is DISABLED."
   );
@@ -118,7 +118,7 @@ function logEvent(level, message, data) {
   if (recentLogs.length > MAX_LOGS) {
     recentLogs.shift();
   }
-  const prefix = "[corp-proxy][" + entry.level.toUpperCase() + "]";
+  const prefix = "[PEC][" + entry.level.toUpperCase() + "]";
   if (entry.level === "error") {
     console.error(prefix, message, data !== undefined ? data : "");
   } else if (entry.level === "warn") {
@@ -213,10 +213,10 @@ async function applyWebRtcProtection() {
         value: "disable_non_proxied_udp",
         scope: "regular",
       });
-      console.log("[corp-proxy] WebRTC IP leak protection enforced.");
+      console.log("[PEC] WebRTC IP leak protection enforced.");
       logEvent("info", "WebRTC IP leak protection enforced (disable_non_proxied_udp)");
     } catch (e) {
-      console.warn("[corp-proxy] Could not set WebRTC IP handling policy:", e);
+      console.warn("[PEC] Could not set WebRTC IP handling policy:", e);
       logEvent("warn", "Could not set WebRTC IP handling policy: " + (e && e.message ? e.message : e));
     }
   }
@@ -250,20 +250,20 @@ async function verifyAppliedProxySettings(expectedMode) {
     const mode = details && details.value ? details.value.mode : "(unset)";
     const control = details && details.levelOfControl ? details.levelOfControl : "(unknown)";
     if (mode === expectedMode && control === "controlled_by_this_extension") {
-      console.log("[corp-proxy] Proxy verified: mode=" + mode + ", control=" + control + " - config is LIVE in the browser.");
+      console.log("[PEC] Proxy verified: mode=" + mode + ", control=" + control + " - config is LIVE in the browser.");
       logEvent("info", "Proxy verified: mode=" + mode + ", control=" + control + " (active)");
     } else if (control === "controlled_by_other_extensions" || control === "not_controllable") {
-      console.warn("[corp-proxy] Proxy NOT in effect: mode=" + mode + ", control=" + control +
+      console.warn("[PEC] Proxy NOT in effect: mode=" + mode + ", control=" + control +
         " - the proxy setting is owned by " +
         (control === "not_controllable" ? "an enterprise policy" : "another extension") +
         ", our config is ignored.");
       logEvent("error", "Proxy NOT active: owned by " + (control === "not_controllable" ? "enterprise policy" : "another extension") + " (" + control + ")");
     } else {
-      console.warn("[corp-proxy] Proxy NOT verified: mode=" + mode + ", control=" + control);
+      console.warn("[PEC] Proxy NOT verified: mode=" + mode + ", control=" + control);
       logEvent("warn", "Proxy NOT verified: mode=" + mode + ", control=" + control);
     }
   } catch (err) {
-    console.warn("[corp-proxy] Verification read failed:", err && err.message ? err.message : err);
+    console.warn("[PEC] Verification read failed:", err && err.message ? err.message : err);
     logEvent("warn", "Verification read failed: " + (err && err.message ? err.message : err));
   }
 }
@@ -397,15 +397,15 @@ async function applyPacScript(pacUrl, config) {
       if (text && text.indexOf("FindProxyForURL") !== -1) {
         pacText = text;
       } else {
-        console.warn("[corp-proxy] PAC endpoint returned an invalid script (no FindProxyForURL).");
+        console.warn("[PEC] PAC endpoint returned an invalid script (no FindProxyForURL).");
         logEvent("warn", "PAC endpoint returned invalid script (no FindProxyForURL), falling back to URL mode");
       }
     } else {
-      console.warn("[corp-proxy] PAC download failed: HTTP " + res.status + " - falling back to URL mode.");
+      console.warn("[PEC] PAC download failed: HTTP " + res.status + " - falling back to URL mode.");
       logEvent("warn", "PAC download failed: HTTP " + res.status + " - falling back to URL mode");
     }
   } catch (err) {
-    console.warn("[corp-proxy] PAC download error - falling back to URL mode:", err && err.message ? err.message : err);
+    console.warn("[PEC] PAC download error - falling back to URL mode:", err && err.message ? err.message : err);
     logEvent("warn", "PAC download error (" + (err && err.message ? err.message : err) + ") - falling back to URL mode");
   }
 
@@ -423,7 +423,7 @@ async function applyPacScript(pacUrl, config) {
         }
       }
     } catch (injectErr) {
-      console.warn("[corp-proxy] Failed to inject user rules into PAC:", injectErr);
+      console.warn("[PEC] Failed to inject user rules into PAC:", injectErr);
       logEvent("warn", "Failed to inject user rules into PAC: " + (injectErr && injectErr.message ? injectErr.message : injectErr));
     }
   }
@@ -499,7 +499,7 @@ async function applyPacScript(pacUrl, config) {
 
   const useInline = pacText !== null;
   const pacRev = useInline ? pacRevisionOf(pacText) : null;
-  console.log("[corp-proxy] Applying PAC " + (useInline
+  console.log("[PEC] Applying PAC " + (useInline
     ? "(inline, " + pacText.length + " bytes, generated " + pacRev + ") from " + pacUrl
     : "(URL fallback - browser fetches it) " + pacUrl));
   logEvent("info", "Applying PAC " + (useInline
@@ -518,7 +518,7 @@ async function applyPacScript(pacUrl, config) {
     });
   } catch (setErr) {
     if (useInline) {
-      console.warn("[corp-proxy] Inline PAC installation failed (" + (setErr && setErr.message ? setErr.message : setErr) + "), falling back to URL mode:", pacUrl);
+      console.warn("[PEC] Inline PAC installation failed (" + (setErr && setErr.message ? setErr.message : setErr) + "), falling back to URL mode:", pacUrl);
       logEvent("warn", "Inline PAC installation failed, falling back to URL mode: " + (setErr && setErr.message ? setErr.message : setErr));
       await chrome.proxy.settings.set({
         value: {
@@ -569,7 +569,7 @@ async function applyProxyConfig(config) {
   try {
     const isEnabled = (effectiveConfig.enabled !== false) && currentProxyState.enabled !== false;
     if (currentProxyState.bypassActive || effectiveConfig.killSwitch || !isEnabled || effectiveConfig.protocol === "direct") {
-      console.log("[corp-proxy] Routing set to DIRECT.");
+      console.log("[PEC] Routing set to DIRECT.");
       logEvent("info", "Proxy set to DIRECT (bypass=" + currentProxyState.bypassActive + ", enabled=" + isEnabled + ")");
       await chrome.proxy.settings.set({
         value: { mode: "direct" },
@@ -595,7 +595,7 @@ async function applyProxyConfig(config) {
     const scheme = schemeMap[effectiveConfig.protocol] || "http";
     const bypassList = Array.isArray(effectiveConfig.bypassList) ? effectiveConfig.bypassList : ["<local>"];
 
-    console.log("[corp-proxy] Applying " + scheme.toUpperCase() + " Proxy: " + effectiveConfig.host + ":" + effectiveConfig.port);
+    console.log("[PEC] Applying " + scheme.toUpperCase() + " Proxy: " + effectiveConfig.host + ":" + effectiveConfig.port);
     logEvent("info", "Applying " + scheme.toUpperCase() + " Proxy: " + effectiveConfig.host + ":" + effectiveConfig.port);
     await chrome.proxy.settings.set({
       value: {
@@ -618,7 +618,7 @@ async function applyProxyConfig(config) {
     }
     await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
-    console.error("[corp-proxy] Error applying proxy settings:", err);
+    console.error("[PEC] Error applying proxy settings:", err);
     logEvent("error", "Error applying proxy settings: " + (err && err.message ? err.message : err));
     updateBadge("ERR", "#ef4444");
   }
@@ -630,19 +630,19 @@ if (chrome.proxy && chrome.proxy.onProxyError && chrome.proxy.onProxyError.addLi
   chrome.proxy.onProxyError.addListener((details) => {
     const errDesc = details && details.error ? details.error : "unknown";
     const fatal = details && details.fatal;
-    console.warn("[corp-proxy] onProxyError:", errDesc, fatal ? "(FATAL - request failed)" : "(recovered)");
+    console.warn("[PEC] onProxyError:", errDesc, fatal ? "(FATAL - request failed)" : "(recovered)");
     logEvent("error", "Proxy network/PAC error: " + errDesc + (fatal ? " (FATAL - request failed)" : " (recovered)"), details);
   });
 }
 
 // Re-enable proxy after the temporary bypass window elapsed
 async function expireBypass() {
-  console.log("[corp-proxy] Bypass window elapsed - re-enabling proxy.");
+  console.log("[PEC] Bypass window elapsed - re-enabling proxy.");
   logEvent("info", "Temporary bypass window expired - re-enabling proxy");
   currentProxyState.bypassActive = false;
   currentProxyState.bypassExpiresAt = null;
   syncWithServer(true).catch(function (e) {
-    console.warn("[corp-proxy] Re-sync after bypass expiry failed:", e);
+    console.warn("[PEC] Re-sync after bypass expiry failed:", e);
     logEvent("warn", "Re-sync after bypass expiry failed: " + (e && e.message ? e.message : e));
   });
 }
@@ -748,11 +748,11 @@ async function syncWithServer(forceRefresh = false) {
           }
         } else {
           const statusMsg = "HTTP " + res.status + (res.statusText ? " " + res.statusText : "");
-          console.warn("[corp-proxy] Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
+          console.warn("[PEC] Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
           logEvent("warn", "Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
         }
       } catch (err) {
-        console.warn("[corp-proxy] Sync endpoint error, trying fallback /creds:", err);
+        console.warn("[PEC] Sync endpoint error, trying fallback /creds:", err);
         logEvent("warn", "Sync endpoint error, trying fallback /creds: " + (err && err.message ? err.message : err));
       }
 
@@ -811,7 +811,7 @@ chrome.webRequest.onAuthRequired.addListener(
     seenRequests.set(details.requestId, attempts);
 
     if (attempts > MAX_AUTH_ATTEMPTS) {
-      console.warn("[corp-proxy] Max auth attempts exceeded for requestId=" + details.requestId);
+      console.warn("[PEC] Max auth attempts exceeded for requestId=" + details.requestId);
       logEvent("warn", "Max auth attempts exceeded for requestId=" + details.requestId);
       seenRequests.delete(details.requestId);
       asyncCallback({ cancel: true });
@@ -828,7 +828,7 @@ chrome.webRequest.onAuthRequired.addListener(
         asyncCallback({ authCredentials: { username: creds.user, password: creds.pass } });
       })
       .catch((err) => {
-        console.error("[corp-proxy] onAuthRequired error:", err);
+        console.error("[PEC] onAuthRequired error:", err);
         logEvent("error", "onAuthRequired error: " + (err && err.message ? err.message : err));
         seenRequests.delete(details.requestId);
         asyncCallback({});
@@ -932,7 +932,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // Schedule automatic re-enable - "temporary bypass" must actually be temporary.
       currentProxyState.bypassExpiresAt = Date.now() + BYPASS_TIMEOUT_MIN * 60 * 1000;
       chrome.alarms.create(ALARM_BYPASS_EXPIRE, { delayInMinutes: Math.max(0.5, BYPASS_TIMEOUT_MIN) });
-      console.log("[corp-proxy] Bypass enabled for " + BYPASS_TIMEOUT_MIN + " minutes.");
+      console.log("[PEC] Bypass enabled for " + BYPASS_TIMEOUT_MIN + " minutes.");
     } else {
       currentProxyState.bypassExpiresAt = null;
       chrome.alarms.clear(ALARM_BYPASS_EXPIRE);
@@ -954,7 +954,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // Alarm handler: periodic sync + bypass expiry
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_SYNC) {
-    syncWithServer(false).catch((e) => console.warn("[corp-proxy] Periodic sync error:", e));
+    syncWithServer(false).catch((e) => console.warn("[PEC] Periodic sync error:", e));
   } else if (alarm.name === ALARM_BYPASS_EXPIRE) {
     expireBypass();
   }
@@ -972,7 +972,7 @@ chrome.alarms.get(ALARM_BYPASS_EXPIRE, (alarm) => {
 
 // Initialize on service worker start
 applyWebRtcProtection();
-syncWithServer(false).catch((e) => console.warn("[corp-proxy] Initial boot sync warning:", e));
+syncWithServer(false).catch((e) => console.warn("[PEC] Initial boot sync warning:", e));
 `;
 
 /**
@@ -1041,18 +1041,19 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
     active: isRu ? "Активен" : "Active",
     bypassed: isRu ? "Обход активен" : "Bypass Active",
     offline: isRu ? "Отключен" : "Offline",
-    tabConn: isRu ? "Подключение" : "Connection",
-    tabRules: isRu ? "Маршрутизация" : "Routing",
+    tabConn: isRu ? "Главная" : "Main",
+    tabRules: isRu ? "Роутинг" : "Routing",
     tabDiag: isRu ? "Инфо" : "Info",
     tabHelp: isRu ? "Поддержка" : "Support",
+    connGateway: isRu ? "🔌 Подключение к корпоративному шлюзу" : "🔌 Corporate Gateway Connection",
     proxyMode: isRu ? "Режим прокси" : "Proxy Mode",
     activeEndpoint: isRu ? "Прокси-сервер" : "Active Endpoint",
     routingProfile: isRu ? "Профиль правил" : "Routing Profile",
     latency: isRu ? "Задержка (Пинг)" : "Latency (Ping)",
     btnSync: isRu ? "Синхронизировать сейчас" : "Sync with Server Now",
     btnSyncShort: isRu ? "Синхронизация" : "Sync",
-    btnPower: isRu ? "Вкл / Выкл" : "Power",
-    btnPause: isRu ? "Пауза 15м" : "Pause 15m",
+    btnPower: isRu ? "Включить / Выключить прокси" : "Enable / Disable Proxy",
+    btnPause: isRu ? "Приостановить прокси на 15 минут" : "Pause Proxy for 15 min",
     btnBypass: isRu ? `Временно отключить (${cfg?.bypassAutoTimeoutMinutes || 15}м)` : `Bypass Proxy Temporarily (${cfg?.bypassAutoTimeoutMinutes || 15}m)`,
     btnResume: isRu ? "Включить прокси" : "Resume Proxy Now",
     corpRules: isRu ? "Корпоративные правила" : "Corporate Rules",
@@ -1106,26 +1107,27 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
   };
 }
 
-export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<string, string>): string {
-  const t = getPopupTranslations(cfg);
-  const palette = (cfg as any).colorPalette || "cyber";
-  const layout = (cfg as any).uiLayout || "console";
-  const themeMode = (cfg as any).defaultThemeMode || "dark";
+export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<string, string>): string {
+  const safeCfg = cfg || ({} as ExtensionBuildConfig);
+  const t = getPopupTranslations(safeCfg);
+  const palette = (safeCfg as any).colorPalette || "cyber";
+  const layout = (safeCfg as any).uiLayout || "console";
+  const themeMode = (safeCfg as any).defaultThemeMode || "dark";
   const effectiveColors = {
-    primary: cfg.themeColor || "#38bdf8",
-    bg: cfg.themeBackground || "#0b1120",
-    card: cfg.themeCard || "#131d36",
+    primary: safeCfg.themeColor || "#38bdf8",
+    bg: safeCfg.themeBackground || "#0b1120",
+    card: safeCfg.themeCard || "#131d36",
     border: "#334155",
     text: "#f8fafc",
     ...colors,
   };
 
   return `<!DOCTYPE html>
-<html lang="${cfg.locale || "ru"}">
+<html lang="${safeCfg.locale || "ru"}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${cfg.name || "PEC Corp Proxy"}</title>
+  <title>${safeCfg.name || "PEC Corp Proxy"}</title>
   <style>
     :root, [data-theme="dark"] {
       --primary: ${effectiveColors.primary};
@@ -1139,6 +1141,10 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
       --success: #10b981;
       --danger: #ef4444;
       --warning: #f59e0b;
+      --border-color: var(--border);
+      --text-main: var(--text);
+      --bg-hover: rgba(255, 255, 255, 0.08);
+      --accent-color: var(--primary);
     }
     [data-theme="light"] {
       --bg: #f8fafc;
@@ -1148,6 +1154,10 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
       --text: #0f172a;
       --text-muted: #64748b;
       --primary: #2563eb;
+      --border-color: var(--border);
+      --text-main: var(--text);
+      --bg-hover: rgba(0, 0, 0, 0.06);
+      --accent-color: var(--primary);
     }
 
     /* 5 Color Palettes */
@@ -1345,6 +1355,33 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
       border-radius: 12px;
       padding: 12px 14px;
       margin-bottom: 10px;
+    }
+    .tab-content > .card:last-child {
+      margin-bottom: 0;
+    }
+    .card-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-icon-minimal {
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    .btn-icon-minimal:hover {
+      background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+      border-color: var(--accent-color);
     }
     .card-header {
       display: flex;
@@ -1690,8 +1727,8 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
       <div class="brand-icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       </div>
-      <span>${cfg.shortName || cfg.name || "PEC"}</span>
-      <span class="version-tag">v${cfg.version || "1.4.0"}</span>
+      <span>${safeCfg.shortName || safeCfg.name || "PEC"}</span>
+      <span class="version-tag">v${safeCfg.version || "1.4.0"}</span>
     </div>
     <div class="header-actions">
       <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme">☀️</button>
@@ -1704,17 +1741,21 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
 
   <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" id="tab-btn-conn" data-tab="tab-content-conn">⚡ ${t.tabConn}</button>
-    <button class="tab-btn" id="tab-btn-routing" data-tab="tab-content-routing">🔀 ${t.tabRules}</button>
-    <button class="tab-btn" id="tab-btn-diag" data-tab="tab-content-diag">📊 ${t.tabDiag}</button>
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">${t.tabConn || "Главная"}</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">${t.tabRules || "Роутинг"}</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">${t.tabDiag || "Инфо"}</button>
   </div>
 
-  <!-- TAB 1: Connection -->
-  <div class="tab-content active" id="tab-content-conn">
-    <div class="card hero-card">
-      <div class="hero-header">
-        <div class="status-orb" id="statusOrb"></div>
-        <div class="hero-status-title" id="heroStatusText">${t.offline}</div>
+  <!-- TAB 1: Main (Главная) -->
+  <div class="tab-content active" id="tab-status">
+    <div class="card" id="cardConnection">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="card-title">${t.connGateway || "🔌 Подключение к корпоративному шлюзу"}</span>
+        <div class="card-header-actions">
+          <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}">🔄</button>
+          <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}">⏻</button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || "Приостановить прокси на 15 минут"}">⏸️</button>
+        </div>
       </div>
       <div class="hero-meta">
         <div class="meta-row">
@@ -1731,26 +1772,10 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
         </div>
       </div>
     </div>
-
-    <!-- 3 Action Buttons -->
-    <div class="action-bar">
-      <button id="btnSyncNow" class="btn-action" title="${t.btnSync}">
-        <svg class="action-icon sync-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        <span class="action-label">${t.btnSyncShort || "Синхронизация"}</span>
-      </button>
-      <button id="btnPowerToggle" class="btn-action" title="Включить / Выключить">
-        <svg class="action-icon power-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
-        <span class="action-label" id="btnPowerLabel">${t.btnPower || "Вкл / Выкл"}</span>
-      </button>
-      <button id="btnPauseToggle" class="btn-action" title="Пауза 15 минут">
-        <svg class="action-icon pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-        <span class="action-label" id="btnPauseLabel">${t.btnPause || "Пауза 15м"}</span>
-      </button>
-    </div>
   </div>
 
   <!-- TAB 2: Routing -->
-  <div class="tab-content" id="tab-content-routing">
+  <div class="tab-content" id="tab-routing">
     <div class="card">
       <div class="card-header">
         <span class="card-title">${t.corpRules || "Корпоративные правила"}</span>
@@ -1790,18 +1815,18 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
   </div>
 
   <!-- TAB 3: Diagnostics & Info -->
-  <div class="tab-content" id="tab-content-diag">
+  <div class="tab-content" id="tab-info">
     <div class="card">
       <div class="card-header">
         <span class="card-title">${t.connParams || "Параметры соединения"}</span>
       </div>
       <div class="row">
         <span class="label">${t.webrtcShield}</span>
-        <span class="val success-val" id="webrtcVal">${cfg.webRtcProtection !== false ? t.webrtcStatus : "Disabled"}</span>
+        <span class="val success-val" id="webrtcVal">${safeCfg.webRtcProtection !== false ? t.webrtcStatus : "Disabled"}</span>
       </div>
       <div class="row">
         <span class="label">${t.dnsGuard}</span>
-        <span class="val success-val" id="dnsVal">${cfg.dnsLeakProtection !== false ? t.dnsStatus : "Off"}</span>
+        <span class="val success-val" id="dnsVal">${safeCfg.dnsLeakProtection !== false ? t.dnsStatus : "Off"}</span>
       </div>
       <div class="row">
         <span class="label">${t.latency}</span>
@@ -1819,7 +1844,7 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
       </div>
       <div class="row" style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--border);">
         <span class="label">${t.helpdesk}</span>
-        <span class="val" style="font-size: 11px;"><a href="${cfg.supportUrl || "mailto:it-support@corp.local"}" target="_blank" style="color: var(--primary); text-decoration: none;">${(cfg.supportUrl || "it-support@corp.local").replace(/^mailto:/i, "")}</a></span>
+        <span class="val" style="font-size: 11px;"><a href="${safeCfg.supportUrl || "mailto:it-support@corp.local"}" target="_blank" style="color: var(--primary); text-decoration: none;">${(safeCfg.supportUrl || "it-support@corp.local").replace(/^mailto:/i, "")}</a></span>
       </div>
     </div>
 
@@ -1841,8 +1866,9 @@ export function renderPopupHtml(cfg: ExtensionBuildConfig, colors?: Record<strin
 </html>`;
 }
 
-export function renderPopupJs(cfg: ExtensionBuildConfig): string {
-  const t = getPopupTranslations(cfg);
+export function renderPopupJs(cfg?: ExtensionBuildConfig): string {
+  const safeCfg = cfg || ({} as ExtensionBuildConfig);
+  const t = getPopupTranslations(safeCfg);
   return `// Global tab switching helper
 window.switchPopupTab = function(tabId) {
   if (!tabId) return;
@@ -1851,18 +1877,25 @@ window.switchPopupTab = function(tabId) {
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
   let targetContentId = tabId;
-  if (!targetContentId.startsWith("tab-content-")) {
+  if (tabId === "tabBtnStatus" || tabId === "tab-status" || tabId === "status" || tabId === "tab-btn-conn" || tabId === "tab-content-conn" || tabId === "conn") {
+    targetContentId = (typeof document !== "undefined" && document.getElementById && document.getElementById("tab-status")) ? "tab-status" : "tab-content-conn";
+  } else if (tabId === "tabBtnRouting" || tabId === "tab-routing" || tabId === "routing" || tabId === "tab-btn-routing" || tabId === "tab-content-routing") {
+    targetContentId = (typeof document !== "undefined" && document.getElementById && document.getElementById("tab-routing")) ? "tab-routing" : "tab-content-routing";
+  } else if (tabId === "tabBtnInfo" || tabId === "tab-info" || tabId === "info" || tabId === "tab-btn-diag" || tabId === "tab-content-diag" || tabId === "diag" || tabId === "tab-diag") {
+    targetContentId = (typeof document !== "undefined" && document.getElementById && document.getElementById("tab-info")) ? "tab-info" : ((typeof document !== "undefined" && document.getElementById && document.getElementById("tab-content-diag")) ? "tab-content-diag" : "tab-content-info");
+  } else if (!targetContentId.startsWith("tab-content-") && (typeof document !== "undefined" && document.getElementById && !document.getElementById(targetContentId))) {
     targetContentId = "tab-content-" + tabId.replace(/^tab-btn-/, "").replace(/^tab-/, "");
   }
+
   const activeBtn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]') ||
                     document.querySelector('.tab-btn[data-tab="' + targetContentId + '"]') ||
-                    document.getElementById("tab-btn-" + tabId.replace(/^tab-content-/, "").replace(/^tab-/, "")) ||
-                    document.getElementById(tabId);
+                    document.getElementById(tabId) ||
+                    document.getElementById("tab-btn-" + tabId.replace(/^tab-content-/, "").replace(/^tab-/, ""));
   if (activeBtn) activeBtn.classList.add("active");
   const target = document.getElementById(targetContentId) || document.getElementById(tabId);
   if (target) target.classList.add("active");
 
-  if ((targetContentId === "tab-content-diag" || tabId === "diag" || tabId === "tab-diag") && typeof window.__pecLoadLogs === "function") {
+  if ((targetContentId === "tab-content-diag" || targetContentId === "tab-info" || tabId === "diag" || tabId === "tab-diag" || tabId === "info" || tabId === "tab-info") && typeof window.__pecLoadLogs === "function") {
     window.__pecLoadLogs();
   }
 };
@@ -2106,7 +2139,7 @@ function initPopup() {
   if (btnSyncNow) {
     btnSyncNow.addEventListener("click", () => {
       btnSyncNow.disabled = true;
-      const syncIcon = btnSyncNow.querySelector(".sync-icon");
+      const syncIcon = btnSyncNow.querySelector(".sync-icon") || btnSyncNow;
       if (syncIcon) syncIcon.classList.add("spin");
       const startMs = Date.now();
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
@@ -2376,21 +2409,60 @@ function initPopup() {
       btnCheckIp.textContent = "${t.checkingIp}";
       if (exitIpVal) exitIpVal.textContent = "${t.checkingIp}";
       const base = window.__pecServerBase || "";
-      let data = null;
-      try {
-        let res = await fetch(base + "/api/ip-echo").catch(() => null);
-        if (res && res.ok) {
-          data = await res.json().catch(() => null);
-        } else {
-          let res2 = await fetch(base + "/ip-echo").catch(() => null);
-          if (res2 && res2.ok) {
-            data = await res2.json().catch(() => null);
-          }
-        }
-      } catch (err) {}
+      let ip = null;
+      let geo = null;
 
-      if (data && data.ip && exitIpVal) {
-        exitIpVal.textContent = data.ip + (data.geo ? " (" + data.geo + ")" : "");
+      // 1. Primary: https://api.ipify.org?format=json (4000ms timeout)
+      try {
+        const c1 = new AbortController();
+        const t1 = setTimeout(() => c1.abort(), 4000);
+        const res1 = await fetch("https://api.ipify.org?format=json", { signal: c1.signal }).catch(() => null);
+        clearTimeout(t1);
+        if (res1 && res1.ok) {
+          const data1 = await res1.json().catch(() => null);
+          if (data1 && data1.ip) ip = String(data1.ip).trim();
+        }
+      } catch (e) {}
+
+      // 2. Fallback: https://icanhazip.com (4000ms timeout, plain text)
+      if (!ip) {
+        try {
+          const c2 = new AbortController();
+          const t2 = setTimeout(() => c2.abort(), 4000);
+          const res2 = await fetch("https://icanhazip.com", { signal: c2.signal }).catch(() => null);
+          clearTimeout(t2);
+          if (res2 && res2.ok) {
+            const text2 = await res2.text().catch(() => "");
+            if (text2 && text2.trim()) ip = text2.trim();
+          }
+        } catch (e) {}
+      }
+
+      // 3. Tertiary fallback: intranet echo
+      if (!ip) {
+        try {
+          let res = await fetch(base + "/api/ip-echo").catch(() => null);
+          if (res && res.ok) {
+            const data = await res.json().catch(() => null);
+            if (data && data.ip) {
+              ip = String(data.ip).trim();
+              if (data.geo) geo = data.geo;
+            }
+          } else {
+            let res2 = await fetch(base + "/ip-echo").catch(() => null);
+            if (res2 && res2.ok) {
+              const data2 = await res2.json().catch(() => null);
+              if (data2 && data2.ip) {
+                ip = String(data2.ip).trim();
+                if (data2.geo) geo = data2.geo;
+              }
+            }
+          }
+        } catch (err) {}
+      }
+
+      if (ip && exitIpVal) {
+        exitIpVal.textContent = ip + (geo ? " (" + geo + ")" : "");
       } else if (exitIpVal) {
         exitIpVal.textContent = "${t.connError}";
       }

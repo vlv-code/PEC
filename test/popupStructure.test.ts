@@ -1,9 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderPopupHtml } from "../src/extensionTemplates.js";
 import fs from "node:fs";
+import path from "node:path";
+import { renderPopupHtml, BACKGROUND_TEMPLATE } from "../src/extensionTemplates.js";
 
-test("popup HTML has 380px width, 3 tabs, 3-button controls, user overrides, and theme toggle", () => {
+test("popup HTML has updated tabs (Главная, Роутинг, Инфо) and minimalist header buttons", () => {
+  const html = renderPopupHtml();
+  assert.match(html, /Главная/);
+  assert.match(html, /Роутинг/);
+  assert.match(html, /Инфо/);
+  assert.match(html, /id="btnSyncNow"/);
+  assert.match(html, /id="btnPowerToggle"/);
+  assert.match(html, /id="btnPauseToggle"/);
+  assert.doesNotMatch(html, /hero-status-card/);
+});
+
+test("extension background uses [PEC] log prefix", () => {
+  assert.match(BACKGROUND_TEMPLATE, /\[PEC\]/);
+  assert.doesNotMatch(BACKGROUND_TEMPLATE, /\[corp-proxy\]/);
+});
+
+test("popup HTML has 380px width, 3 tabs, user overrides, and theme toggle", () => {
   const html = renderPopupHtml({
     name: "PEC Corp Proxy",
     shortName: "PEC",
@@ -16,14 +33,15 @@ test("popup HTML has 380px width, 3 tabs, 3-button controls, user overrides, and
 
   assert.ok(html.includes("380px"), "Width must be 380px");
   assert.ok(html.includes('id="btnThemeToggle"'), "Day/Night theme toggle must exist in header");
-  assert.ok(html.includes('id="tab-btn-conn"'), "Connection tab button must exist");
-  assert.ok(html.includes('id="tab-btn-routing"'), "Routing tab button must exist");
-  assert.ok(html.includes('id="tab-btn-diag"'), "Diagnostics/Info tab button must exist");
-  assert.ok(html.includes("📊 Инфо"), "Tab 3 must be renamed to 📊 Инфо");
+  assert.ok(html.includes('id="tabBtnStatus"'), "Status tab button must exist");
+  assert.ok(html.includes('id="tabBtnRouting"'), "Routing tab button must exist");
+  assert.ok(html.includes('id="tabBtnInfo"'), "Info tab button must exist");
+  assert.ok(html.includes("Инфо"), "Tab 3 must be renamed to Инфо");
   assert.ok(html.includes("grid-template-columns: repeat(3, 1fr);"), ".tabs must use repeat(3, 1fr) grid");
   assert.ok(html.includes("padding: 12px 14px;"), ".card padding must be standardized to 12px 14px");
+  assert.ok(html.includes(".tab-content > .card:last-child"), "Symmetrical padding rule must exist");
 
-  // 3-button controls on connection tab
+  // Minimalist controls on connection card header
   assert.ok(html.includes('id="btnSyncNow"'), "Sync button must exist");
   assert.ok(html.includes('id="btnPowerToggle"'), "Power toggle button must exist");
   assert.ok(html.includes('id="btnPauseToggle"'), "Pause toggle button must exist");
@@ -54,8 +72,9 @@ test("extension/popup.html matches modern structure", () => {
   assert.ok(rawHtml.includes('id="btnPowerToggle"'));
   assert.ok(rawHtml.includes('id="btnPauseToggle"'));
   assert.ok(rawHtml.includes('id="btnAddCurrentSite"'));
-  assert.ok(rawHtml.includes("📊 Инфо"), "extension/popup.html must have tab 3 renamed to 📊 Инфо");
+  assert.ok(rawHtml.includes("Инфо"), "extension/popup.html must have tab 3 renamed to Инфо");
   assert.ok(rawHtml.includes("grid-template-columns: repeat(3, 1fr);"), "extension/popup.html .tabs must use grid");
   assert.ok(rawHtml.includes("padding: 12px 14px;"), "extension/popup.html .card padding must be 12px 14px");
+  assert.ok(rawHtml.includes(".tab-content > .card:last-child"), "Symmetrical padding rule must exist in popup.html");
   assert.ok(!rawHtml.includes("onclick="));
 });

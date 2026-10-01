@@ -180,3 +180,14 @@ test("popup.js and renderPopupJs defensively filter user rules", () => {
   const generatedJs = renderPopupJs({ name: "PEC", serverUrl: "https://proxyex.ic-iskra.ru" } as any);
   assert.ok(generatedJs.includes('rules || []).filter(r => r && typeof r.pattern === "string")'), "renderPopupJs must filter invalid rules defensively");
 });
+
+test("btnCheckIp in popup.js and renderPopupJs queries public IP services first with fallbacks", () => {
+  const rawJs = fs.readFileSync("extension/popup.js", "utf8");
+  assert.ok(rawJs.includes("api.ipify.org"), "popup.js must query api.ipify.org");
+  assert.ok(rawJs.includes("icanhazip.com"), "popup.js must have icanhazip.com fallback");
+
+  const generatedJs = renderPopupJs({ name: "PEC", serverUrl: "https://proxyex.ic-iskra.ru" } as any);
+  assert.ok(generatedJs.includes("api.ipify.org"), "renderPopupJs must query api.ipify.org");
+  assert.ok(generatedJs.includes("icanhazip.com"), "renderPopupJs must have icanhazip.com fallback");
+});
+

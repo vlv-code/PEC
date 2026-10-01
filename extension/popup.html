@@ -17,6 +17,10 @@
       --success: #10b981;
       --danger: #ef4444;
       --warning: #f59e0b;
+      --border-color: var(--border);
+      --text-main: var(--text);
+      --bg-hover: rgba(255, 255, 255, 0.08);
+      --accent-color: var(--primary);
     }
     [data-theme="light"] {
       --bg: #f8fafc;
@@ -26,6 +30,10 @@
       --text: #0f172a;
       --text-muted: #64748b;
       --primary: #2563eb;
+      --border-color: var(--border);
+      --text-main: var(--text);
+      --bg-hover: rgba(0, 0, 0, 0.06);
+      --accent-color: var(--primary);
     }
 
     /* 5 Color Palettes */
@@ -223,6 +231,33 @@
       border-radius: 12px;
       padding: 12px 14px;
       margin-bottom: 10px;
+    }
+    .tab-content > .card:last-child {
+      margin-bottom: 0;
+    }
+    .card-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-icon-minimal {
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    .btn-icon-minimal:hover {
+      background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+      border-color: var(--accent-color);
     }
     .card-header {
       display: flex;
@@ -582,17 +617,21 @@
 
   <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" id="tab-btn-conn" data-tab="tab-content-conn">⚡ Подключение</button>
-    <button class="tab-btn" id="tab-btn-routing" data-tab="tab-content-routing">🔀 Маршрутизация</button>
-    <button class="tab-btn" id="tab-btn-diag" data-tab="tab-content-diag">📊 Инфо</button>
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">Главная</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">Роутинг</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">Инфо</button>
   </div>
 
-  <!-- TAB 1: Connection -->
-  <div class="tab-content active" id="tab-content-conn">
-    <div class="card hero-card">
-      <div class="hero-header">
-        <div class="status-orb" id="statusOrb"></div>
-        <div class="hero-status-title" id="heroStatusText">Отключен</div>
+  <!-- TAB 1: Main (Главная) -->
+  <div class="tab-content active" id="tab-status">
+    <div class="card" id="cardConnection">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="card-title">🔌 Подключение к корпоративному шлюзу</span>
+        <div class="card-header-actions">
+          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас">🔄</button>
+          <button class="btn-icon-minimal" id="btnPowerToggle" title="Включить / Выключить прокси">⏻</button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="Приостановить прокси на 15 минут">⏸️</button>
+        </div>
       </div>
       <div class="hero-meta">
         <div class="meta-row">
@@ -609,26 +648,10 @@
         </div>
       </div>
     </div>
-
-    <!-- 3 Action Buttons -->
-    <div class="action-bar">
-      <button id="btnSyncNow" class="btn-action" title="Синхронизировать сейчас">
-        <svg class="action-icon sync-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        <span class="action-label">Синхронизация</span>
-      </button>
-      <button id="btnPowerToggle" class="btn-action" title="Включить / Выключить">
-        <svg class="action-icon power-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
-        <span class="action-label" id="btnPowerLabel">Вкл / Выкл</span>
-      </button>
-      <button id="btnPauseToggle" class="btn-action" title="Пауза 15 минут">
-        <svg class="action-icon pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-        <span class="action-label" id="btnPauseLabel">Пауза 15м</span>
-      </button>
-    </div>
   </div>
 
   <!-- TAB 2: Routing -->
-  <div class="tab-content" id="tab-content-routing">
+  <div class="tab-content" id="tab-routing">
     <div class="card">
       <div class="card-header">
         <span class="card-title">Корпоративные правила</span>
@@ -668,7 +691,7 @@
   </div>
 
   <!-- TAB 3: Diagnostics & Info -->
-  <div class="tab-content" id="tab-content-diag">
+  <div class="tab-content" id="tab-info">
     <div class="card">
       <div class="card-header">
         <span class="card-title">Параметры соединения</span>

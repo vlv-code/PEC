@@ -6,18 +6,25 @@ window.switchPopupTab = function(tabId) {
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
   let targetContentId = tabId;
-  if (!targetContentId.startsWith("tab-content-")) {
+  if (tabId === "tabBtnStatus" || tabId === "tab-status" || tabId === "status" || tabId === "tab-btn-conn" || tabId === "tab-content-conn" || tabId === "conn") {
+    targetContentId = (typeof document !== "undefined" && document.getElementById && document.getElementById("tab-status")) ? "tab-status" : "tab-content-conn";
+  } else if (tabId === "tabBtnRouting" || tabId === "tab-routing" || tabId === "routing" || tabId === "tab-btn-routing" || tabId === "tab-content-routing") {
+    targetContentId = (typeof document !== "undefined" && document.getElementById && document.getElementById("tab-routing")) ? "tab-routing" : "tab-content-routing";
+  } else if (tabId === "tabBtnInfo" || tabId === "tab-info" || tabId === "info" || tabId === "tab-btn-diag" || tabId === "tab-content-diag" || tabId === "diag" || tabId === "tab-diag") {
+    targetContentId = (typeof document !== "undefined" && document.getElementById && document.getElementById("tab-info")) ? "tab-info" : ((typeof document !== "undefined" && document.getElementById && document.getElementById("tab-content-diag")) ? "tab-content-diag" : "tab-content-info");
+  } else if (!targetContentId.startsWith("tab-content-") && (typeof document !== "undefined" && document.getElementById && !document.getElementById(targetContentId))) {
     targetContentId = "tab-content-" + tabId.replace(/^tab-btn-/, "").replace(/^tab-/, "");
   }
+
   const activeBtn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]') ||
                     document.querySelector('.tab-btn[data-tab="' + targetContentId + '"]') ||
-                    document.getElementById("tab-btn-" + tabId.replace(/^tab-content-/, "").replace(/^tab-/, "")) ||
-                    document.getElementById(tabId);
+                    document.getElementById(tabId) ||
+                    document.getElementById("tab-btn-" + tabId.replace(/^tab-content-/, "").replace(/^tab-/, ""));
   if (activeBtn) activeBtn.classList.add("active");
   const target = document.getElementById(targetContentId) || document.getElementById(tabId);
   if (target) target.classList.add("active");
 
-  if ((targetContentId === "tab-content-diag" || tabId === "diag" || tabId === "tab-diag") && typeof window.__pecLoadLogs === "function") {
+  if ((targetContentId === "tab-content-diag" || targetContentId === "tab-info" || tabId === "diag" || tabId === "tab-diag" || tabId === "info" || tabId === "tab-info") && typeof window.__pecLoadLogs === "function") {
     window.__pecLoadLogs();
   }
 };
@@ -263,7 +270,7 @@ function initPopup() {
   if (btnSyncNow) {
     btnSyncNow.addEventListener("click", () => {
       btnSyncNow.disabled = true;
-      const syncIcon = btnSyncNow.querySelector(".sync-icon");
+      const syncIcon = btnSyncNow.querySelector(".sync-icon") || btnSyncNow;
       if (syncIcon) syncIcon.classList.add("spin");
       const startMs = Date.now();
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
@@ -533,21 +540,60 @@ function initPopup() {
       btnCheckIp.textContent = "Проверка...";
       if (exitIpVal) exitIpVal.textContent = "Проверка IP...";
       const base = window.__pecServerBase || "";
-      let data = null;
-      try {
-        let res = await fetch(base + "/api/ip-echo").catch(() => null);
-        if (res && res.ok) {
-          data = await res.json().catch(() => null);
-        } else {
-          let res2 = await fetch(base + "/ip-echo").catch(() => null);
-          if (res2 && res2.ok) {
-            data = await res2.json().catch(() => null);
-          }
-        }
-      } catch (err) {}
+      let ip = null;
+      let geo = null;
 
-      if (data && data.ip && exitIpVal) {
-        exitIpVal.textContent = data.ip + (data.geo ? " (" + data.geo + ")" : "");
+      // 1. Primary: https://api.ipify.org?format=json (4000ms timeout)
+      try {
+        const c1 = new AbortController();
+        const t1 = setTimeout(() => c1.abort(), 4000);
+        const res1 = await fetch("https://api.ipify.org?format=json", { signal: c1.signal }).catch(() => null);
+        clearTimeout(t1);
+        if (res1 && res1.ok) {
+          const data1 = await res1.json().catch(() => null);
+          if (data1 && data1.ip) ip = String(data1.ip).trim();
+        }
+      } catch (e) {}
+
+      // 2. Fallback: https://icanhazip.com (4000ms timeout, plain text)
+      if (!ip) {
+        try {
+          const c2 = new AbortController();
+          const t2 = setTimeout(() => c2.abort(), 4000);
+          const res2 = await fetch("https://icanhazip.com", { signal: c2.signal }).catch(() => null);
+          clearTimeout(t2);
+          if (res2 && res2.ok) {
+            const text2 = await res2.text().catch(() => "");
+            if (text2 && text2.trim()) ip = text2.trim();
+          }
+        } catch (e) {}
+      }
+
+      // 3. Tertiary fallback: intranet echo
+      if (!ip) {
+        try {
+          let res = await fetch(base + "/api/ip-echo").catch(() => null);
+          if (res && res.ok) {
+            const data = await res.json().catch(() => null);
+            if (data && data.ip) {
+              ip = String(data.ip).trim();
+              if (data.geo) geo = data.geo;
+            }
+          } else {
+            let res2 = await fetch(base + "/ip-echo").catch(() => null);
+            if (res2 && res2.ok) {
+              const data2 = await res2.json().catch(() => null);
+              if (data2 && data2.ip) {
+                ip = String(data2.ip).trim();
+                if (data2.geo) geo = data2.geo;
+              }
+            }
+          }
+        } catch (err) {}
+      }
+
+      if (ip && exitIpVal) {
+        exitIpVal.textContent = ip + (geo ? " (" + geo + ")" : "");
       } else if (exitIpVal) {
         exitIpVal.textContent = "Ошибка связи";
       }
