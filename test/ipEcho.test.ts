@@ -25,6 +25,8 @@ test("systemRoutes responds to both /api/ip-echo and /ip-echo without 404", asyn
     const dataApi = await resApi.json();
     assert.ok(dataApi.ip);
     assert.ok(dataApi.note);
+    assert.ok(/^(?:\d{1,3}\.){3}\d{1,3}$|^[a-fA-F0-9:]+$/.test(dataApi.ip), "ip must be a valid IP address literal");
+    assert.equal(dataApi.ip, dataApi.clientIp, "ip must match clientIp");
 
     const resRoot = await fetch(`http://127.0.0.1:${port}/ip-echo`);
     assert.equal(resRoot.status, 200);

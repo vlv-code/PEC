@@ -51,7 +51,11 @@ export function getClientIp(req: Request): string {
   // - trust proxy off  -> socket address (spoofed X-Forwarded-For is ignored)
   // - trust proxy set  -> the client address as reported by the trusted proxy hop
   // Always use this helper; never parse X-Forwarded-For manually.
-  return req.ip || req.socket.remoteAddress || "unknown";
+  let ip = req.ip || req.socket.remoteAddress || "unknown";
+  if (ip.startsWith("::ffff:")) {
+    ip = ip.substring(7);
+  }
+  return ip;
 }
 
 export function getBaseUrl(req: Request): string {

@@ -24,15 +24,14 @@ export function createSystemRouter(options: {
 
   const handleIpEcho = (req: Request, res: Response) => {
     const active = getActiveProxy();
-    const proxyHost =
-      active?.host && active.host !== "10.0.0.1" && active.host !== "0.0.0.0" ? active.host : undefined;
+    const clientIp = getClientIp(req);
     res.json({
-      ip: proxyHost || getClientIp(req),
-      clientIp: getClientIp(req),
-      proxyHost,
+      ip: clientIp,
+      clientIp: clientIp,
+      proxyHost: active?.host,
       proxyPort: active?.port,
       proxyProtocol: active?.protocol,
-      note: proxyHost ? "Remote proxy node host" : "Egress IP as observed by the PEC server",
+      note: "Egress IP as observed by the PEC server",
       timestamp: new Date().toISOString(),
     });
   };

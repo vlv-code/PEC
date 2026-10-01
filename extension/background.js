@@ -67,7 +67,7 @@ let recentLogs = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecCredsCache"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecCredsCache", "pecBasePac"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
@@ -82,6 +82,9 @@ try {
       }
       if (res && res.pecCredsCache && res.pecCredsCache.user && res.pecCredsCache.pass) {
         memoryCredsCache = res.pecCredsCache;
+      }
+      if (res && res.pecBasePac && typeof res.pecBasePac === "string" && !cachedBasePacText) {
+        cachedBasePacText = res.pecBasePac;
       }
     });
   }
@@ -299,9 +302,6 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer, proxyProtocol) 
   const nl = String.fromCharCode(10);
   let ruleLines = "  // === USER OVERRIDES BEGIN ===" + nl;
   ruleLines += '  host = ("" + host).toLowerCase();' + nl;
-  if (defaultProxyDirective && defaultProxyDirective !== "DIRECT") {
-    ruleLines += '  if (dnsDomainIs(host, "api.ipify.org") || host === "api.ipify.org" || dnsDomainIs(host, "icanhazip.com") || host === "icanhazip.com" || dnsDomainIs(host, "ifconfig.me") || host === "ifconfig.me" || dnsDomainIs(host, "2ip.ru") || host === "2ip.ru" || dnsDomainIs(host, "2ip.io") || host === "2ip.io") { return "' + defaultProxyDirective + '"; }' + nl;
-  }
   for (const r of activeRules) {
     let rawPattern = (r.pattern ? r.pattern.trim() : "");
     // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
@@ -882,10 +882,42 @@ chrome.webRequest.onAuthRequired.addListener(
       return;
     }
 
-    // Fast path: if credentials already in cache, supply immediately without blocking on TTL check during 407 challenge
+    const provideCreds = (user, pass, source) => {
+      logEvent("info", "Supplied " + source + " proxy auth credentials for requestId=" + details.requestId);
+      asyncCallback({ authCredentials: { username: user, password: pass } });
+    };
+
+    // Fast path 1: if credentials already in memory, supply immediately
     if (memoryCredsCache && memoryCredsCache.user && memoryCredsCache.pass) {
-      logEvent("info", "Supplied cached proxy auth credentials for requestId=" + details.requestId);
-      asyncCallback({ authCredentials: { username: memoryCredsCache.user, password: memoryCredsCache.pass } });
+      provideCreds(memoryCredsCache.user, memoryCredsCache.pass, "cached");
+      return;
+    }
+
+    // Fast path 2: check local storage directly before attempting slow network roundtrip
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+      chrome.storage.local.get(["pecCredsCache"], (stored) => {
+        if (stored && stored.pecCredsCache && stored.pecCredsCache.user && stored.pecCredsCache.pass) {
+          memoryCredsCache = stored.pecCredsCache;
+          provideCreds(memoryCredsCache.user, memoryCredsCache.pass, "storage");
+          return;
+        }
+
+        const forceRefresh = attempts > 1;
+        // CRITICAL: applyConfig must be FALSE during onAuthRequired to avoid resetting the proxy mid-request!
+        syncWithServer(forceRefresh, false)
+          .then((creds) => {
+            if (!creds || !creds.user || !creds.pass) {
+              throw new Error("No valid credentials returned");
+            }
+            provideCreds(creds.user, creds.pass, "synced");
+          })
+          .catch((err) => {
+            console.error("[PEC] onAuthRequired error:", err);
+            logEvent("error", "onAuthRequired error: " + (err && err.message ? err.message : err));
+            seenRequests.delete(details.requestId);
+            asyncCallback({});
+          });
+      });
       return;
     }
 
@@ -896,8 +928,7 @@ chrome.webRequest.onAuthRequired.addListener(
         if (!creds || !creds.user || !creds.pass) {
           throw new Error("No valid credentials returned");
         }
-        logEvent("info", "Supplied proxy auth credentials for requestId=" + details.requestId);
-        asyncCallback({ authCredentials: { username: creds.user, password: creds.pass } });
+        provideCreds(creds.user, creds.pass, "synced");
       })
       .catch((err) => {
         console.error("[PEC] onAuthRequired error:", err);

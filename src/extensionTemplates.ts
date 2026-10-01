@@ -83,7 +83,7 @@ let recentLogs = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecCredsCache"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecCredsCache", "pecBasePac"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
@@ -98,6 +98,9 @@ try {
       }
       if (res && res.pecCredsCache && res.pecCredsCache.user && res.pecCredsCache.pass) {
         memoryCredsCache = res.pecCredsCache;
+      }
+      if (res && res.pecBasePac && typeof res.pecBasePac === "string" && !cachedBasePacText) {
+        cachedBasePacText = res.pecBasePac;
       }
     });
   }
@@ -315,9 +318,6 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer, proxyProtocol) 
   const nl = String.fromCharCode(10);
   let ruleLines = "  // === USER OVERRIDES BEGIN ===" + nl;
   ruleLines += '  host = ("" + host).toLowerCase();' + nl;
-  if (defaultProxyDirective && defaultProxyDirective !== "DIRECT") {
-    ruleLines += '  if (dnsDomainIs(host, "api.ipify.org") || host === "api.ipify.org" || dnsDomainIs(host, "icanhazip.com") || host === "icanhazip.com" || dnsDomainIs(host, "ifconfig.me") || host === "ifconfig.me" || dnsDomainIs(host, "2ip.ru") || host === "2ip.ru" || dnsDomainIs(host, "2ip.io") || host === "2ip.io") { return "' + defaultProxyDirective + '"; }' + nl;
-  }
   for (const r of activeRules) {
     let rawPattern = (r.pattern ? r.pattern.trim() : "");
     // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
@@ -898,10 +898,42 @@ chrome.webRequest.onAuthRequired.addListener(
       return;
     }
 
-    // Fast path: if credentials already in cache, supply immediately without blocking on TTL check during 407 challenge
+    const provideCreds = (user, pass, source) => {
+      logEvent("info", "Supplied " + source + " proxy auth credentials for requestId=" + details.requestId);
+      asyncCallback({ authCredentials: { username: user, password: pass } });
+    };
+
+    // Fast path 1: if credentials already in memory, supply immediately
     if (memoryCredsCache && memoryCredsCache.user && memoryCredsCache.pass) {
-      logEvent("info", "Supplied cached proxy auth credentials for requestId=" + details.requestId);
-      asyncCallback({ authCredentials: { username: memoryCredsCache.user, password: memoryCredsCache.pass } });
+      provideCreds(memoryCredsCache.user, memoryCredsCache.pass, "cached");
+      return;
+    }
+
+    // Fast path 2: check local storage directly before attempting slow network roundtrip
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+      chrome.storage.local.get(["pecCredsCache"], (stored) => {
+        if (stored && stored.pecCredsCache && stored.pecCredsCache.user && stored.pecCredsCache.pass) {
+          memoryCredsCache = stored.pecCredsCache;
+          provideCreds(memoryCredsCache.user, memoryCredsCache.pass, "storage");
+          return;
+        }
+
+        const forceRefresh = attempts > 1;
+        // CRITICAL: applyConfig must be FALSE during onAuthRequired to avoid resetting the proxy mid-request!
+        syncWithServer(forceRefresh, false)
+          .then((creds) => {
+            if (!creds || !creds.user || !creds.pass) {
+              throw new Error("No valid credentials returned");
+            }
+            provideCreds(creds.user, creds.pass, "synced");
+          })
+          .catch((err) => {
+            console.error("[PEC] onAuthRequired error:", err);
+            logEvent("error", "onAuthRequired error: " + (err && err.message ? err.message : err));
+            seenRequests.delete(details.requestId);
+            asyncCallback({});
+          });
+      });
       return;
     }
 
@@ -912,8 +944,7 @@ chrome.webRequest.onAuthRequired.addListener(
         if (!creds || !creds.user || !creds.pass) {
           throw new Error("No valid credentials returned");
         }
-        logEvent("info", "Supplied proxy auth credentials for requestId=" + details.requestId);
-        asyncCallback({ authCredentials: { username: creds.user, password: creds.pass } });
+        provideCreds(creds.user, creds.pass, "synced");
       })
       .catch((err) => {
         console.error("[PEC] onAuthRequired error:", err);
@@ -2640,50 +2671,67 @@ function initPopup() {
       let ip = null;
       let geo = null;
 
-      // 1. Primary: https://api.ipify.org?format=json (4000ms timeout)
-      try {
-        const c1 = new AbortController();
-        const t1 = setTimeout(() => c1.abort(), 4000);
-        const res1 = await fetch("https://api.ipify.org?format=json", { signal: c1.signal }).catch(() => null);
-        clearTimeout(t1);
-        if (res1 && res1.ok) {
-          const data1 = await res1.json().catch(() => null);
-          if (data1 && data1.ip) ip = String(data1.ip).trim();
-        }
-      } catch (e) {}
-
-      // 2. Fallback: https://icanhazip.com (4000ms timeout, plain text)
-      if (!ip) {
-        try {
-          const c2 = new AbortController();
-          const t2 = setTimeout(() => c2.abort(), 4000);
-          const res2 = await fetch("https://icanhazip.com", { signal: c2.signal }).catch(() => null);
-          clearTimeout(t2);
-          if (res2 && res2.ok) {
-            const text2 = await res2.text().catch(() => "");
-            if (text2 && text2.trim()) ip = text2.trim();
-          }
-        } catch (e) {}
+      function isIpAddress(str) {
+        if (!str || typeof str !== "string") return false;
+        let s = str.trim();
+        if (s.startsWith("::ffff:")) s = s.substring(7);
+        // IPv4 regex (4 octets 0-255)
+        if (/^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$/.test(s)) return true;
+        // IPv6 regex
+        if (/^[a-fA-F0-9:]{2,39}$/.test(s) && s.includes(":")) return true;
+        return false;
       }
 
-      // 3. Tertiary fallback: intranet echo
+      async function fetchCandidate(url, isJson, key) {
+        try {
+          const c = new AbortController();
+          const t = setTimeout(() => c.abort(), 3500);
+          const res = await fetch(url, { signal: c.signal, cache: "no-store" }).catch(() => null);
+          clearTimeout(t);
+          if (!res || !res.ok) return null;
+          if (isJson) {
+            const data = await res.json().catch(() => null);
+            const val = data && key ? data[key] : (data && data.ip ? data.ip : null);
+            return isIpAddress(val) ? String(val).trim() : null;
+          }
+          const text = await res.text().catch(() => "");
+          const clean = text.trim();
+          return isIpAddress(clean) ? clean : null;
+        } catch {
+          return null;
+        }
+      }
+
+      // 1. Primary: https://api.ipify.org?format=json
+      ip = await fetchCandidate("https://api.ipify.org?format=json", true, "ip");
+
+      // 2. Fast global fallback: https://checkip.amazonaws.com
       if (!ip) {
+        ip = await fetchCandidate("https://checkip.amazonaws.com", false);
+      }
+
+      // 3. Fallback: https://icanhazip.com
+      if (!ip) {
+        ip = await fetchCandidate("https://icanhazip.com", false);
+      }
+
+      // 4. Reliable Russian provider: https://yandex.ru/internet/api/v0/ip
+      if (!ip) {
+        ip = await fetchCandidate("https://yandex.ru/internet/api/v0/ip", false);
+      }
+
+      // 5. Intranet echo fallback
+      if (!ip && base) {
         try {
           let res = await fetch(base + "/api/ip-echo").catch(() => null);
+          if (!res || !res.ok) {
+            res = await fetch(base + "/ip-echo").catch(() => null);
+          }
           if (res && res.ok) {
             const data = await res.json().catch(() => null);
-            if (data && data.ip) {
+            if (data && isIpAddress(data.ip)) {
               ip = String(data.ip).trim();
               if (data.geo) geo = data.geo;
-            }
-          } else {
-            let res2 = await fetch(base + "/ip-echo").catch(() => null);
-            if (res2 && res2.ok) {
-              const data2 = await res2.json().catch(() => null);
-              if (data2 && data2.ip) {
-                ip = String(data2.ip).trim();
-                if (data2.geo) geo = data2.geo;
-              }
             }
           }
         } catch (err) {}

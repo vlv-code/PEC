@@ -606,50 +606,67 @@ function initPopup() {
       let ip = null;
       let geo = null;
 
-      // 1. Primary: https://api.ipify.org?format=json (4000ms timeout)
-      try {
-        const c1 = new AbortController();
-        const t1 = setTimeout(() => c1.abort(), 4000);
-        const res1 = await fetch("https://api.ipify.org?format=json", { signal: c1.signal }).catch(() => null);
-        clearTimeout(t1);
-        if (res1 && res1.ok) {
-          const data1 = await res1.json().catch(() => null);
-          if (data1 && data1.ip) ip = String(data1.ip).trim();
-        }
-      } catch (e) {}
-
-      // 2. Fallback: https://icanhazip.com (4000ms timeout, plain text)
-      if (!ip) {
-        try {
-          const c2 = new AbortController();
-          const t2 = setTimeout(() => c2.abort(), 4000);
-          const res2 = await fetch("https://icanhazip.com", { signal: c2.signal }).catch(() => null);
-          clearTimeout(t2);
-          if (res2 && res2.ok) {
-            const text2 = await res2.text().catch(() => "");
-            if (text2 && text2.trim()) ip = text2.trim();
-          }
-        } catch (e) {}
+      function isIpAddress(str) {
+        if (!str || typeof str !== "string") return false;
+        let s = str.trim();
+        if (s.startsWith("::ffff:")) s = s.substring(7);
+        // IPv4 regex (4 octets 0-255)
+        if (/^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(s)) return true;
+        // IPv6 regex
+        if (/^[a-fA-F0-9:]{2,39}$/.test(s) && s.includes(":")) return true;
+        return false;
       }
 
-      // 3. Tertiary fallback: intranet echo
+      async function fetchCandidate(url, isJson, key) {
+        try {
+          const c = new AbortController();
+          const t = setTimeout(() => c.abort(), 3500);
+          const res = await fetch(url, { signal: c.signal, cache: "no-store" }).catch(() => null);
+          clearTimeout(t);
+          if (!res || !res.ok) return null;
+          if (isJson) {
+            const data = await res.json().catch(() => null);
+            const val = data && key ? data[key] : (data && data.ip ? data.ip : null);
+            return isIpAddress(val) ? String(val).trim() : null;
+          }
+          const text = await res.text().catch(() => "");
+          const clean = text.trim();
+          return isIpAddress(clean) ? clean : null;
+        } catch {
+          return null;
+        }
+      }
+
+      // 1. Primary: https://api.ipify.org?format=json
+      ip = await fetchCandidate("https://api.ipify.org?format=json", true, "ip");
+
+      // 2. Fast global fallback: https://checkip.amazonaws.com
       if (!ip) {
+        ip = await fetchCandidate("https://checkip.amazonaws.com", false);
+      }
+
+      // 3. Fallback: https://icanhazip.com
+      if (!ip) {
+        ip = await fetchCandidate("https://icanhazip.com", false);
+      }
+
+      // 4. Reliable Russian provider: https://yandex.ru/internet/api/v0/ip
+      if (!ip) {
+        ip = await fetchCandidate("https://yandex.ru/internet/api/v0/ip", false);
+      }
+
+      // 5. Intranet echo fallback
+      if (!ip && base) {
         try {
           let res = await fetch(base + "/api/ip-echo").catch(() => null);
+          if (!res || !res.ok) {
+            res = await fetch(base + "/ip-echo").catch(() => null);
+          }
           if (res && res.ok) {
             const data = await res.json().catch(() => null);
-            if (data && data.ip) {
+            if (data && isIpAddress(data.ip)) {
               ip = String(data.ip).trim();
               if (data.geo) geo = data.geo;
-            }
-          } else {
-            let res2 = await fetch(base + "/ip-echo").catch(() => null);
-            if (res2 && res2.ok) {
-              const data2 = await res2.json().catch(() => null);
-              if (data2 && data2.ip) {
-                ip = String(data2.ip).trim();
-                if (data2.geo) geo = data2.geo;
-              }
             }
           }
         } catch (err) {}
