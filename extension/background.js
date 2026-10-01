@@ -617,7 +617,7 @@ async function applyProxyConfig(config) {
         value: { mode: "direct" },
         scope: "regular",
       });
-      updateBadge("DIR", "#f59e0b");
+      updateBadge("D", "#f59e0b");
       await verifyAppliedProxySettings("direct");
       return;
     }
@@ -656,7 +656,7 @@ async function applyProxyConfig(config) {
     if (currentProxyState.proxyReachable === false) {
       updateBadge("ERR", "#ef4444");
     } else {
-      updateBadge(scheme === "socks5" ? "S5" : "PRX", "#10b981");
+      updateBadge(scheme === "socks5" ? "S5" : "P", "#10b981");
     }
     await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
