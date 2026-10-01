@@ -159,7 +159,7 @@
     function bootDashboard() {
       refreshAll();
       if (!window.__pecTimers) {
-        window.__pecTimers = setInterval(fetchFleet, 5000);
+        window.__pecTimers = setInterval(loadInstances, 5000);
         setInterval(fetchStatus, 10000);
       }
     }

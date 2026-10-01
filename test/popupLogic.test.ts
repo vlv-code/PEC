@@ -62,6 +62,7 @@ function createMockEnvironment(scriptText: string) {
     btnToggleBypass: { textContent: "", title: "", className: "", addEventListener: () => {} },
     btnPowerLabel: { textContent: "", title: "", className: "", addEventListener: () => {} },
     btnPauseLabel: { textContent: "", title: "", className: "", addEventListener: () => {} },
+    btnPauseToggle: { textContent: "", title: "", className: "", addEventListener: () => {} },
     btnPowerToggle: { textContent: "", title: "", className: "", style: {}, addEventListener: () => {} },
     btnSyncNow: { textContent: "", title: "", className: "", querySelector: () => null, addEventListener: () => {} },
     btnCheckIp: { textContent: "", title: "", className: "", addEventListener: () => {} },
@@ -168,6 +169,7 @@ test("applyPopupState correctly handles bypass, disabled power, and tunnel polic
   assert.strictEqual(elements.statusText.textContent, "Обход");
   assert.ok(elements.badge.className.includes("bypass"));
   assert.ok(elements.btnPauseLabel.textContent.includes("Пауза"));
+  assert.ok(elements.btnPauseToggle.title.includes("Пауза"));
 
   // 4. Reset bypass so timer stops
   ctx.window.applyPopupState({ bypassActive: false });

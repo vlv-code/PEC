@@ -1904,10 +1904,12 @@ let currentProxyState = { enabled: true, online: false, bypassActive: false };
 let bypassCountdownTimer = null;
 
 function updateBypassCountdown(expiresAt) {
+  const btnPauseToggle = document.getElementById("btnPauseToggle");
   const btnPauseLabel = document.getElementById("btnPauseLabel");
-  if (!btnPauseLabel) return;
+  if (!btnPauseToggle && !btnPauseLabel) return;
   if (!expiresAt || expiresAt <= Date.now()) {
-    btnPauseLabel.textContent = "${t.btnPause}";
+    if (btnPauseToggle) btnPauseToggle.title = "${t.btnPause}";
+    if (btnPauseLabel) btnPauseLabel.textContent = "${t.btnPause}";
     if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
       clearInterval(bypassCountdownTimer);
       bypassCountdownTimer = null;
@@ -1917,7 +1919,9 @@ function updateBypassCountdown(expiresAt) {
   const remainingSec = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
   const m = Math.floor(remainingSec / 60);
   const s = remainingSec % 60;
-  btnPauseLabel.textContent = "${t.isRu ? "Пауза" : "Pause"} (" + m + ":" + (s < 10 ? "0" : "") + s + ")";
+  const timeStr = "${t.isRu ? "Пауза" : "Pause"} (" + m + ":" + (s < 10 ? "0" : "") + s + ")";
+  if (btnPauseToggle) btnPauseToggle.title = timeStr;
+  if (btnPauseLabel) btnPauseLabel.textContent = timeStr;
 }
 
 // Global state applier - reactive to simulator and chrome.runtime
@@ -1939,6 +1943,7 @@ window.applyPopupState = function(response) {
   const btnPowerLabel = document.getElementById("btnPowerLabel");
   const btnPauseLabel = document.getElementById("btnPauseLabel");
   const btnPowerToggle = document.getElementById("btnPowerToggle");
+  const btnPauseToggle = document.getElementById("btnPauseToggle");
 
   const isBypass = Boolean(response.bypassActive);
   const isOnline = Boolean(response.online);
@@ -1978,7 +1983,7 @@ window.applyPopupState = function(response) {
     clearInterval(bypassCountdownTimer);
     bypassCountdownTimer = null;
   }
-  if (btnPauseLabel) {
+  if (btnPauseToggle || btnPauseLabel) {
     if (isBypass) {
       if (response.bypassExpiresAt) {
         updateBypassCountdown(response.bypassExpiresAt);
@@ -1989,15 +1994,18 @@ window.applyPopupState = function(response) {
             } else {
               if (typeof clearInterval !== "undefined") clearInterval(bypassCountdownTimer);
               bypassCountdownTimer = null;
+              if (btnPauseToggle) btnPauseToggle.title = "${t.btnPause}";
               if (btnPauseLabel) btnPauseLabel.textContent = "${t.btnPause}";
             }
           }, 1000);
         }
       } else {
-        btnPauseLabel.textContent = "${t.btnResume}";
+        if (btnPauseToggle) btnPauseToggle.title = "${t.btnResume}";
+        if (btnPauseLabel) btnPauseLabel.textContent = "${t.btnResume}";
       }
     } else {
-      btnPauseLabel.textContent = "${t.btnPause}";
+      if (btnPauseToggle) btnPauseToggle.title = "${t.btnPause}";
+      if (btnPauseLabel) btnPauseLabel.textContent = "${t.btnPause}";
     }
   }
 
