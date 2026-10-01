@@ -168,7 +168,12 @@ window.applyPopupState = function(response) {
   if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
   if (pingVal && response.ping) pingVal.textContent = response.ping;
   if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
-  if (response.serverBase) window.__pecServerBase = response.serverBase;
+  if (response.uiLayout && document.body) {
+    document.body.setAttribute("data-layout", response.uiLayout);
+  }
+  if (response.colorPalette && document.body) {
+    document.body.setAttribute("data-palette", response.colorPalette);
+  }
 
   if (btnToggle) {
     btnToggle.textContent = isBypass ? "Включить прокси" : "Временно отключить (15м)";
@@ -178,6 +183,11 @@ window.applyPopupState = function(response) {
 window.addEventListener("message", function(e) {
   if (e.data && e.data.type === "UPDATE_SIM_STATE") {
     window.applyPopupState(e.data.state);
+  }
+  if (e.data && e.data.type === "UPDATE_STUDIO_THEME") {
+    if (e.data.layout && document.body) document.body.setAttribute("data-layout", e.data.layout);
+    if (e.data.palette && document.body) document.body.setAttribute("data-palette", e.data.palette);
+    if (e.data.themeMode) applyTheme(e.data.themeMode);
   }
 });
 
@@ -244,13 +254,17 @@ function initPopup() {
   async function loadState() {
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
       try {
-        const stored = await chrome.storage.local.get(["pecProxyState", "pecThemeMode"]);
+        const stored = await chrome.storage.local.get(["pecProxyState", "pecThemeMode", "pecLastConfig"]);
         if (stored) {
           if (stored.pecProxyState && typeof stored.pecProxyState === "object") {
             window.applyPopupState(stored.pecProxyState);
           }
           if (stored.pecThemeMode) {
             applyTheme(stored.pecThemeMode);
+          }
+          if (stored.pecLastConfig && document.body) {
+            if (stored.pecLastConfig.uiLayout) document.body.setAttribute("data-layout", stored.pecLastConfig.uiLayout);
+            if (stored.pecLastConfig.colorPalette) document.body.setAttribute("data-palette", stored.pecLastConfig.colorPalette);
           }
         }
       } catch (e) {}

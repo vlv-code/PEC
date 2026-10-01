@@ -17,7 +17,7 @@ test("PAC normalization: bare domain matches apex and subdomains", () => {
     pac.includes('host === "yandex.ru" || dnsDomainIs(host, ".yandex.ru") || shExpMatch(host, "*.yandex.ru")'),
     "Bare domain must check exact host, dnsDomainIs with dot, and shExpMatch wildcard"
   );
-  assert.ok(pac.includes('return "PROXY proxy.corp.internal:1080";'));
+  assert.ok(pac.includes('return "PROXY proxy.corp.internal:1080; DIRECT";'));
 });
 
 test("PAC normalization: wildcard prefix *. matches subdomains and apex", () => {

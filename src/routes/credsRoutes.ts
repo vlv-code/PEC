@@ -3,6 +3,7 @@ import { getProxyConfig, registerHeartbeat } from "../instances.js";
 import { probeProxyTcp } from "../proxies.js";
 import { resolveProfileForInstance, getProfileById, generatePacScript } from "../routing.js";
 import { readCurrentCredsAsync } from "../rotate.js";
+import { getBuildConfig } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter, timingSafeEqualString } from "../middleware/security.js";
 
@@ -125,6 +126,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     const probeTimeout = process.env.NODE_ENV === "test" ? 300 : 1500;
     const proxyReachable = await probeProxyTcp(proxyConfig.host, proxyConfig.port, probeTimeout);
 
+    const bldCfg = getBuildConfig();
     return res.json({
       ok: true,
       serverTime: new Date().toISOString(),
@@ -133,9 +135,13 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       profileName: assignedProfile.name,
       profileDefaultPolicy: assignedProfile.defaultPolicy || "direct",
       proxyReachable,
+      uiLayout: bldCfg.uiLayout || "console",
+      colorPalette: bldCfg.colorPalette || "cyber",
       config: {
         ...proxyConfig,
         pacUrl,
+        uiLayout: bldCfg.uiLayout || "console",
+        colorPalette: bldCfg.colorPalette || "cyber",
       },
     });
   });

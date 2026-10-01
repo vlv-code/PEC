@@ -160,6 +160,9 @@ export function injectUserRulesIntoPac(
       actionStr = "PROXY 127.0.0.1:0";
     } else {
       actionStr = defaultProxyDirective;
+      if (!actionStr.includes("; DIRECT") && actionStr !== "DIRECT" && !actionStr.includes("127.0.0.1")) {
+        actionStr += "; DIRECT";
+      }
     }
 
     let condition = "";

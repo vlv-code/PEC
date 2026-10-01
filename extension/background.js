@@ -185,6 +185,9 @@ function updateBadge(text, color) {
       if (color && chrome.action.setBadgeBackgroundColor) {
         chrome.action.setBadgeBackgroundColor({ color: color });
       }
+      if (chrome.action.setBadgeTextColor) {
+        chrome.action.setBadgeTextColor({ color: "#ffffff" });
+      }
     } catch {}
   }
 }
@@ -372,6 +375,9 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer, proxyProtocol) 
       actionStr = "PROXY 127.0.0.1:0";
     } else {
       actionStr = defaultProxyDirective;
+      if (!actionStr.includes("; DIRECT") && actionStr !== "DIRECT" && !actionStr.includes("127.0.0.1")) {
+        actionStr += "; DIRECT";
+      }
     }
 
     let condition = "";
@@ -570,7 +576,7 @@ async function applyPacScript(pacUrl, config) {
   if (currentProxyState.proxyReachable === false) {
     updateBadge("ERR", "#ef4444");
   } else {
-    updateBadge("P", "#0284c7");
+    updateBadge("pac", "#0284c7");
   }
   await verifyAppliedProxySettings("pac_script");
 }
@@ -768,6 +774,8 @@ async function syncWithServer(forceRefresh = false) {
               profileDefaultPolicy: payload.profileDefaultPolicy || "direct",
               proxyReachable: proxyReachable,
               pacUrl: payload.config.pacUrl || "",
+              uiLayout: payload.uiLayout || (payload.config && payload.config.uiLayout) || "console",
+              colorPalette: payload.colorPalette || (payload.config && payload.config.colorPalette) || "cyber",
               lastSync: Date.now(),
             };
 
@@ -850,7 +858,7 @@ chrome.webRequest.onAuthRequired.addListener(
       console.warn("[PEC] Max auth attempts exceeded for requestId=" + details.requestId);
       logEvent("warn", "Max auth attempts exceeded for requestId=" + details.requestId);
       seenRequests.delete(details.requestId);
-      asyncCallback({ cancel: true });
+      asyncCallback({});
       return;
     }
 

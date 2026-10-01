@@ -43,7 +43,7 @@ function FindProxyForURL(url, host) {
   vm.runInContext(modified, sandbox);
 
   assert.equal(sandbox.FindProxyForURL("http://sub.custom-direct.com", "sub.custom-direct.com"), "DIRECT");
-  assert.equal(sandbox.FindProxyForURL("http://specific-proxy.org", "specific-proxy.org"), "PROXY proxy.corp:3128");
+  assert.equal(sandbox.FindProxyForURL("http://specific-proxy.org", "specific-proxy.org"), "PROXY proxy.corp:3128; DIRECT");
   assert.equal(sandbox.FindProxyForURL("http://other.com", "other.com"), "PROXY proxy.corp:3128");
 });
 
@@ -278,5 +278,5 @@ function FindProxyForURL(url, host) {
   assert.ok(installedPac.includes('shExpMatch(host, "*.special-domain.com")'));
   assert.ok(installedPac.includes('return "DIRECT";'));
   assert.ok(installedPac.includes('host === "proxy-override.com" || dnsDomainIs(host, ".proxy-override.com") || shExpMatch(host, "*.proxy-override.com")'));
-  assert.ok(installedPac.includes('return "PROXY proxy.corp:3128";'));
+  assert.ok(installedPac.includes('return "PROXY proxy.corp:3128; DIRECT";'));
 });

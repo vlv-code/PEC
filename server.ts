@@ -195,7 +195,7 @@ app.get("/", (req: Request, res: Response) => {
   if (req.headers.accept?.includes("application/json") && !req.headers.accept?.includes("text/html")) {
     return res.json({
       title: "Corp Proxy Auth & Extension Studio",
-      version: "1.3.1",
+      version: "1.4.0",
       description: "Mini-server managing selective routing, GeoBases, extension constructor studio, GPO distribution, and 3x-ui rotation.",
       endpoints: [
         "GET /healthz",
