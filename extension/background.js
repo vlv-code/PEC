@@ -45,6 +45,7 @@ let memoryCredsCache = null; // { user, pass, fetchedAt }
 let syncPromise = null;
 const seenRequests = new Map();
 let lastConfig = null;
+let cachedBasePacText = null;
 let currentProxyState = {
   enabled: true,
   online: false,
@@ -431,29 +432,32 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer, proxyProtocol) 
 //     url-mode, while that browser-side download is pending - or when it
 //     fails - Chrome silently routes everything DIRECT (mandatory:false),
 //     with no feedback anywhere.
-async function applyPacScript(pacUrl, config) {
-  let pacText = null;
-  logEvent("info", "Fetching PAC script from " + pacUrl);
-  try {
-    const res = await fetch(pacUrl, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (res.ok) {
-      const text = await res.text();
-      if (text && text.indexOf("FindProxyForURL") !== -1) {
-        pacText = text;
+async function applyPacScript(pacUrl, config, forcePacFetch = false) {
+  let pacText = (!forcePacFetch && cachedBasePacText) ? cachedBasePacText : null;
+  if (!pacText) {
+    logEvent("info", "Fetching PAC script from " + pacUrl);
+    try {
+      const res = await fetch(pacUrl, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.indexOf("FindProxyForURL") !== -1) {
+          pacText = text;
+          cachedBasePacText = text;
+        } else {
+          console.warn("[PEC] PAC endpoint returned an invalid script (no FindProxyForURL).");
+          logEvent("warn", "PAC endpoint returned invalid script (no FindProxyForURL), falling back to URL mode");
+        }
       } else {
-        console.warn("[PEC] PAC endpoint returned an invalid script (no FindProxyForURL).");
-        logEvent("warn", "PAC endpoint returned invalid script (no FindProxyForURL), falling back to URL mode");
+        console.warn("[PEC] PAC download failed: HTTP " + res.status + " - falling back to URL mode.");
+        logEvent("warn", "PAC download failed: HTTP " + res.status + " - falling back to URL mode");
       }
-    } else {
-      console.warn("[PEC] PAC download failed: HTTP " + res.status + " - falling back to URL mode.");
-      logEvent("warn", "PAC download failed: HTTP " + res.status + " - falling back to URL mode");
+    } catch (err) {
+      console.warn("[PEC] PAC download error - falling back to URL mode:", err && err.message ? err.message : err);
+      logEvent("warn", "PAC download error (" + (err && err.message ? err.message : err) + ") - falling back to URL mode");
     }
-  } catch (err) {
-    console.warn("[PEC] PAC download error - falling back to URL mode:", err && err.message ? err.message : err);
-    logEvent("warn", "PAC download error (" + (err && err.message ? err.message : err) + ") - falling back to URL mode");
   }
 
   // Inject active user overrides ahead of corporate rules
@@ -878,9 +882,8 @@ chrome.webRequest.onAuthRequired.addListener(
       return;
     }
 
-    // Fast path: if credentials already in cache and not a retry, supply immediately
-    const now = Date.now();
-    if (attempts === 1 && memoryCredsCache && memoryCredsCache.user && memoryCredsCache.pass && (now - (memoryCredsCache.fetchedAt || 0) < TTL_MS)) {
+    // Fast path: if credentials already in cache, supply immediately without blocking on TTL check during 407 challenge
+    if (memoryCredsCache && memoryCredsCache.user && memoryCredsCache.pass) {
       logEvent("info", "Supplied cached proxy auth credentials for requestId=" + details.requestId);
       asyncCallback({ authCredentials: { username: memoryCredsCache.user, password: memoryCredsCache.pass } });
       return;
