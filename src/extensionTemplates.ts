@@ -586,7 +586,7 @@ async function applyPacScript(pacUrl, config) {
   if (currentProxyState.proxyReachable === false) {
     updateBadge("ERR", "#ef4444");
   } else {
-    updateBadge("PAC", "#0284c7");
+    updateBadge("P", "#0284c7");
   }
   await verifyAppliedProxySettings("pac_script");
 }

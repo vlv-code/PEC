@@ -71,16 +71,8 @@
     [data-layout="terminal"] {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
-    [data-layout="terminal"] .card,
-    [data-layout="terminal"] .tab-btn,
-    [data-layout="terminal"] .btn-action,
-    [data-layout="terminal"] .form-input,
-    [data-layout="terminal"] .form-select,
-    [data-layout="terminal"] .btn-primary-sm,
-    [data-layout="terminal"] .btn-sec,
-    [data-layout="terminal"] .btn-sm,
-    [data-layout="terminal"] .btn-quick-add {
-      border-radius: 4px !important;
+    [data-layout="terminal"] * {
+      border-radius: 0px !important;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -609,7 +601,7 @@
       <span class="version-tag">v1.4.0</span>
     </div>
     <div class="header-actions">
-      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme">☀️</button>
+      <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme"><img id="themeToggleImg" src="icons/sun.png" style="width:14px;height:14px;vertical-align:middle;" alt="" /></button>
       <div class="status-badge offline" id="statusPill">
         <span class="dot"></span>
         <span id="statusText">Отключен</span>
@@ -628,11 +620,11 @@
   <div class="tab-content active" id="tab-status">
     <div class="card" id="cardConnection">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="card-title">🔌 Подключение к корпоративному шлюзу</span>
+        <span class="card-title"><img src="icons/plug.png" style="width:16px;height:16px;vertical-align:-3px;margin-right:5px;" alt="" />Подключение к прокси</span>
         <div class="card-header-actions">
-          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас"><span class="sync-icon">🔄</span></button>
-          <button class="btn-icon-minimal" id="btnPowerToggle" title="Включить / Выключить прокси">⏻</button>
-          <button class="btn-icon-minimal" id="btnPauseToggle" title="Приостановить прокси на 15 минут">⏸️</button>
+          <button class="btn-icon-minimal" id="btnSyncNow" title="Синхронизировать сейчас"><img src="icons/sync.png" class="sync-icon" style="width:14px;height:14px;vertical-align:middle;" alt="" /></button>
+          <button class="btn-icon-minimal" id="btnPowerToggle" title="Включить / Выключить прокси"><img src="icons/power.png" style="width:14px;height:14px;vertical-align:middle;" alt="" /></button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="Приостановить прокси на 15 минут"><img src="icons/pause.png" style="width:14px;height:14px;vertical-align:middle;" alt="" /></button>
         </div>
       </div>
       <div class="hero-meta">

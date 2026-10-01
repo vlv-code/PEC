@@ -400,11 +400,14 @@
     }
     .popover-layout-btn:hover {
       border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.1);
     }
     .popover-layout-btn.active {
-      background: rgba(56, 189, 248, 0.15);
-      border-color: var(--primary);
-      color: var(--primary);
+      background: rgba(56, 189, 248, 0.28) !important;
+      border-color: var(--primary) !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.4), inset 0 0 0 1px var(--primary) !important;
+      font-weight: 700 !important;
     }
     .popover-theme-dot {
       background: transparent;
@@ -415,19 +418,23 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.12s ease;
+      transition: all 0.15s ease;
     }
     .popover-theme-dot span {
       width: 18px;
       height: 18px;
       border-radius: 50%;
       display: block;
+      transition: transform 0.15s ease;
     }
     .popover-theme-dot:hover {
       border-color: var(--border);
+      transform: scale(1.1);
     }
     .popover-theme-dot.active {
-      border-color: var(--primary);
+      border-color: #ffffff !important;
+      box-shadow: 0 0 10px var(--primary), inset 0 0 0 2px var(--primary) !important;
+      transform: scale(1.18);
     }
 
     /* Layout overrides for popover */
@@ -540,15 +547,58 @@
       transition: all 0.15s ease;
       white-space: nowrap;
     }
-    .tab-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+    .tab-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.15); }
     .tab-btn.active {
-      color: var(--primary);
-      background: var(--card-bg);
-      border-color: var(--border);
+      color: #ffffff !important;
+      background: rgba(56, 189, 248, 0.22) !important;
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.3), inset 0 -2px 0 var(--primary) !important;
+      font-weight: 700;
     }
 
     .tab-pane { display: none; }
     .tab-pane.active { display: block; }
+
+    /* UI PNG Icon Helpers */
+    .ui-icon {
+      width: 16px;
+      height: 16px;
+      vertical-align: -2px;
+      display: inline-block;
+      object-fit: contain;
+      margin-right: 5px;
+    }
+    .ui-icon-sm {
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+      display: inline-block;
+      object-fit: contain;
+      margin-right: 4px;
+    }
+    .ui-icon-lg {
+      width: 20px;
+      height: 20px;
+      vertical-align: -3px;
+      display: inline-block;
+      object-fit: contain;
+      margin-right: 6px;
+    }
+
+    /* Button Click Pulse & Active States */
+    @keyframes btnClickPulse {
+      0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.8); }
+      50% { box-shadow: 0 0 0 6px rgba(56, 189, 248, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+    }
+    .btn-clicked {
+      animation: btnClickPulse 0.3s ease-out !important;
+    }
+
+    button:active, .btn:active, .tab-btn:active, .studio-layout-btn:active, .studio-mode-btn:active, .preset-chip:active, .popover-layout-btn:active, .btn-icon:active {
+      transform: translateY(1px) scale(0.97) !important;
+      filter: brightness(1.25) !important;
+    }
 
     /* Layout & Cards */
     .grid-2 {
@@ -994,13 +1044,14 @@
     }
     .studio-layout-btn:hover {
       border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.08);
+      background: rgba(56, 189, 248, 0.1);
     }
     .studio-layout-btn.active {
-      border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.18);
-      color: var(--primary);
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+      border-color: var(--primary) !important;
+      background: rgba(56, 189, 248, 0.28) !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4), inset 0 0 0 1px var(--primary) !important;
+      font-weight: 700 !important;
     }
 
     .studio-mode-btn {
@@ -1019,13 +1070,40 @@
     }
     .studio-mode-btn:hover {
       border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.08);
+      background: rgba(56, 189, 248, 0.1);
     }
     .studio-mode-btn.active {
+      border-color: var(--primary) !important;
+      background: rgba(56, 189, 248, 0.28) !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4), inset 0 0 0 1px var(--primary) !important;
+      font-weight: 700 !important;
+    }
+
+    .preset-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card-inner);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .preset-chip:hover {
       border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.18);
-      color: var(--primary);
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+      background: rgba(56, 189, 248, 0.1);
+    }
+    .preset-chip.active {
+      border-color: var(--primary) !important;
+      background: rgba(56, 189, 248, 0.28) !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4), inset 0 0 0 1px var(--primary) !important;
+      font-weight: 700 !important;
     }
 
     /* Light theme overrides */
