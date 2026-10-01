@@ -11,10 +11,10 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ git
 
 # Copy dependency manifests (package-lock.json is committed - npm ci works)
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json* ./
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy application source code
 COPY . .
@@ -42,8 +42,8 @@ RUN addgroup -g 1001 -S pecgroup && \
     adduser -u 1001 -S pecuser -G pecgroup
 
 # Runtime dependencies only: the bundle (dist/server.cjs) externalizes packages
-COPY --from=builder --chown=pecuser:pecgroup /app/package.json /app/package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=builder --chown=pecuser:pecgroup /app/package.json /app/package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
 
 # Built bundle only - server.ts/src are not needed at runtime
 COPY --from=builder --chown=pecuser:pecgroup /app/dist ./dist

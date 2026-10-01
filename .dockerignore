@@ -1,0 +1,17 @@
+node_modules
+dist
+data
+*.log
+.git
+.github
+*.local
+.env
+current_creds.json
+audit_log.json
+instances_meta.json
+proxy_config.json
+routing_profiles.json
+rotation_config.json
+rotation_history.json
+dashboard_auth.json
+extension_build_config.json
