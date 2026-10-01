@@ -1,10 +1,10 @@
 export interface DashboardViewOptions {
-  isDefaultTokenInUse: boolean;
-  port: number;
+  isDefaultTokenInUse?: boolean;
+  port?: number;
 }
 
-export function renderDashboardHtml(options: DashboardViewOptions): string {
-  const { isDefaultTokenInUse, port } = options;
+export function renderDashboardHtml(options: DashboardViewOptions = {}): string {
+  const { isDefaultTokenInUse = false, port = 3000 } = options;
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -965,6 +965,7 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
   <!-- Modal: Add Manual or Edit Proxy Form -->
   <div id="modalProxyForm" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
     <div style="max-width: 480px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 24px;">
+      <form id="proxyForm" onsubmit="return false;">
       <h2 id="proxyFormTitle" style="margin: 0 0 12px 0; font-size: 17px;" data-i18n="titleAddManualProxy">Add Manual Proxy Node</h2>
       <input type="hidden" id="proxyFormId" value="" />
 
@@ -1024,6 +1025,10 @@ export function renderDashboardHtml(options: DashboardViewOptions): string {
         <button type="button" id="btnProxyFormSubmit" onclick="submitProxyForm()" style="flex: 1;" data-i18n="btnSaveProxy">Save Proxy</button>
         <button type="button" id="btnProxyFormCancel" onclick="closeProxyFormModal()" class="btn-secondary" style="flex: 1;" data-i18n="btnCancel">Cancel</button>
       </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal: Geobase Inspector -->
   <div id="modalGeobaseInspector" class="modal-geobase-inspector" style="display: none;">
     <div class="modal-geobase-inspector-content">
