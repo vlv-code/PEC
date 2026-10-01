@@ -10,8 +10,10 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Corp Proxy Devices & Extension Studio</title>
-  <meta name="description" content="Central manager for selective proxy routing, GeoBases, extension constructor studio, and 3x-ui rotating authentication." />
+  <title>PEC - Proxy Extension Corp</title>
+  <meta name="description" content="Enterprise proxy synchronization server, live extension builder studio, GPO policies &amp; 3x-ui rotator" />
+  <meta property="og:title" content="PEC - Proxy Extension Corp" />
+  <meta property="og:description" content="Enterprise proxy synchronization server, live extension builder studio, GPO policies &amp; 3x-ui rotator" />
   <link rel="stylesheet" href="/dashboard.css">
 </head>
 <body>

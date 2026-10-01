@@ -1,0 +1,7 @@
+{
+  "name": "PEC - Proxy Extension Corp",
+  "description": "Enterprise proxy synchronization server, live extension builder studio, GPO policies & 3x-ui rotator",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
