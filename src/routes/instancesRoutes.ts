@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getActiveInstances, assignInstanceProfile, deleteInstance, revokeInstanceToken, getProxyConfig, updateProxyConfig } from "../instances.js";
+import { getActiveInstances, assignInstanceProfile, assignInstanceProxy, deleteInstance, revokeInstanceToken, getProxyConfig, updateProxyConfig } from "../instances.js";
 import { recordAudit, getClientIp } from "../audit.js";
 
 export function createInstancesRouter(): Router {
@@ -30,6 +30,27 @@ export function createInstancesRouter(): Router {
       return res.status(400).json({ error: msg });
     }
     res.json({ ok: true });
+  });
+
+  router.post("/api/instances/assign-proxy", (req: Request, res: Response) => {
+    const { instanceId, proxyId } = req.body || {};
+    if (!instanceId) {
+      return res.status(400).json({ error: "instanceId is required" });
+    }
+    try {
+      assignInstanceProxy(String(instanceId), proxyId ? String(proxyId) : undefined);
+      recordAudit({
+        ip: getClientIp(req),
+        endpoint: "/api/instances/assign-proxy",
+        status: 200,
+        result: "CONFIG_UPDATED",
+        details: `Assigned proxy ${proxyId || "default"} to instance ${instanceId}`,
+      });
+      res.json({ ok: true, instanceId, assignedProxyId: proxyId || null });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: msg });
+    }
   });
 
   router.delete("/api/instances/:id", (req: Request, res: Response) => {

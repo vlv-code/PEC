@@ -4,7 +4,7 @@ import { ProxyConfiguration, ExtensionInstance } from "./types.js";
 import { resolveProfileForInstance, getProfileById } from "./routing.js";
 import { writeJsonAtomic } from "./jsonStore.js";
 import { getProxyConfigPath, getInstancesMetaPath } from "./storage.js";
-import { getActiveProxy } from "./proxies.js";
+import { getActiveProxy, getProxyById } from "./proxies.js";
 
 const CONFIG_PATH = getProxyConfigPath();
 const INSTANCES_META_PATH = getInstancesMetaPath();
@@ -127,6 +127,7 @@ const persistentMeta: Record<
   {
     group?: string;
     assignedProfileId?: string;
+    assignedProxyId?: string;
     tokenHash?: string;
     enrolledAt?: string;
     revoked?: boolean;
@@ -177,6 +178,13 @@ export function registerHeartbeat(data: {
     ? getProfileById(effectiveProfileId)
     : resolveProfileForInstance(cleanId, effectiveGroup);
 
+  const effectiveProxyId = meta.assignedProxyId !== undefined ? meta.assignedProxyId : existing?.assignedProxyId;
+  let appliedProxyName: string | undefined = "По умолчанию";
+  if (effectiveProxyId) {
+    const node = getProxyById(effectiveProxyId);
+    appliedProxyName = node ? (node.name || `${node.host}:${node.port}`) : "По умолчанию";
+  }
+
   const record: ExtensionInstance = {
     instanceId: cleanId,
     ip: String(data.ip || "").slice(0, 64),
@@ -190,6 +198,8 @@ export function registerHeartbeat(data: {
     group: effectiveGroup,
     assignedProfileId: effectiveProfileId,
     appliedProfileName: resolvedProfile?.name || "Default Profile",
+    assignedProxyId: effectiveProxyId,
+    appliedProxyName: appliedProxyName,
     tokenHash: meta.tokenHash || existing?.tokenHash,
     enrolledAt: meta.enrolledAt || existing?.enrolledAt,
     revoked: meta.revoked !== undefined ? meta.revoked : existing?.revoked,
@@ -230,6 +240,33 @@ export function assignInstanceProfile(instanceId: string, profileId?: string, gr
       ? getProfileById(existing.assignedProfileId)
       : resolveProfileForInstance(cleanId, existing.group);
     existing.appliedProfileName = resolved?.name || "Default Profile";
+  }
+}
+
+export function assignInstanceProxy(instanceId: string, proxyId?: string) {
+  const cleanId = assertSafeInstanceId(instanceId);
+  if (!persistentMeta[cleanId]) {
+    persistentMeta[cleanId] = {};
+  }
+  persistentMeta[cleanId].assignedProxyId = proxyId ? String(proxyId).trim() : undefined;
+
+  const metaKeys = Object.keys(persistentMeta);
+  if (metaKeys.length > MAX_PERSISTENT_META) {
+    for (const k of metaKeys.slice(0, metaKeys.length - MAX_PERSISTENT_META)) {
+      delete persistentMeta[k];
+    }
+  }
+  saveInstancesMeta();
+
+  const existing = instancesMap.get(cleanId);
+  if (existing) {
+    existing.assignedProxyId = persistentMeta[cleanId].assignedProxyId;
+    if (existing.assignedProxyId) {
+      const node = getProxyById(existing.assignedProxyId);
+      existing.appliedProxyName = node ? (node.name || `${node.host}:${node.port}`) : "По умолчанию";
+    } else {
+      existing.appliedProxyName = "По умолчанию";
+    }
   }
 }
 
@@ -320,7 +357,7 @@ export function revokeInstanceToken(instanceId: string): boolean {
 /**
  * Retrieve persistent metadata (tokenHash, enrolledAt, revoked) for an instance.
  */
-export function getInstanceMeta(instanceId: string): { group?: string; assignedProfileId?: string; tokenHash?: string; enrolledAt?: string; revoked?: boolean } | undefined {
+export function getInstanceMeta(instanceId: string): { group?: string; assignedProfileId?: string; assignedProxyId?: string; tokenHash?: string; enrolledAt?: string; revoked?: boolean } | undefined {
   if (isUnsafeObjectId(instanceId)) return undefined;
   return persistentMeta[instanceId];
 }
