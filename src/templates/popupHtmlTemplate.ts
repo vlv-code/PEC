@@ -27,13 +27,13 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       --primary: ${effectiveColors.primary};
       --bg: ${effectiveColors.bg};
       --card: ${effectiveColors.card};
-      --card-inner: #1e293b;
+      --card-inner: #16223b;
       --border: ${effectiveColors.border};
-      --text: ${effectiveColors.text};
+      --text: #f1f5f9;
       --text-muted: #94a3b8;
       --primary-rgb: 56, 189, 248;
       --success: #10b981;
-      --danger: #ef4444;
+      --danger: #e05252;
       --warning: #f59e0b;
       --border-color: var(--border);
       --text-main: var(--text);
@@ -41,64 +41,73 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       --accent-color: var(--primary);
     }
     [data-theme="light"] {
-      --bg: #f8fafc;
+      --bg: #f1f5f9;
       --card: #ffffff;
-      --card-inner: #f1f5f9;
+      --card-inner: #e2e8f0;
       --border: #cbd5e1;
       --text: #0f172a;
       --text-muted: #64748b;
       --primary: #2563eb;
+      --primary-rgb: 37, 99, 235;
+      --success: #059669;
+      --danger: #dc2626;
+      --warning: #d97706;
       --border-color: var(--border);
       --text-main: var(--text);
       --bg-hover: rgba(0, 0, 0, 0.06);
       --accent-color: var(--primary);
     }
 
-    /* 5 Color Palettes */
+    /* 5 Color Palettes (High-Contrast Harmonized) */
     [data-palette="cyber"] { --primary: #38bdf8; --primary-rgb: 56, 189, 248; }
-    [data-palette="obsidian"] { --primary: #c084fc; --primary-rgb: 192, 132, 252; }
-    [data-palette="obsidian"]:not([data-theme="light"]), [data-palette="obsidian"][data-theme="dark"] {
-      --bg: #09090b; --card: #18181b; --card-inner: #27272a; --border: #3f3f46;
+    [data-palette="cyber"]:not([data-theme="light"]), [data-palette="cyber"][data-theme="dark"] {
+      --bg: #090e1a; --card: #111a2e; --card-inner: #16223b; --border: #1e2c4a; --text: #f1f5f9; --text-muted: #94a3b8;
     }
-    [data-palette="obsidian"][data-theme="light"] {
-      --bg: #faf5ff; --card: #ffffff; --card-inner: #f3e8ff; --border: #e9d5ff;
-    }
-    [data-palette="nord"] { --primary: #88c0d0; --primary-rgb: 136, 192, 208; }
-    [data-palette="nord"]:not([data-theme="light"]), [data-palette="nord"][data-theme="dark"] {
-      --bg: #242933; --card: #2e3440; --card-inner: #3b4252; --border: #4c566a;
-    }
-    [data-palette="nord"][data-theme="light"] {
-      --bg: #eceff4; --card: #ffffff; --card-inner: #e5e9f0; --border: #d8dee9;
-    }
-    [data-palette="emerald"] { --primary: #34d399; --primary-rgb: 52, 211, 153; }
-    [data-palette="emerald"]:not([data-theme="light"]), [data-palette="emerald"][data-theme="dark"] {
-      --bg: #061e14; --card: #0d3322; --card-inner: #134e35; --border: #1a6344;
-    }
-    [data-palette="emerald"][data-theme="light"] {
-      --bg: #f0fdf4; --card: #ffffff; --card-inner: #dcfce7; --border: #bbf7d0;
-    }
-    [data-palette="light"] { --primary: #2563eb; --primary-rgb: 37, 99, 235; }
-    [data-palette="light"]:not([data-theme="light"]), [data-palette="light"][data-theme="dark"] {
-      --bg: #0f172a; --card: #1e293b; --card-inner: #334155; --border: #475569;
-    }
-    [data-palette="light"][data-theme="light"] {
-      --bg: #f8fafc; --card: #ffffff; --card-inner: #f1f5f9; --border: #cbd5e1;
+    [data-palette="cyber"][data-theme="light"] {
+      --bg: #f1f5f9; --card: #ffffff; --card-inner: #e2e8f0; --border: #cbd5e1; --text: #0f172a; --text-muted: #64748b;
     }
 
-    /* Layout Terminal & Console: 0px razor-sharp retro-terminal corners matching dashboard */
+    [data-palette="obsidian"] { --primary: #c084fc; --primary-rgb: 192, 132, 252; }
+    [data-palette="obsidian"]:not([data-theme="light"]), [data-palette="obsidian"][data-theme="dark"] {
+      --bg: #0d1117; --card: #161b22; --card-inner: #21262d; --border: #30363d; --text: #f0f6fc; --text-muted: #8b949e;
+    }
+    [data-palette="obsidian"][data-theme="light"] {
+      --bg: #faf5ff; --card: #ffffff; --card-inner: #f3e8ff; --border: #e9d5ff; --text: #1e1b4b; --text-muted: #6b21a8;
+    }
+
+    [data-palette="nord"] { --primary: #88c0d0; --primary-rgb: 136, 192, 208; }
+    [data-palette="nord"]:not([data-theme="light"]), [data-palette="nord"][data-theme="dark"] {
+      --bg: #242933; --card: #2e3440; --card-inner: #3b4252; --border: #4c566a; --text: #eceff4; --text-muted: #d8dee9;
+    }
+    [data-palette="nord"][data-theme="light"] {
+      --bg: #eceff4; --card: #ffffff; --card-inner: #e5e9f0; --border: #d8dee9; --text: #2e3440; --text-muted: #4c566a;
+    }
+
+    [data-palette="emerald"] { --primary: #34d399; --primary-rgb: 52, 211, 153; }
+    [data-palette="emerald"]:not([data-theme="light"]), [data-palette="emerald"][data-theme="dark"] {
+      --bg: #06130d; --card: #0b1f16; --card-inner: #112e21; --border: #133a2a; --text: #ecfdf5; --text-muted: #6ee7b7;
+    }
+    [data-palette="emerald"][data-theme="light"] {
+      --bg: #f0fdf4; --card: #ffffff; --card-inner: #dcfce7; --border: #bbf7d0; --text: #064e3b; --text-muted: #047857;
+    }
+
+    [data-palette="light"] { --primary: #3b82f6; --primary-rgb: 59, 130, 246; }
+    [data-palette="light"]:not([data-theme="light"]), [data-palette="light"][data-theme="dark"] {
+      --bg: #0f172a; --card: #1e293b; --card-inner: #283548; --border: #334155; --text: #f8fafc; --text-muted: #94a3b8;
+    }
+    [data-palette="light"][data-theme="light"] {
+      --bg: #f1f5f9; --card: #ffffff; --card-inner: #e2e8f0; --border: #cbd5e1; --text: #0f172a; --text-muted: #64748b;
+    }
+
+    /* Layout 1. Terminal: 0px razor-sharp retro-terminal corners matching dashboard */
     [data-layout="terminal"],
     [data-layout="terminal"] *,
     [data-layout="terminal"] *::before,
-    [data-layout="terminal"] *::after,
-    [data-layout="console"],
-    [data-layout="console"] *,
-    [data-layout="console"] *::before,
-    [data-layout="console"] *::after {
+    [data-layout="terminal"] *::after {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
       border-radius: 0 !important;
     }
-    [data-layout="terminal"] .card,
-    [data-layout="console"] .card {
+    [data-layout="terminal"] .card {
       border-radius: 0 !important;
       border-color: var(--primary) !important;
       box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.2);
@@ -116,6 +125,19 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
     [data-layout="terminal"] .slider,
     [data-layout="terminal"] .status-dot,
     [data-layout="terminal"] .btn-icon,
+    [data-layout="terminal"] .btn-icon-minimal {
+      border-radius: 0 !important;
+    }
+
+    /* Layout 2. Console: rounded, soft modern UI */
+    [data-layout="console"] {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    [data-layout="console"] .card {
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    }
     [data-layout="console"] .btn-sec,
     [data-layout="console"] .btn-sm,
     [data-layout="console"] .form-input,
@@ -123,13 +145,20 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
     [data-layout="console"] .btn-primary-sm,
     [data-layout="console"] .btn-quick-add,
     [data-layout="console"] .tab-btn,
+    [data-layout="console"] .btn-icon,
+    [data-layout="console"] .btn-icon-minimal,
+    [data-layout="console"] .btn-theme-toggle {
+      border-radius: 6px;
+    }
     [data-layout="console"] .badge,
     [data-layout="console"] .tag,
-    [data-layout="console"] .switch,
-    [data-layout="console"] .slider,
-    [data-layout="console"] .status-dot,
-    [data-layout="console"] .btn-icon {
-      border-radius: 0 !important;
+    [data-layout="console"] .status-badge {
+      border-radius: 12px;
+    }
+    [data-layout="console"] .hero-meta,
+    [data-layout="console"] .rules-notice,
+    [data-layout="console"] .log-box {
+      border-radius: 8px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -237,14 +266,16 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
     }
     .status-badge.bypass .dot { background: var(--warning); }
 
-    /* Tabs */
+    /* Tabs (Symmetrical Modern Segmented Control) */
     .tabs {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
+      gap: 4px;
       margin-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 6px;
+      padding: 3px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 8px;
     }
     .tab-btn {
       flex: 1;
@@ -253,21 +284,32 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       color: var(--text-muted);
       font-size: 11px;
       font-weight: 600;
-      padding: 7px 4px;
+      padding: 6px 4px;
       border-radius: 6px;
       cursor: pointer;
       text-align: center;
-      transition: all 0.15s;
+      transition: all 0.15s ease;
       white-space: nowrap;
     }
     .tab-btn:hover {
       color: var(--text);
-      background: var(--card-inner);
     }
     .tab-btn.active {
       background: var(--card);
       color: var(--primary);
       border-color: var(--border);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+    [data-layout="terminal"] .tabs {
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      padding: 0 0 6px 0;
+      border-radius: 0;
+      gap: 6px;
+    }
+    [data-layout="terminal"] .tab-btn {
+      border-radius: 0 !important;
     }
 
     .tab-content { display: none; }
@@ -277,7 +319,7 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 10px;
       padding: 12px 14px;
       margin-bottom: 10px;
     }
@@ -290,23 +332,45 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       gap: 6px;
     }
     .btn-icon-minimal {
-      width: 30px;
-      height: 30px;
+      width: 28px;
+      height: 28px;
       padding: 0;
       border-radius: 6px;
-      border: 1px solid var(--border-color);
-      background: transparent;
-      color: var(--text-main);
+      border: 1px solid var(--border);
+      background: var(--card-inner);
+      color: var(--text-muted);
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
+      font-size: 13px;
       transition: all 0.2s ease;
     }
     .btn-icon-minimal:hover {
-      background: var(--bg-hover, rgba(255, 255, 255, 0.08));
-      border-color: var(--accent-color);
+      background: var(--card);
+      border-color: var(--primary);
+      color: var(--text);
+    }
+    /* Dynamic active state highlighting */
+    .btn-icon-minimal.btn-power-active,
+    .btn-icon-minimal.is-active#btnPowerToggle {
+      color: var(--success) !important;
+      background: rgba(16, 185, 129, 0.14) !important;
+      border-color: rgba(16, 185, 129, 0.45) !important;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
+    }
+    .btn-icon-minimal.btn-power-disabled,
+    .btn-icon-minimal.is-disabled#btnPowerToggle {
+      color: var(--danger) !important;
+      background: rgba(224, 82, 82, 0.12) !important;
+      border-color: rgba(224, 82, 82, 0.35) !important;
+    }
+    .btn-icon-minimal.btn-pause-active,
+    .btn-icon-minimal.is-active#btnPauseToggle {
+      color: var(--warning) !important;
+      background: rgba(245, 158, 11, 0.16) !important;
+      border-color: rgba(245, 158, 11, 0.5) !important;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
     }
     .btn-icon-minimal:active,
     .btn-theme-toggle:active,
@@ -574,6 +638,9 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
       white-space: nowrap;
     }
     .btn-primary-sm:hover { opacity: 0.9; }
+    [data-theme="light"] .btn-primary-sm {
+      color: #ffffff;
+    }
 
     .user-rules-list {
       max-height: 140px;

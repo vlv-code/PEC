@@ -1207,16 +1207,18 @@
       document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
         if (dict[key]) {
-          const icon = el.querySelector('img.icon-inline, svg');
-          if (icon) {
-            const clone = icon.cloneNode(true);
-            el.innerHTML = '';
-            el.appendChild(clone);
-            el.appendChild(document.createTextNode(' ' + dict[key]));
-          } else if (dict[key].includes('<')) {
+          if (dict[key].includes('<')) {
             el.innerHTML = dict[key];
           } else {
-            el.textContent = dict[key];
+            const icon = el.querySelector('img.icon-inline, svg');
+            if (icon) {
+              const clone = icon.cloneNode(true);
+              el.innerHTML = '';
+              el.appendChild(clone);
+              el.appendChild(document.createTextNode(' ' + dict[key]));
+            } else {
+              el.textContent = dict[key];
+            }
           }
         }
       });

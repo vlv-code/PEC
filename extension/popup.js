@@ -37,7 +37,7 @@ function updateBypassCountdown(expiresAt) {
   const btnPauseLabel = document.getElementById("btnPauseLabel");
   if (!btnPauseToggle && !btnPauseLabel) return;
   if (!expiresAt || expiresAt <= Date.now()) {
-    if (btnPauseToggle) btnPauseToggle.title = "Приостановить прокси на 15 минут";
+    if (btnPauseToggle) btnPauseToggle.title = "Пауза 15м";
     if (btnPauseLabel) btnPauseLabel.textContent = "Пауза 15м";
     if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
       clearInterval(bypassCountdownTimer);
@@ -106,6 +106,17 @@ window.applyPopupState = function(response) {
   }
   if (btnPowerToggle) {
     btnPowerToggle.style.opacity = isEnabled ? "1" : "0.7";
+    if (btnPowerToggle.classList && typeof btnPowerToggle.classList.toggle === "function") {
+      btnPowerToggle.classList.toggle("btn-power-active", isEnabled);
+      btnPowerToggle.classList.toggle("btn-power-disabled", !isEnabled);
+    }
+    btnPowerToggle.title = isEnabled ? "Отключить прокси" : "Включить прокси";
+  }
+
+  if (btnPauseToggle) {
+    if (btnPauseToggle.classList && typeof btnPauseToggle.classList.toggle === "function") {
+      btnPauseToggle.classList.toggle("btn-pause-active", isBypass);
+    }
   }
 
   if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
@@ -123,7 +134,12 @@ window.applyPopupState = function(response) {
             } else {
               if (typeof clearInterval !== "undefined") clearInterval(bypassCountdownTimer);
               bypassCountdownTimer = null;
-              if (btnPauseToggle) btnPauseToggle.title = "Приостановить прокси на 15 минут";
+              if (btnPauseToggle) {
+                btnPauseToggle.title = "Пауза 15м";
+                if (btnPauseToggle.classList && typeof btnPauseToggle.classList.remove === "function") {
+                  btnPauseToggle.classList.remove("btn-pause-active");
+                }
+              }
               if (btnPauseLabel) btnPauseLabel.textContent = "Пауза 15м";
             }
           }, 1000);
@@ -133,7 +149,7 @@ window.applyPopupState = function(response) {
         if (btnPauseLabel) btnPauseLabel.textContent = "Включить прокси";
       }
     } else {
-      if (btnPauseToggle) btnPauseToggle.title = "Приостановить прокси на 15 минут";
+      if (btnPauseToggle) btnPauseToggle.title = "Пауза 15м";
       if (btnPauseLabel) btnPauseLabel.textContent = "Пауза 15м";
     }
   }
@@ -145,9 +161,7 @@ window.applyPopupState = function(response) {
     } else if (response.protocol === "pac") {
       const isTunnel = response.profileDefaultPolicy === "proxy";
       modeVal.textContent = isTunnel ? "PAC (туннель)" : "PAC (селективный)";
-      modeVal.title = isTunnel
-        ? "Весь трафик через прокси, кроме исключений"
-        : "Проксируются только домены из правил; остальной трафик — напрямую";
+      modeVal.title = isTunnel ? "Весь трафик через прокси, кроме исключений" : "Проксируются только домены из правил; остальной трафик — напрямую";
     } else if (response.protocol) {
       modeVal.textContent = "Fixed (" + response.protocol.toUpperCase() + ")";
       modeVal.title = "Весь трафик направляется через фиксированный прокси-сервер";
@@ -174,6 +188,7 @@ window.applyPopupState = function(response) {
   if (response.colorPalette && document.body) {
     document.body.setAttribute("data-palette", response.colorPalette);
   }
+  if (response.serverBase) window.__pecServerBase = response.serverBase;
 
   if (btnToggle) {
     btnToggle.textContent = isBypass ? "Включить прокси" : "Временно отключить (15м)";
@@ -606,7 +621,7 @@ function initPopup() {
     btnCheckIp.addEventListener("click", async () => {
       btnCheckIp.disabled = true;
       const origText = btnCheckIp.textContent;
-      btnCheckIp.textContent = "Проверка...";
+      btnCheckIp.textContent = "Проверка IP...";
       if (exitIpVal) exitIpVal.textContent = "Проверка IP...";
       const base = window.__pecServerBase || "";
       let ip = null;
@@ -708,17 +723,17 @@ function initPopup() {
   function renderLogs(logs) {
     if (!logContainer) return;
     if (!Array.isArray(logs) || logs.length === 0) {
-      logContainer.textContent = "Журнал пуст. Нет зарегистрированных событий.";
+      logContainer.textContent = "Журнал пуст";
       if (logCountTag) logCountTag.textContent = "0 записей";
       return;
     }
-    if (logCountTag) logCountTag.textContent = logs.length + " зап.";
+    if (logCountTag) logCountTag.textContent = logs.length + " записей";
     const lines = logs.map((l) => {
       const time = formatTime(l.timestamp || l.time);
       const lvl = (l.level || "INFO").toUpperCase().padEnd(5);
       const msg = l.message || "";
       const extra = l.data ? " " + (typeof l.data === "object" ? JSON.stringify(l.data) : l.data) : "";
-      return `[${time}] [${lvl}] ${msg}${extra}`;
+      return "[" + time + "] [" + lvl + "] " + msg + extra;
     });
     logContainer.textContent = lines.join("\n");
     logContainer.scrollTop = logContainer.scrollHeight;

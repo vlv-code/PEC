@@ -112,6 +112,17 @@ window.applyPopupState = function(response) {
   }
   if (btnPowerToggle) {
     btnPowerToggle.style.opacity = isEnabled ? "1" : "0.7";
+    if (btnPowerToggle.classList && typeof btnPowerToggle.classList.toggle === "function") {
+      btnPowerToggle.classList.toggle("btn-power-active", isEnabled);
+      btnPowerToggle.classList.toggle("btn-power-disabled", !isEnabled);
+    }
+    btnPowerToggle.title = isEnabled ? "${t.isRu ? "Отключить прокси" : "Disable proxy"}" : "${t.isRu ? "Включить прокси" : "Enable proxy"}";
+  }
+
+  if (btnPauseToggle) {
+    if (btnPauseToggle.classList && typeof btnPauseToggle.classList.toggle === "function") {
+      btnPauseToggle.classList.toggle("btn-pause-active", isBypass);
+    }
   }
 
   if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
@@ -129,7 +140,12 @@ window.applyPopupState = function(response) {
             } else {
               if (typeof clearInterval !== "undefined") clearInterval(bypassCountdownTimer);
               bypassCountdownTimer = null;
-              if (btnPauseToggle) btnPauseToggle.title = "${t.btnPause}";
+              if (btnPauseToggle) {
+                btnPauseToggle.title = "${t.btnPause}";
+                if (btnPauseToggle.classList && typeof btnPauseToggle.classList.remove === "function") {
+                  btnPauseToggle.classList.remove("btn-pause-active");
+                }
+              }
               if (btnPauseLabel) btnPauseLabel.textContent = "${t.btnPause}";
             }
           }, 1000);

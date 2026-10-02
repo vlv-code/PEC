@@ -61,15 +61,15 @@
       --purple: #c084fc;
     }
     body[data-theme="light"] {
-      --bg: #f8fafc;
-      --card-bg: #ffffff;
-      --card-inner: #f1f5f9;
+      --bg: #edf0f5;
+      --card-bg: #f8fafc;
+      --card-inner: #e8ecf2;
       --border: #cbd5e1;
-      --text: #0f172a;
+      --text: #1e293b;
       --text-muted: #64748b;
-      --primary: #0284c7;
-      --primary-hover: #0369a1;
-      --primary-rgb: 2, 132, 199;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-rgb: 37, 99, 235;
       --success: #059669;
       --warning: #d97706;
       --danger: #dc2626;
@@ -77,7 +77,7 @@
     }
 
     /* ==================== UI LAYOUT ARCHETYPES ==================== */
-    /* 1. Compact Console (Ultra-minimalist, flat hairline borders, 4px corners, dense scanning across ALL tabs) */
+    /* 1. Compact Console (Rounded, soft modern UI across ALL tabs) */
     body[data-layout="console"] {
       padding: 12px;
       font-size: 13px;
@@ -94,39 +94,39 @@
       font-weight: 700;
     }
     body[data-layout="console"] .banner {
-      padding: 6px 12px;
+      padding: 8px 14px;
       font-size: 12px;
       margin-bottom: 12px;
-      border-radius: 4px;
+      border-radius: 8px;
     }
     body[data-layout="console"] .card {
-      padding: 12px 14px;
-      border-radius: 4px;
-      margin-bottom: 12px;
-      box-shadow: none !important;
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
       border: 1px solid var(--border);
     }
     body[data-layout="console"] .card h2 {
-      font-size: 13.5px;
-      margin-bottom: 8px;
-      padding-bottom: 5px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 14px;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
     }
     body[data-layout="console"] .card > div[style*="background: var(--card-inner)"] {
-      padding: 10px 12px !important;
-      border-radius: 4px !important;
-      margin-bottom: 10px !important;
+      padding: 12px 14px !important;
+      border-radius: 8px !important;
+      margin-bottom: 12px !important;
       border: 1px solid var(--border) !important;
     }
     body[data-layout="console"] .tabs-nav {
-      gap: 4px;
-      margin-bottom: 12px;
-      padding-bottom: 4px;
+      gap: 6px;
+      margin-bottom: 14px;
+      padding-bottom: 6px;
     }
     body[data-layout="console"] .tab-btn {
-      padding: 5px 10px;
-      font-size: 11.5px;
-      border-radius: 4px;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 6px;
       border: 1px solid transparent;
     }
     body[data-layout="console"] .tab-btn.active {
@@ -142,61 +142,73 @@
     body[data-layout="console"] .btn-secondary,
     body[data-layout="console"] .btn-danger,
     body[data-layout="console"] .btn-success {
-      padding: 4px 8px;
-      font-size: 12px;
-      border-radius: 4px;
-      height: 32px;
+      padding: 6px 12px;
+      font-size: 12.5px;
+      border-radius: 6px;
+      height: 34px;
+    }
+    body[data-layout="console"] .btn-sm {
+      padding: 2px 8px !important;
+      font-size: 11.5px !important;
+      height: 26px !important;
+      border-radius: 4px !important;
+      line-height: 1.2 !important;
     }
     body[data-layout="console"] textarea {
-      border-radius: 4px;
-      font-size: 11.5px;
+      border-radius: 6px;
+      font-size: 12px;
     }
     body[data-layout="console"] th, body[data-layout="console"] td {
-      padding: 5px 8px;
-      font-size: 11.5px;
+      padding: 7px 10px;
+      font-size: 12px;
     }
-    body[data-layout="console"] .table-container table {
+    body[data-layout="console"] .table-container {
+      border-radius: 8px;
+      overflow: hidden;
       border: 1px solid var(--border);
     }
+    body[data-layout="console"] .table-container table {
+      border: none;
+    }
     body[data-layout="console"] pre {
-      padding: 8px 10px;
-      border-radius: 4px;
-      font-size: 11px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 11.5px;
     }
     body[data-layout="console"] .preset-card {
-      padding: 8px 10px;
-      border-radius: 4px;
+      padding: 10px 12px;
+      border-radius: 8px;
     }
     body[data-layout="console"] .preset-chip {
-      padding: 4px 8px !important;
-      border-radius: 4px !important;
+      padding: 4px 10px !important;
+      border-radius: 14px !important;
       font-size: 11px !important;
     }
     body[data-layout="console"] .browser-mock {
-      border-radius: 4px;
-      box-shadow: none;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     }
     body[data-layout="console"] .popup-frame-box {
-      border-radius: 4px;
+      border-radius: 8px;
       box-shadow: none;
     }
     body[data-layout="console"] .badge {
-      border-radius: 3px;
-      padding: 1px 6px;
-      font-size: 10px;
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 11px;
     }
     body[data-layout="console"] .stat-row {
       padding: 5px 0;
       font-size: 12px;
     }
     body[data-layout="console"] .grid-2, body[data-layout="console"] .grid-3 {
-      gap: 10px;
-      margin-bottom: 12px;
+      gap: 12px;
+      margin-bottom: 14px;
     }
     body[data-layout="console"] label {
-      font-size: 10.5px;
+      font-size: 11px;
       letter-spacing: 0.2px;
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
 
     /* 2. Cyber Terminal (Monospace SecOps terminal, 0px sharp corners, glowing neon borders across ALL tabs) */
@@ -713,27 +725,88 @@
       border-color: var(--primary) !important;
       filter: brightness(1.1);
     }
-    button.btn-secondary, .btn-secondary { background: #1e293b; color: var(--text); border: 1px solid var(--border); }
-    button.btn-secondary:hover { background: #334155; }
+    button.btn-secondary, .btn-secondary {
+      background: var(--card-inner);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.btn-secondary:hover {
+      background: var(--border);
+    }
     button.btn-secondary:active, .btn-secondary:active {
-      background: #0f172a !important;
+      background: var(--card-bg) !important;
       border-color: var(--primary) !important;
       transform: translateY(2px) scale(0.96) !important;
       box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5) !important;
     }
-    button.btn-danger, .btn-danger { background: #dc2626; color: white; }
-    button.btn-danger:hover { background: #b91c1c; }
+    button.btn-danger, .btn-danger {
+      background: rgba(239, 68, 68, 0.16);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+    button.btn-danger:hover {
+      background: #dc2626;
+      color: #ffffff;
+      border-color: #dc2626;
+    }
     button.btn-danger:active, .btn-danger:active {
       background: #991b1b !important;
       transform: translateY(2px) scale(0.96) !important;
       box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5) !important;
     }
-    button.btn-success, .btn-success { background: #10b981; color: #0b1120; }
-    button.btn-success:hover { background: #059669; color: white; }
+    button.btn-success, .btn-success {
+      background: rgba(16, 185, 129, 0.16);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    button.btn-success:hover {
+      background: #10b981;
+      color: #0b1120;
+      border-color: #10b981;
+    }
     button.btn-success:active, .btn-success:active {
       background: #047857 !important;
       transform: translateY(2px) scale(0.96) !important;
       box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    /* Light Theme Button Harmonization */
+    body[data-theme="light"] button,
+    body[data-theme="light"] .btn {
+      color: #ffffff;
+    }
+    body[data-theme="light"] button.btn-secondary,
+    body[data-theme="light"] .btn-secondary {
+      background: #e2e8f0;
+      color: #1e293b;
+      border: 1px solid #cbd5e1;
+    }
+    body[data-theme="light"] button.btn-secondary:hover,
+    body[data-theme="light"] .btn-secondary:hover {
+      background: #cbd5e1;
+      color: #0f172a;
+    }
+    body[data-theme="light"] button.btn-danger,
+    body[data-theme="light"] .btn-danger {
+      background: rgba(220, 38, 38, 0.12);
+      color: #b91c1c;
+      border: 1px solid rgba(220, 38, 38, 0.35);
+    }
+    body[data-theme="light"] button.btn-danger:hover,
+    body[data-theme="light"] .btn-danger:hover {
+      background: #dc2626;
+      color: #ffffff;
+    }
+    body[data-theme="light"] button.btn-success,
+    body[data-theme="light"] .btn-success {
+      background: rgba(5, 150, 105, 0.12);
+      color: #047857;
+      border: 1px solid rgba(5, 150, 105, 0.35);
+    }
+    body[data-theme="light"] button.btn-success:hover,
+    body[data-theme="light"] .btn-success:hover {
+      background: #059669;
+      color: #ffffff;
     }
 
     /* Icon inline assets */
