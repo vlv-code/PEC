@@ -677,7 +677,8 @@
         thInstProfile: 'Assigned Profile',
         thInstSyncs: 'Syncs',
         thInstStatus: 'Status',
-        thInstAssign: 'Assign',
+        thInstAssign: 'Assign Profile',
+        thInstProxy: 'Proxy Server',
         thInstActions: 'Actions',
         txtNoFleet: 'No registered fleet connected yet.',
 
@@ -1005,7 +1006,8 @@
         thInstProfile: 'Назначенный профиль',
         thInstSyncs: 'Синхронизаций',
         thInstStatus: 'Статус',
-        thInstAssign: 'Назначить',
+        thInstAssign: 'Назначить профиль',
+        thInstProxy: 'Прокси-сервер',
         thInstActions: 'Действия',
         txtNoFleet: 'Зарегистрированный флот отсутствует',
 
@@ -2837,8 +2839,15 @@
     }
 
     // ----------------- Devices & Instances -----------------
+    let lastLoadedInstances = [];
     async function loadInstances() {
       try {
+        if (!currentProxiesList || !currentProxiesList.length) {
+          try {
+            const pRes = await adminFetch('/api/proxies');
+            if (pRes.ok) currentProxiesList = (await pRes.json()) || [];
+          } catch (_) {}
+        }
         const res = await adminFetch('/api/instances');
         const data = await res.json();
         const isRu = currentLang === 'ru';
@@ -2846,7 +2855,8 @@
         if (badge) {
           badge.textContent = data.online + (isRu ? ' онлайн' : ' online');
         }
-        renderInstancesTable(data.instances || []);
+        lastLoadedInstances = data.instances || [];
+        renderInstancesTable(lastLoadedInstances);
       } catch (e) {
         console.error(e);
       }
@@ -2861,9 +2871,14 @@
       const tbody = document.getElementById('fleetTableBody');
       if (!tbody) return;
       if (!instances || !instances.length) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'Пока нет подключенных устройств. Расширения синхронизируются через <code>/api/sync</code> каждые 5 мин.' : 'No instances connected yet. Extensions sync via <code>/api/sync</code> every 5 min.') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'Пока нет подключенных устройств. Расширения синхронизируются через <code>/api/sync</code> каждые 5 мин.' : 'No instances connected yet. Extensions sync via <code>/api/sync</code> every 5 min.') + '</td></tr>';
         return;
       }
+
+      const defaultProxy = (currentProxiesList || []).find(p => p.active);
+      const defaultProxyName = defaultProxy
+        ? (defaultProxy.name || `${defaultProxy.host}:${defaultProxy.port}`)
+        : (isRu ? 'Серверный по умолчанию' : 'Server Default');
 
       const profileOptions = allProfiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
 
@@ -2898,6 +2913,16 @@
             <select onchange="assignProfileToInstance('${esc(inst.instanceId)}', this.value)" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
               <option value="">${isRu ? 'По умолчанию (Авто)' : 'Default (Auto)'}</option>
               ${profileOptions}
+            </select>
+          </td>
+          <td>
+            <select class="form-select form-select-sm select-instance-proxy" data-instance-id="${escapeHtml(inst.instanceId)}" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
+              <option value="">${isRu ? 'По умолчанию (' + esc(defaultProxyName) + ')' : 'Default (' + esc(defaultProxyName) + ')'}</option>
+              ${(currentProxiesList || []).map(p => {
+                const pName = p.name || `${p.host}:${p.port}`;
+                const sel = inst.assignedProxyId === p.id ? ' selected' : '';
+                return `<option value="${esc(p.id)}"${sel}>${esc(pName)} (${esc(p.protocol)})</option>`;
+              }).join('')}
             </select>
           </td>
           <td>
@@ -2974,6 +2999,34 @@
         toast('Assignment error: ' + e, 'error');
       }
     }
+
+    async function assignProxyToInstance(instanceId, proxyId) {
+      try {
+        const res = await adminFetch('/api/instances/assign-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instanceId, proxyId: proxyId || undefined })
+        });
+        if (res.ok) {
+          toast(currentLang === 'ru' ? 'Прокси для инстанса обновлен' : 'Instance proxy updated', 'success');
+          loadInstances();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast('Proxy assignment error: ' + (data.error || res.statusText), 'error');
+        }
+      } catch (err) {
+        toast('Proxy assignment error: ' + err, 'error');
+      }
+    }
+
+    document.addEventListener('change', function (e) {
+      const selectProxy = e.target.closest('.select-instance-proxy');
+      if (selectProxy) {
+        const instanceId = selectProxy.getAttribute('data-instance-id');
+        const proxyId = selectProxy.value || undefined;
+        assignProxyToInstance(instanceId, proxyId);
+      }
+    });
 
     // ----------------- Extension Info & GPO -----------------
     async function fetchExtensionInfo() {

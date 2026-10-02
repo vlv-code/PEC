@@ -623,11 +623,12 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <th data-i18n="thInstSyncs">Syncs</th>
                 <th data-i18n="thInstStatus">Status</th>
                 <th data-i18n="thInstAssign">Assign</th>
+                <th data-i18n="thInstProxy">Прокси-сервер</th>
                 <th data-i18n="thInstActions">Действия</th>
               </tr>
             </thead>
             <tbody id="fleetTableBody">
-              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);" data-i18n="txtNoFleet">Зарегистрированный флот отсутствует</td></tr>
+              <tr><td colspan="10" style="text-align: center; color: var(--text-muted);" data-i18n="txtNoFleet">Зарегистрированный флот отсутствует</td></tr>
             </tbody>
           </table>
         </div>
