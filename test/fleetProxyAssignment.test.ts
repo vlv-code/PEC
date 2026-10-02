@@ -137,5 +137,20 @@ test("Task 2: POST /api/instances/assign-proxy assigns and clears proxy via HTTP
   });
   assert.strictEqual(badRes.status, 400);
 
+  // Non-existent proxyId returns 400
+  const notFoundRes = await fetch(`${baseUrl}/api/instances/assign-proxy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instanceId: instId, proxyId: "ghost-proxy-id-999" }),
+  });
+  assert.strictEqual(notFoundRes.status, 400);
+  const notFoundBody = await notFoundRes.json();
+  assert.match(notFoundBody.error, /not found/i);
+
+  // Whitespace-only proxyId cleans to undefined/default
+  assignInstanceProxy(instId, "   ");
+  const wsInst = getActiveInstances().find((i) => i.instanceId === instId);
+  assert.strictEqual(wsInst?.assignedProxyId, undefined);
+
   deleteInstance(instId);
 });

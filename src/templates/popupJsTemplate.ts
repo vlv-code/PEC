@@ -59,6 +59,15 @@ function updateBypassCountdown(expiresAt) {
   if (btnPauseLabel) btnPauseLabel.textContent = timeStr;
 }
 
+function escapeHtml(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Global state applier - reactive to simulator and chrome.runtime
 window.applyPopupState = function(response) {
   if (!response) return;
@@ -213,7 +222,22 @@ window.applyPopupState = function(response) {
   }
 
   if (activeProxyProtocolBadge) {
-    const proto = response.protocol || currentProxyState.protocol || "HTTP";
+    let proto = "";
+    if (response.activeProxyId && Array.isArray(response.availableProxies)) {
+      const activeNode = response.availableProxies.find(function(p) { return p.id === response.activeProxyId; });
+      if (activeNode && activeNode.protocol) {
+        proto = activeNode.protocol;
+      }
+    }
+    if (!proto && response.proxyProtocol) {
+      proto = response.proxyProtocol;
+    }
+    if (!proto && response.config && response.config.protocol && response.config.protocol !== "pac") {
+      proto = response.config.protocol;
+    }
+    if (!proto) {
+      proto = (response.protocol && response.protocol !== "pac") ? response.protocol : (currentProxyState.proxyProtocol || currentProxyState.protocol || "HTTP");
+    }
     activeProxyProtocolBadge.textContent = proto.toUpperCase();
   }
 
@@ -221,9 +245,11 @@ window.applyPopupState = function(response) {
     const isRu = "${t.isRu ? "true" : "false"}" === "true";
     const currentActiveId = response.activeProxyId || "";
     const optionsHtml = response.availableProxies.map(function(p) {
-      const pName = p.name || (p.host + ":" + p.port);
+      const pHostPort = p.host && p.host.includes(":") && !p.host.startsWith("[") ? "[" + p.host + "]:" + p.port : (p.host ? p.host + ":" + p.port : "");
+      const pName = p.name || pHostPort || p.id;
+      const pProto = (p.protocol || "http").toUpperCase();
       const sel = p.id === currentActiveId ? " selected" : "";
-      return '<option value="' + p.id + '"' + sel + '>' + pName + ' (' + p.protocol.toUpperCase() + ')</option>';
+      return '<option value="' + escapeHtml(p.id) + '"' + sel + '>' + escapeHtml(pName) + ' (' + escapeHtml(pProto) + ')</option>';
     }).join("");
 
     const defaultOpt = '<option value="">' + (isRu ? "По умолчанию (Сервер)" : "Default (Server)") + '</option>';
@@ -612,6 +638,13 @@ function initPopup() {
   if (selectActiveProxy) {
     selectActiveProxy.addEventListener("change", () => {
       const proxyId = selectActiveProxy.value;
+      const badge = document.getElementById("activeProxyProtocolBadge");
+      if (badge && Array.isArray(currentProxyState.availableProxies)) {
+        const selNode = currentProxyState.availableProxies.find(function(p) { return p.id === proxyId; });
+        if (selNode && selNode.protocol) {
+          badge.textContent = selNode.protocol.toUpperCase();
+        }
+      }
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "SET_ACTIVE_PROXY", proxyId: proxyId }, (res) => {
           if (res) window.applyPopupState(res);

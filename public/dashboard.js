@@ -2189,13 +2189,15 @@
               if (pRes.ok) currentProxiesList = (await pRes.json()) || [];
             } catch (_) {}
           }
-          const defaultProxy = (currentProxiesList || []).find(p => p.active);
+          const defaultProxy = (currentProxiesList || []).find(p => p.isActive || p.active);
+          const defaultHostPort = defaultProxy && defaultProxy.host ? (defaultProxy.host.includes(':') && !defaultProxy.host.startsWith('[') ? '[' + defaultProxy.host + ']:' + defaultProxy.port : defaultProxy.host + ':' + defaultProxy.port) : '';
           const defaultProxyName = defaultProxy
-            ? (defaultProxy.name || (defaultProxy.host + ':' + defaultProxy.port))
+            ? (defaultProxy.name || defaultHostPort)
             : (currentLang === 'ru' ? 'Активный на сервере' : 'Active Server Node');
           defProxyEl.innerHTML = `<option value="">${currentLang === 'ru' ? 'По умолчанию (' + esc(defaultProxyName) + ')' : 'Default (' + esc(defaultProxyName) + ')'}</option>` +
             (currentProxiesList || []).map(p => {
-              const pName = p.name || (p.host + ':' + p.port);
+              const pHostPort = p.host && p.host.includes(':') && !p.host.startsWith('[') ? '[' + p.host + ']:' + p.port : p.host + ':' + p.port;
+              const pName = p.name || pHostPort;
               return `<option value="${esc(p.id)}">${esc(pName)} (${esc(p.protocol)})</option>`;
             }).join('');
           defProxyEl.value = cfg.defaultProxyId || '';
@@ -2905,9 +2907,10 @@
         return;
       }
 
-      const defaultProxy = (currentProxiesList || []).find(p => p.active);
+      const defaultProxy = (currentProxiesList || []).find(p => p.isActive || p.active);
+      const defaultHostPort = defaultProxy && defaultProxy.host ? (defaultProxy.host.includes(':') && !defaultProxy.host.startsWith('[') ? '[' + defaultProxy.host + ']:' + defaultProxy.port : defaultProxy.host + ':' + defaultProxy.port) : '';
       const defaultProxyName = defaultProxy
-        ? (defaultProxy.name || (defaultProxy.host + ':' + defaultProxy.port))
+        ? (defaultProxy.name || defaultHostPort)
         : (isRu ? 'Серверный по умолчанию' : 'Server Default');
 
       const profileOptions = allProfiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
@@ -2949,7 +2952,8 @@
             <select class="form-select form-select-sm select-instance-proxy" data-instance-id="${escapeHtml(inst.instanceId)}" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
               <option value="">${isRu ? 'По умолчанию (' + esc(defaultProxyName) + ')' : 'Default (' + esc(defaultProxyName) + ')'}</option>
               ${(currentProxiesList || []).map(p => {
-                const pName = p.name || (p.host + ':' + p.port);
+                const pHostPort = p.host && p.host.includes(':') && !p.host.startsWith('[') ? '[' + p.host + ']:' + p.port : p.host + ':' + p.port;
+                const pName = p.name || pHostPort;
                 const sel = inst.assignedProxyId === p.id ? ' selected' : '';
                 return `<option value="${esc(p.id)}"${sel}>${esc(pName)} (${esc(p.protocol)})</option>`;
               }).join('')}

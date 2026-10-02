@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { getActiveInstances, assignInstanceProfile, assignInstanceProxy, deleteInstance, revokeInstanceToken, getProxyConfig, updateProxyConfig } from "../instances.js";
+import { getProxyById } from "../proxies.js";
 import { recordAudit, getClientIp } from "../audit.js";
 
 export function createInstancesRouter(): Router {
@@ -38,15 +39,26 @@ export function createInstancesRouter(): Router {
       return res.status(400).json({ error: "instanceId is required" });
     }
     try {
-      assignInstanceProxy(String(instanceId), proxyId ? String(proxyId) : undefined);
+      let cleanProxyId: string | undefined = undefined;
+      if (proxyId !== undefined && proxyId !== null) {
+        const trimmed = String(proxyId).trim();
+        if (trimmed !== "" && trimmed !== "default") {
+          const node = getProxyById(trimmed);
+          if (!node) {
+            return res.status(400).json({ error: "Proxy node not found" });
+          }
+          cleanProxyId = node.id;
+        }
+      }
+      assignInstanceProxy(String(instanceId), cleanProxyId);
       recordAudit({
         ip: getClientIp(req),
         endpoint: "/api/instances/assign-proxy",
         status: 200,
         result: "CONFIG_UPDATED",
-        details: `Assigned proxy ${proxyId || "default"} to instance ${instanceId}`,
+        details: `Assigned proxy ${cleanProxyId || "default"} to instance ${instanceId}`,
       });
-      res.json({ ok: true, instanceId, assignedProxyId: proxyId || null });
+      res.json({ ok: true, instanceId: String(instanceId), assignedProxyId: cleanProxyId || null });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: msg });

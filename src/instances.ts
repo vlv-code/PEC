@@ -182,7 +182,8 @@ export function registerHeartbeat(data: {
   let appliedProxyName: string | undefined = "По умолчанию";
   if (effectiveProxyId) {
     const node = getProxyById(effectiveProxyId);
-    appliedProxyName = node ? (node.name || `${node.host}:${node.port}`) : "По умолчанию";
+    const hostPort = node && node.host ? (node.host.includes(":") && !node.host.startsWith("[") ? `[${node.host}]:${node.port}` : `${node.host}:${node.port}`) : "";
+    appliedProxyName = node ? (node.name || hostPort) : "По умолчанию";
   }
 
   const record: ExtensionInstance = {
@@ -248,7 +249,8 @@ export function assignInstanceProxy(instanceId: string, proxyId?: string) {
   if (!persistentMeta[cleanId]) {
     persistentMeta[cleanId] = {};
   }
-  persistentMeta[cleanId].assignedProxyId = proxyId ? String(proxyId).trim() : undefined;
+  const cleanProxy = proxyId ? String(proxyId).trim() : undefined;
+  persistentMeta[cleanId].assignedProxyId = cleanProxy || undefined;
 
   const metaKeys = Object.keys(persistentMeta);
   if (metaKeys.length > MAX_PERSISTENT_META) {
@@ -263,7 +265,8 @@ export function assignInstanceProxy(instanceId: string, proxyId?: string) {
     existing.assignedProxyId = persistentMeta[cleanId].assignedProxyId;
     if (existing.assignedProxyId) {
       const node = getProxyById(existing.assignedProxyId);
-      existing.appliedProxyName = node ? (node.name || `${node.host}:${node.port}`) : "По умолчанию";
+      const hostPort = node && node.host ? (node.host.includes(":") && !node.host.startsWith("[") ? `[${node.host}]:${node.port}` : `${node.host}:${node.port}`) : "";
+      existing.appliedProxyName = node ? (node.name || hostPort) : "По умолчанию";
     } else {
       existing.appliedProxyName = "По умолчанию";
     }
@@ -297,7 +300,13 @@ export function getActiveInstances(): ExtensionInstance[] {
     } else if (elapsedMs > 6 * 60 * 1000) {
       status = "STALE";
     }
-    list.push({ ...item, status });
+    let appliedProxyName = item.appliedProxyName || "По умолчанию";
+    if (item.assignedProxyId) {
+      const node = getProxyById(item.assignedProxyId);
+      const hostPort = node && node.host ? (node.host.includes(":") && !node.host.startsWith("[") ? `[${node.host}]:${node.port}` : `${node.host}:${node.port}`) : "";
+      appliedProxyName = node ? (node.name || hostPort) : "По умолчанию";
+    }
+    list.push({ ...item, status, appliedProxyName });
   }
 
   // Sort by most recently active

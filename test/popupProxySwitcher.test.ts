@@ -71,6 +71,21 @@ test("Task 6: popup.js applyPopupState toggles cardProxySelector and populates s
   assert.ok(elements.selectActiveProxy.innerHTML.includes("px2"));
   assert.strictEqual(elements.selectActiveProxy.value, "px2");
   assert.strictEqual(elements.activeProxyProtocolBadge.textContent, "HTTP");
+
+  // 3. When protocol is "pac" (enterprise PAC mode), badge reflects selected node's protocol (SOCKS5), not "PAC"
+  context.window.applyPopupState({
+    allowUserProxySwitch: true,
+    availableProxies: [
+      { id: "px1", name: 'Node <script> & "quotes"', protocol: "socks5", host: "1.1.1.1", port: 1080 },
+    ],
+    activeProxyId: "px1",
+    protocol: "pac",
+  });
+  assert.strictEqual(elements.activeProxyProtocolBadge.textContent, "SOCKS5");
+  // HTML escaping prevents raw script or unescaped quotes injection
+  assert.ok(!elements.selectActiveProxy.innerHTML.includes("<script>"));
+  assert.ok(elements.selectActiveProxy.innerHTML.includes("&lt;script&gt;"));
+  assert.ok(elements.selectActiveProxy.innerHTML.includes("&quot;quotes&quot;"));
 });
 
 test("Task 6: background.js SET_ACTIVE_PROXY switches active proxy and respects allowUserProxySwitch", async () => {

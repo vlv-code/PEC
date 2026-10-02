@@ -85,7 +85,7 @@ try {
       if (res && res.pecProxyState && typeof res.pecProxyState === "object") {
         currentProxyState = { ...currentProxyState, ...res.pecProxyState };
       }
-      if (res && res.pecActiveProxyId) {
+      if (res && typeof res.pecActiveProxyId === "string") {
         currentProxyState.activeProxyId = res.pecActiveProxyId;
       }
       if (res && res.pecLastConfig && typeof res.pecLastConfig === "object") {
@@ -1033,6 +1033,7 @@ async function syncWithServer(forceRefresh = false, applyConfig = true, selected
               ...currentProxyState,
               online: true,
               protocol: isPac ? "pac" : (payload.config.protocol || "http"),
+              proxyProtocol: (payload.config && payload.config.protocol) || "http",
               host: payload.config.host || "",
               port: payload.config.port || 10809,
               profileName: payload.profileName || "Default Profile",
@@ -1245,6 +1246,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         logEvent("info", "User selected proxy node: " + (proxyId || "default"));
         await syncWithServer(true, true, proxyId);
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+          await chrome.storage.local.set({ pecActiveProxyId: currentProxyState.activeProxyId });
+        }
         persistProxyState();
         updateActiveTabBadge();
         sendResponse({ ok: true, ...currentProxyState });
