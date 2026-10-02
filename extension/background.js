@@ -446,6 +446,11 @@ async function applyPacScript(pacUrl, config, forcePacFetch = false) {
         if (text && text.indexOf("FindProxyForURL") !== -1) {
           pacText = text;
           cachedBasePacText = text;
+          try {
+            if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+              chrome.storage.local.set({ pecBasePac: text });
+            }
+          } catch (e) {}
         } else {
           console.warn("[PEC] PAC endpoint returned an invalid script (no FindProxyForURL).");
           logEvent("warn", "PAC endpoint returned invalid script (no FindProxyForURL), falling back to URL mode");

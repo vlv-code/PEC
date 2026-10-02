@@ -2032,7 +2032,7 @@
     let currentCustomIconDataUrl = '';
     let isCustomIconUploaded = false;
 
-    function setCustomIconDataUrl(dataUrl, isUploaded = false, triggerSave = true) {
+    function setCustomIconDataUrl(dataUrl, isUploaded = false, triggerSave = false) {
       currentCustomIconDataUrl = dataUrl || '';
       isCustomIconUploaded = Boolean(isUploaded);
       const previewBox = document.getElementById('customIconPreviewBox');
@@ -2142,9 +2142,9 @@
         document.getElementById('bldThemeColor').value = cfg.themeColor || '#0284c7';
         document.getElementById('bldEmoji').value = cfg.iconEmoji || '🛡️';
         if (cfg.customIconDataUrl) {
-          setCustomIconDataUrl(cfg.customIconDataUrl, false);
+          setCustomIconDataUrl(cfg.customIconDataUrl, true, false);
         } else {
-          setCustomIconDataUrl('', false);
+          setCustomIconDataUrl('', false, false);
         }
         document.getElementById('bldDesc').value = cfg.description || 'Enterprise Chrome extension for automatic proxy synchronization';
         const srvInput = document.getElementById('bldServerUrl');
@@ -2247,6 +2247,19 @@
       }
     }
     window.applyTemplatePreset = applyTemplatePreset;
+
+    function highlightStyleChip(style) {
+      const styleToPalette = {
+        'cyber-blue': 'cyber',
+        'dark-obsidian': 'obsidian',
+        'nord': 'nord',
+        'emerald-sentinel': 'emerald',
+        'sunset-amber': 'cyber',
+        'minimal-light': 'light'
+      };
+      setStudioPalette(styleToPalette[style] || style || 'cyber', true);
+    }
+    window.highlightStyleChip = highlightStyleChip;
 
     async function applyStylePreset(style) {
       highlightStyleChip(style);
