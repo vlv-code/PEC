@@ -470,7 +470,7 @@
       let html = `<div style="display: flex; gap: 16px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
         <div>
           <span style="color: var(--text-muted); font-size: 11px;">${isRu ? 'Установленная версия:' : 'Installed version:'}</span>
-          <strong style="color: var(--primary); font-family: var(--mono); font-size: 13px; margin-left: 6px;">v${data.currentVersion || '1.3.0'}</strong>
+          <strong style="color: var(--primary); font-family: var(--mono); font-size: 13px; margin-left: 6px;">v${data.currentVersion || (document.getElementById('versionReleaseBadge') && document.getElementById('versionReleaseBadge').getAttribute('data-server-version')) || '1.4.0'}</strong>
         </div>`;
 
       if (data.latestRelease) {

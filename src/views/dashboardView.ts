@@ -1,3 +1,5 @@
+import { getAppVersion } from "../version.js";
+
 export interface DashboardViewOptions {
   isDefaultTokenInUse?: boolean;
   port?: number;
@@ -5,6 +7,7 @@ export interface DashboardViewOptions {
 
 export function renderDashboardHtml(options: DashboardViewOptions = {}): string {
   const { isDefaultTokenInUse = false, port = 3000 } = options;
+  const currentVersion = getAppVersion();
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,7 +28,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       </div>
       <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
         <!-- GitHub Version Release Badge -->
-        <span id="versionReleaseBadge" class="badge badge-action-proxy" style="cursor: pointer; font-size: 11px; padding: 4px 8px;" onclick="toggleCustomizationPopover(event)" title="GitHub Releases & Version Control">v1.3.0</span>
+        <span id="versionReleaseBadge" data-server-version="${currentVersion}" class="badge badge-action-proxy" style="cursor: pointer; font-size: 11px; padding: 4px 8px;" onclick="toggleCustomizationPopover(event)" title="GitHub Releases & Version Control">v${currentVersion}</span>
 
         <!-- Server Customization Popover Trigger (Palette Icon) -->
         <div style="position: relative; display: inline-block;">

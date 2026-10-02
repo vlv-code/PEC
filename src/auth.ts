@@ -148,11 +148,9 @@ export function requestIsSecure(req: { secure?: boolean; headers: Record<string,
 // password) and then changeable from the dashboard settings.
 // ---------------------------------------------------------------------------
 
-const AUTH_STORE_PATH = getDashboardAuthPath();
-
 /** Where the credential store lives (exported for ops tooling and tests). */
 export function getDashboardAuthStorePath(): string {
-  return AUTH_STORE_PATH;
+  return getDashboardAuthPath();
 }
 const SCRYPT_KEYLEN = 64;
 
@@ -169,9 +167,10 @@ export function isSetupRequired(): boolean {
   if (credentials) {
     return credentials.setupCompleted !== true;
   }
+  const storePath = getDashboardAuthStorePath();
   try {
-    if (fs.existsSync(AUTH_STORE_PATH)) {
-      const data = JSON.parse(fs.readFileSync(AUTH_STORE_PATH, "utf-8"));
+    if (fs.existsSync(storePath)) {
+      const data = JSON.parse(fs.readFileSync(storePath, "utf-8"));
       if (data && typeof data.username === "string" && typeof data.passwordHash === "string") {
         const loadedCreds: DashboardCredentials = data;
         if (loadedCreds.setupCompleted === undefined) {
@@ -230,7 +229,7 @@ function verifyPasswordHash(password: string, stored: string): boolean {
 
 function persistCredentials(): void {
   if (!credentials) return;
-  writeJsonAtomic(AUTH_STORE_PATH, credentials);
+  writeJsonAtomic(getDashboardAuthStorePath(), credentials);
 }
 
 /**
@@ -241,9 +240,10 @@ export function initDashboardCredentials(bootstrap: {
   fallbackPassword?: string;
   autoCreate?: boolean;
 }): { usingFallbackPassword: boolean; setupRequired: boolean } {
+  const storePath = getDashboardAuthStorePath();
   try {
-    if (fs.existsSync(AUTH_STORE_PATH)) {
-      const data = JSON.parse(fs.readFileSync(AUTH_STORE_PATH, "utf-8"));
+    if (fs.existsSync(storePath)) {
+      const data = JSON.parse(fs.readFileSync(storePath, "utf-8"));
       if (data && typeof data.username === "string" && typeof data.passwordHash === "string") {
         const loadedCreds: DashboardCredentials = data;
         if (loadedCreds.setupCompleted === undefined) {
@@ -266,10 +266,9 @@ export function initDashboardCredentials(bootstrap: {
   }
 
   const username = bootstrap.username;
-  const password = process.env.ADMIN_PASSWORD || bootstrap.fallbackPassword || "";
+  let password = process.env.ADMIN_PASSWORD || bootstrap.fallbackPassword || "";
   if (!password) {
-    credentials = null;
-    return { usingFallbackPassword: false, setupRequired: true };
+    password = crypto.randomBytes(12).toString("base64url");
   }
   const usingFallbackPassword = !process.env.ADMIN_PASSWORD;
   credentials = {
@@ -279,6 +278,21 @@ export function initDashboardCredentials(bootstrap: {
     setupCompleted: true,
   };
   persistCredentials();
+
+  if (usingFallbackPassword) {
+    const port = process.env.PORT || 3000;
+    const host = process.env.HOST || "localhost";
+    console.log(`
+┌────────────────────────────────────────────┐
+│  Dashboard bootstrap credentials (shown ONCE)
+│  URL:      http://${host}:${port}/
+│  Login:    ${username}
+│  Password: ${password}
+│  Set ADMIN_PASSWORD env to control this.
+└────────────────────────────────────────────┘
+`);
+  }
+
   return { usingFallbackPassword, setupRequired: false };
 }
 

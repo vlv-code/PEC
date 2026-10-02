@@ -5,6 +5,7 @@ import { getActiveInstances, getProxyConfig } from "../instances.js";
 import { getAllProfiles } from "../routing.js";
 import { recordAudit, getClientIp, getAuditLogs } from "../audit.js";
 import { getActiveProxy } from "../proxies.js";
+import { getAppVersion } from "../version.js";
 
 export function createSystemRouter(options: {
   port: number;
@@ -14,7 +15,7 @@ export function createSystemRouter(options: {
   credsStorePath: string;
 }): Router {
   const router = Router();
-  const currentVersion = "1.4.0";
+  const currentVersion = getAppVersion();
 
   router.get("/healthz", (req: Request, res: Response) => {
     const ip = getClientIp(req);
@@ -74,7 +75,7 @@ export function createSystemRouter(options: {
   });
 
   router.get("/api/github/releases", async (req: Request, res: Response) => {
-    const repoParam = (req.query.repo as string) || "balukabalukasa/pec-proxy-corp";
+    const repoParam = (req.query.repo as string) || process.env.UPDATE_CHECK_REPO || "vlv-code/PEC";
     const repoClean = repoParam.replace(/^https?:\/\/github\.com\//i, "").replace(/\.git$/i, "").trim();
 
     try {
