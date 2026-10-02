@@ -193,6 +193,37 @@ window.applyPopupState = function(response) {
   if (btnToggle) {
     btnToggle.textContent = isBypass ? "Включить прокси" : "Временно отключить (15м)";
   }
+
+  const cardProxySelector = document.getElementById("cardProxySelector");
+  const selectActiveProxy = document.getElementById("selectActiveProxy");
+  const activeProxyProtocolBadge = document.getElementById("activeProxyProtocolBadge");
+
+  if (cardProxySelector) {
+    if (response.allowUserProxySwitch === false) {
+      cardProxySelector.style.display = "none";
+    } else {
+      cardProxySelector.style.display = "block";
+    }
+  }
+
+  if (activeProxyProtocolBadge) {
+    const proto = response.protocol || currentProxyState.protocol || "HTTP";
+    activeProxyProtocolBadge.textContent = proto.toUpperCase();
+  }
+
+  if (selectActiveProxy && Array.isArray(response.availableProxies)) {
+    const isRu = "true" === "true";
+    const currentActiveId = response.activeProxyId || "";
+    const optionsHtml = response.availableProxies.map(function(p) {
+      const pName = p.name || (p.host + ":" + p.port);
+      const sel = p.id === currentActiveId ? " selected" : "";
+      return '<option value="' + p.id + '"' + sel + '>' + pName + ' (' + p.protocol.toUpperCase() + ')</option>';
+    }).join("");
+
+    const defaultOpt = '<option value="">' + (isRu ? "По умолчанию (Сервер)" : "Default (Server)") + '</option>';
+    selectActiveProxy.innerHTML = defaultOpt + optionsHtml;
+    selectActiveProxy.value = currentActiveId;
+  }
 };
 
 window.addEventListener("message", function(e) {
@@ -567,6 +598,18 @@ function initPopup() {
       if (currentDomain) {
         if (inputPattern) inputPattern.value = currentDomain;
         addRule(currentDomain, (selectAction && selectAction.value) || "DIRECT");
+      }
+    });
+  }
+
+  const selectActiveProxy = document.getElementById("selectActiveProxy");
+  if (selectActiveProxy) {
+    selectActiveProxy.addEventListener("change", () => {
+      const proxyId = selectActiveProxy.value;
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ action: "SET_ACTIVE_PROXY", proxyId: proxyId }, (res) => {
+          if (res) window.applyPopupState(res);
+        });
       }
     });
   }

@@ -63,6 +63,9 @@ let currentProxyState = {
   bypassExpiresAt: null,
   serverBase: DEFAULT_SERVER_BASE,
   lastSync: 0,
+  activeProxyId: (DEFAULT_PROXY_ID && !DEFAULT_PROXY_ID.startsWith("__" + "PEC_")) ? DEFAULT_PROXY_ID : "",
+  availableProxies: [],
+  allowUserProxySwitch: typeof ALLOW_USER_PROXY_SWITCH === "boolean" ? ALLOW_USER_PROXY_SWITCH : true,
 };
 
 // Diagnostics ring-buffer log (last 100 events) persisted to local storage
@@ -75,12 +78,15 @@ let cachedUserRules = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac", "pecInstanceToken", "pecProfileRules", "pecProfileDefaultPolicy", "pecUserRules"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac", "pecInstanceToken", "pecProfileRules", "pecProfileDefaultPolicy", "pecUserRules", "pecActiveProxyId"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
       if (res && res.pecProxyState && typeof res.pecProxyState === "object") {
         currentProxyState = { ...currentProxyState, ...res.pecProxyState };
+      }
+      if (res && res.pecActiveProxyId) {
+        currentProxyState.activeProxyId = res.pecActiveProxyId;
       }
       if (res && res.pecLastConfig && typeof res.pecLastConfig === "object") {
         lastConfig = res.pecLastConfig;
@@ -914,7 +920,7 @@ async function expireBypass() {
 }
 
 // Synchronize with server (fetches creds & config)
-async function syncWithServer(forceRefresh = false, applyConfig = true) {
+async function syncWithServer(forceRefresh = false, applyConfig = true, selectedProxyId = undefined) {
   const now = Date.now();
   if (!forceRefresh && memoryCredsCache && now - memoryCredsCache.fetchedAt < TTL_MS) {
     return memoryCredsCache;
@@ -958,6 +964,10 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
       let syncSuccessful = false;
       logEvent("info", "Starting sync with server: " + syncUrl);
 
+      const effectiveSelectedProxyId = selectedProxyId !== undefined
+        ? selectedProxyId
+        : (currentProxyState.activeProxyId || undefined);
+
       try {
         const res = await fetch(syncUrl, {
           method: "POST",
@@ -968,12 +978,23 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
             extensionId: chrome.runtime.id,
             activeProxyMode: currentProxyState.protocol,
             group: targetGroup,
+            selectedProxyId: effectiveSelectedProxyId,
           }),
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
 
         if (res.ok) {
           const payload = await res.json();
+          if (payload.activeProxyId !== undefined) {
+            currentProxyState.activeProxyId = payload.activeProxyId;
+          }
+          if (Array.isArray(payload.availableProxies)) {
+            currentProxyState.availableProxies = payload.availableProxies;
+          }
+          if (payload.allowUserProxySwitch !== undefined) {
+            currentProxyState.allowUserProxySwitch = payload.allowUserProxySwitch;
+          }
+
           if (payload.instanceToken && typeof payload.instanceToken === "string") {
             memoryInstanceToken = payload.instanceToken;
             try {
@@ -1208,6 +1229,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const action = msg.action || msg.type;
   if (action === "GET_STATUS") {
     sendResponse({ ...currentProxyState });
+    return true;
+  }
+  if (action === "SET_ACTIVE_PROXY") {
+    if (currentProxyState.allowUserProxySwitch === false) {
+      sendResponse({ ok: false, error: "Proxy switching is disabled by enterprise policy", ...currentProxyState });
+      return true;
+    }
+    const proxyId = msg.proxyId || "";
+    currentProxyState.activeProxyId = proxyId;
+    (async () => {
+      try {
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+          await chrome.storage.local.set({ pecActiveProxyId: proxyId });
+        }
+        logEvent("info", "User selected proxy node: " + (proxyId || "default"));
+        await syncWithServer(true, true, proxyId);
+        persistProxyState();
+        updateActiveTabBadge();
+        sendResponse({ ok: true, ...currentProxyState });
+      } catch (err) {
+        logEvent("error", "Failed to switch active proxy: " + (err && err.message ? err.message : err));
+        sendResponse({ ok: false, error: String(err), ...currentProxyState });
+      }
+    })();
     return true;
   }
   if (action === "GET_USER_RULES") {

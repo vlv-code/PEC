@@ -825,7 +825,17 @@ export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<stri
 
   <!-- TAB 2: Routing -->
   <div class="tab-content" id="tab-routing">
-    <div class="card">
+    <div class="card" id="cardProxySelector" style="margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-weight: 600; font-size: 12px; color: var(--text);">🌐 ${t.isRu ? "Прокси-сервер" : "Proxy Server"}</span>
+        <span id="activeProxyProtocolBadge" class="badge badge-action-proxy" style="font-size: 10px;">HTTP</span>
+      </div>
+      <select id="selectActiveProxy" class="form-select" style="width: 100%; margin-bottom: 0;">
+        <option value="">${t.isRu ? "Загрузка доступных прокси..." : "Loading available proxies..."}</option>
+      </select>
+    </div>
+
+    <div class="card" id="cardCorporateRules">
       <div class="card-header">
         <span class="card-title">${t.corpRules || "Корпоративные правила"}</span>
         <span class="tag corp-tag">${t.fromServer || "От сервера"}</span>
