@@ -6,6 +6,7 @@ import { readCurrentCredsAsync } from "../rotate.js";
 import { getBuildConfig } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter, timingSafeEqualString } from "../middleware/security.js";
+import { signPacUrlParams, verifyPacUrlParams } from "../pacSigner.js";
 
 export function createCredsRouter(getSharedToken: () => string): Router {
   const router = Router();
@@ -112,8 +113,10 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       }
     }
 
-    // Generate tailored PAC URL for this instance or profile
-    const pacUrl = `${getBaseUrl(req)}/proxy.pac?profileId=${assignedProfile.id}`;
+    // Generate tailored PAC URL for this instance or profile (HMAC signed)
+    const pacSecret = process.env.PAC_SIGNING_SECRET || getSharedToken() || "pec-pac-secret";
+    const { exp, sig } = signPacUrlParams(assignedProfile.id, pacSecret, 86400);
+    const pacUrl = `${getBaseUrl(req)}/proxy.pac?profileId=${encodeURIComponent(assignedProfile.id)}&exp=${exp}&sig=${sig}`;
 
     recordAudit({
       ip: clientHost,
@@ -148,6 +151,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
 
   // GET /proxy.pac
   router.get("/proxy.pac", (req: Request, res: Response) => {
+    const clientHost = getClientIp(req);
     const proxyConfig = getProxyConfig();
     const profileId = typeof req.query.profileId === "string" ? req.query.profileId : undefined;
     const instanceId = typeof req.query.instanceId === "string" ? req.query.instanceId : undefined;
@@ -156,6 +160,25 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     let profile = profileId ? getProfileById(profileId) : undefined;
     if (!profile) {
       profile = resolveProfileForInstance(instanceId, group);
+    }
+
+    const requireSig = process.env.PAC_REQUIRE_SIGNATURE === "1" || process.env.PAC_REQUIRE_SIGNATURE === "true";
+    if (requireSig) {
+      const expParam = typeof req.query.exp === "string" ? req.query.exp : "";
+      const sigParam = typeof req.query.sig === "string" ? req.query.sig : "";
+      const effectiveProfileId = profile?.id || profileId || "";
+      const pacSecret = process.env.PAC_SIGNING_SECRET || getSharedToken() || "pec-pac-secret";
+      const verifyResult = verifyPacUrlParams(effectiveProfileId, expParam, sigParam, pacSecret);
+      if (!verifyResult.valid) {
+        recordAudit({
+          ip: clientHost,
+          endpoint: "/proxy.pac",
+          status: 403,
+          result: "REJECTED_TOKEN",
+          details: `PAC signature rejected: ${verifyResult.reason}`,
+        });
+        return res.status(403).json({ ok: false, error: `PAC signature verification failed: ${verifyResult.reason}` });
+      }
     }
 
     const pacContent = generatePacScript(profile, proxyConfig);
