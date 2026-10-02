@@ -84,6 +84,9 @@ export interface ExtensionInstance {
   group?: string;
   assignedProfileId?: string;
   appliedProfileName?: string;
+  tokenHash?: string;
+  enrolledAt?: string;
+  revoked?: boolean;
 }
 
 export interface RotationConfig {

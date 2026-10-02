@@ -1,5 +1,6 @@
+import crypto from "node:crypto";
 import express, { Router, Request, Response } from "express";
-import { getProxyConfig, registerHeartbeat } from "../instances.js";
+import { getProxyConfig, registerHeartbeat, enrollInstanceToken, getInstanceMeta } from "../instances.js";
 import { probeProxyTcp } from "../proxies.js";
 import { resolveProfileForInstance, getProfileById, generatePacScript } from "../routing.js";
 import { readCurrentCredsAsync } from "../rotate.js";
@@ -7,6 +8,62 @@ import { getBuildConfig } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter, timingSafeEqualString } from "../middleware/security.js";
 import { signPacUrlParams, verifyPacUrlParams } from "../pacSigner.js";
+
+function authenticateExtRequest(
+  tokenProvided: string | undefined,
+  instanceId: string | undefined,
+  sharedToken: string
+): { authenticated: boolean; shouldEnroll: boolean } {
+  if (!tokenProvided) {
+    return { authenticated: false, shouldEnroll: false };
+  }
+
+  if (instanceId) {
+    const meta = getInstanceMeta(instanceId);
+    if (meta?.tokenHash) {
+      const incomingHash = crypto.createHash("sha256").update(tokenProvided).digest("hex");
+      if (timingSafeEqualString(incomingHash, meta.tokenHash)) {
+        return { authenticated: true, shouldEnroll: false };
+      }
+    }
+    if (meta?.revoked) {
+      return { authenticated: false, shouldEnroll: false };
+    }
+  }
+
+  if (sharedToken && timingSafeEqualString(tokenProvided, sharedToken)) {
+    const meta = instanceId ? getInstanceMeta(instanceId) : undefined;
+    const shouldEnroll = Boolean(instanceId && !meta?.tokenHash && !meta?.revoked);
+    return { authenticated: true, shouldEnroll };
+  }
+
+  return { authenticated: false, shouldEnroll: false };
+}
+
+class EnrollmentTracker {
+  private store = new Map<string, { count: number; resetTime: number }>();
+  private windowMs: number;
+  private maxRequests: number;
+
+  constructor(windowMs: number = 60_000, maxRequests: number = 10) {
+    this.windowMs = windowMs;
+    this.maxRequests = maxRequests;
+  }
+
+  check(ip: string): boolean {
+    const now = Date.now();
+    const rec = this.store.get(ip);
+    if (!rec || now > rec.resetTime) {
+      this.store.set(ip, { count: 1, resetTime: now + this.windowMs });
+      return true;
+    }
+    if (rec.count >= this.maxRequests) {
+      return false;
+    }
+    rec.count++;
+    return true;
+  }
+}
 
 export function createCredsRouter(getSharedToken: () => string): Router {
   const router = Router();
@@ -23,6 +80,8 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     message: "Rate limit exceeded for extension heartbeat sync.",
   });
 
+  const enrollmentTracker = new EnrollmentTracker(60_000, 10);
+
   // GET /creds
   router.get("/creds", credsLimiter, async (req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
@@ -32,9 +91,12 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     const clientHost = getClientIp(req);
     const xExtTokenHeader = req.headers["x-ext-token"];
     const xExtToken = Array.isArray(xExtTokenHeader) ? xExtTokenHeader[0] : xExtTokenHeader;
+    const rawInstanceId = req.query.instanceId ? String(req.query.instanceId) : (req.headers["x-instance-id"] ? String(req.headers["x-instance-id"]) : undefined);
+    const instanceId = rawInstanceId ? rawInstanceId.trim().slice(0, 128) : undefined;
     const token = getSharedToken();
 
-    if (!token || !xExtToken || !timingSafeEqualString(xExtToken, token)) {
+    const auth = authenticateExtRequest(xExtToken, instanceId, token);
+    if (!token || !xExtToken || !auth.authenticated) {
       recordAudit({
         ip: clientHost,
         endpoint: "/creds",
@@ -76,7 +138,13 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     const xExtToken = Array.isArray(xExtTokenHeader) ? xExtTokenHeader[0] : xExtTokenHeader;
     const token = getSharedToken();
 
-    if (!token || !xExtToken || !timingSafeEqualString(xExtToken, token)) {
+    const { instanceId: bodyInstanceId, version, extensionId, activeProxyMode, group } = req.body || {};
+    const headerInstanceId = req.headers["x-instance-id"];
+    const rawInstanceId = bodyInstanceId || (Array.isArray(headerInstanceId) ? headerInstanceId[0] : headerInstanceId);
+    const instanceId = rawInstanceId ? String(rawInstanceId).trim().slice(0, 128) : undefined;
+
+    const auth = authenticateExtRequest(xExtToken, instanceId, token);
+    if (!token || !xExtToken || !auth.authenticated) {
       recordAudit({
         ip: clientHost,
         endpoint: "/api/sync",
@@ -87,7 +155,15 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       return res.status(403).json({ detail: "Forbidden" });
     }
 
-    const { instanceId, version, extensionId, activeProxyMode, group } = req.body || {};
+    let issuedInstanceToken: string | undefined;
+    if (auth.shouldEnroll && instanceId) {
+      if (enrollmentTracker.check(clientHost)) {
+        issuedInstanceToken = crypto.randomBytes(24).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(issuedInstanceToken).digest("hex");
+        enrollInstanceToken(instanceId, tokenHash);
+      }
+    }
+
     const currentCreds = await readCurrentCredsAsync();
     const proxyConfig = getProxyConfig();
 
@@ -123,7 +199,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       endpoint: "/api/sync",
       status: 200,
       result: "SYNCED",
-      details: `Instance: ${instanceId || "anon"}, Profile: ${assignedProfile.name}`,
+      details: `Instance: ${instanceId || "anon"}, Profile: ${assignedProfile.name}${issuedInstanceToken ? " (enrolled)" : ""}`,
     });
 
     const probeTimeout = process.env.NODE_ENV === "test" ? 300 : 1500;
@@ -133,6 +209,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     return res.json({
       ok: true,
       serverTime: new Date().toISOString(),
+      ...(issuedInstanceToken ? { instanceToken: issuedInstanceToken } : {}),
       creds: currentCreds ? { user: currentCreds.user, pass: currentCreds.pass } : null,
       profileId: assignedProfile.id,
       profileName: assignedProfile.name,

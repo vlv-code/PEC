@@ -121,8 +121,17 @@ function isUnsafeObjectId(id: string): boolean {
   return id === "__proto__" || id === "constructor" || id === "prototype";
 }
 
-// Load persistent instance assignments (group & assigned profile)
-const persistentMeta: Record<string, { group?: string; assignedProfileId?: string }> = {};
+// Load persistent instance assignments (group & assigned profile, token enrollment)
+const persistentMeta: Record<
+  string,
+  {
+    group?: string;
+    assignedProfileId?: string;
+    tokenHash?: string;
+    enrolledAt?: string;
+    revoked?: boolean;
+  }
+> = {};
 try {
   if (fs.existsSync(INSTANCES_META_PATH)) {
     const raw = fs.readFileSync(INSTANCES_META_PATH, "utf-8");
@@ -181,6 +190,9 @@ export function registerHeartbeat(data: {
     group: effectiveGroup,
     assignedProfileId: effectiveProfileId,
     appliedProfileName: resolvedProfile?.name || "Default Profile",
+    tokenHash: meta.tokenHash || existing?.tokenHash,
+    enrolledAt: meta.enrolledAt || existing?.enrolledAt,
+    revoked: meta.revoked !== undefined ? meta.revoked : existing?.revoked,
   };
 
   instancesMap.delete(cleanId); // refresh insertion order (LRU recency)
@@ -259,3 +271,57 @@ export function getActiveInstances(): ExtensionInstance[] {
 export function clearInstances() {
   instancesMap.clear();
 }
+
+/**
+ * Enroll a newly generated per-instance token hash.
+ */
+export function enrollInstanceToken(instanceId: string, tokenHash: string): void {
+  const cleanId = assertSafeInstanceId(instanceId);
+  if (!persistentMeta[cleanId]) {
+    persistentMeta[cleanId] = {};
+  }
+  const now = new Date().toISOString();
+  persistentMeta[cleanId].tokenHash = tokenHash;
+  persistentMeta[cleanId].enrolledAt = now;
+  persistentMeta[cleanId].revoked = false;
+  saveInstancesMeta();
+
+  const existing = instancesMap.get(cleanId);
+  if (existing) {
+    existing.tokenHash = tokenHash;
+    existing.enrolledAt = now;
+    existing.revoked = false;
+  }
+}
+
+/**
+ * Revoke an instance's per-instance token and mark it revoked.
+ */
+export function revokeInstanceToken(instanceId: string): boolean {
+  if (isUnsafeObjectId(instanceId)) return false;
+  let changed = false;
+  if (persistentMeta[instanceId]) {
+    delete persistentMeta[instanceId].tokenHash;
+    delete persistentMeta[instanceId].enrolledAt;
+    persistentMeta[instanceId].revoked = true;
+    changed = true;
+    saveInstancesMeta();
+  }
+  const existing = instancesMap.get(instanceId);
+  if (existing) {
+    existing.tokenHash = undefined;
+    existing.enrolledAt = undefined;
+    existing.revoked = true;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Retrieve persistent metadata (tokenHash, enrolledAt, revoked) for an instance.
+ */
+export function getInstanceMeta(instanceId: string): { group?: string; assignedProfileId?: string; tokenHash?: string; enrolledAt?: string; revoked?: boolean } | undefined {
+  if (isUnsafeObjectId(instanceId)) return undefined;
+  return persistentMeta[instanceId];
+}
+

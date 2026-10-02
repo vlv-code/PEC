@@ -2870,8 +2870,17 @@
         if (inst.status === 'STALE') badge = 'badge-stale';
         else if (inst.status === 'OFFLINE') badge = 'badge-offline';
 
+        const tokenBadge = inst.tokenHash
+          ? `<span class="badge badge-success" title="${isRu ? 'Индивидуальный токен выдан' : 'Enrolled per-instance token'}">🔑 ${isRu ? 'Токен' : 'Token'}</span>`
+          : (inst.revoked
+            ? `<span class="badge badge-danger" title="${isRu ? 'Токен отозван' : 'Token revoked'}">🚫 ${isRu ? 'Отозван' : 'Revoked'}</span>`
+            : `<span class="badge badge-secondary" title="${isRu ? 'Использует общий токен' : 'Using shared token'}">${isRu ? 'Общий' : 'Shared'}</span>`);
+
         return `<tr>
-          <td><code>${esc(inst.instanceId)}</code></td>
+          <td>
+            <code>${esc(inst.instanceId)}</code>
+            <div style="margin-top: 4px;">${tokenBadge}</div>
+          </td>
           <td style="font-family: var(--mono);">${esc(inst.ip)}</td>
           <td>v${esc(inst.version)}</td>
           <td><code>${esc(inst.group || (isRu ? 'Основная группа' : 'Default Group'))}</code></td>
@@ -2885,10 +2894,32 @@
             </select>
           </td>
           <td>
-            <button class="btn btn-sm btn-danger btn-delete-instance" data-id="${escapeHtml(inst.instanceId)}" title="Удалить устройство"><img src="/icons/trash.png" class="icon-inline-sm" alt="del"></button>
+            <div style="display: inline-flex; gap: 6px; align-items: center;">
+              ${inst.tokenHash ? `<button class="btn btn-sm btn-warning btn-revoke-token" data-id="${escapeHtml(inst.instanceId)}" title="${isRu ? 'Отозвать индивидуальный токен' : 'Revoke token'}">🚫</button>` : ''}
+              <button class="btn btn-sm btn-danger btn-delete-instance" data-id="${escapeHtml(inst.instanceId)}" title="${isRu ? 'Удалить устройство' : 'Delete device'}"><img src="/icons/trash.png" class="icon-inline-sm" alt="del"></button>
+            </div>
           </td>
         </tr>`;
       }).join('');
+    }
+
+    async function revokeInstanceToken(id) {
+      const isRu = currentLang === 'ru';
+      if (!confirm((isRu ? 'Отозвать токен доступа для ' : 'Revoke access token for ') + id + '?')) return;
+      try {
+        const res = await adminFetch('/api/instances/' + encodeURIComponent(id) + '/revoke-token', {
+          method: 'POST'
+        });
+        if (res.ok || res.status === 200) {
+          toast(isRu ? 'Токен успешно отозван' : 'Token successfully revoked', 'success');
+          loadInstances();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          toast('Revoke error: ' + (errData.error || res.statusText), 'error');
+        }
+      } catch (err) {
+        toast('Revoke error: ' + err, 'error');
+      }
     }
 
     async function deleteInstance(id) {
@@ -2910,6 +2941,12 @@
     }
 
     document.addEventListener('click', function (e) {
+      const revokeBtn = e.target.closest('.btn-revoke-token');
+      if (revokeBtn) {
+        const id = revokeBtn.getAttribute('data-id');
+        if (id) revokeInstanceToken(id);
+        return;
+      }
       const btn = e.target.closest('.btn-delete-instance');
       if (!btn) return;
       const id = btn.getAttribute('data-id');

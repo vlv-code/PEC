@@ -64,10 +64,11 @@ let currentProxyState = {
 // Diagnostics ring-buffer log (last 100 events) persisted to local storage
 const MAX_LOGS = 100;
 let recentLogs = [];
+let memoryInstanceToken = "";
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac", "pecInstanceToken"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
@@ -82,6 +83,9 @@ try {
       }
       if (res && res.pecBasePac && typeof res.pecBasePac === "string" && !cachedBasePacText) {
         cachedBasePacText = res.pecBasePac;
+      }
+      if (res && res.pecInstanceToken && typeof res.pecInstanceToken === "string") {
+        memoryInstanceToken = res.pecInstanceToken;
       }
     });
   }
@@ -174,7 +178,7 @@ async function getManagedConfig() {
       "targetGroup",
     ]);
 
-    const token = managed.extToken || FALLBACK_TOKEN || null;
+    const token = managed.extToken || memoryInstanceToken || FALLBACK_TOKEN || null;
     const credsUrl = isValidUrl(managed.credsUrl) ? managed.credsUrl : DEFAULT_CREDS_URL;
     const syncUrl = isValidUrl(managed.syncUrl) ? managed.syncUrl : DEFAULT_SYNC_URL;
     const autoConfigureProxy = managed.autoConfigureProxy !== false;
@@ -183,7 +187,7 @@ async function getManagedConfig() {
     return { token, credsUrl, syncUrl, autoConfigureProxy, targetGroup };
   } catch (e) {
     return {
-      token: FALLBACK_TOKEN || null,
+      token: memoryInstanceToken || FALLBACK_TOKEN || null,
       credsUrl: DEFAULT_CREDS_URL,
       syncUrl: DEFAULT_SYNC_URL,
       autoConfigureProxy: true,
@@ -748,8 +752,12 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
         currentProxyState.serverBase = new URL(syncUrl).origin;
       } catch {}
 
+      const instId = await getInstanceId();
+      const activeToken = memoryInstanceToken || token;
+
       const headers = { "Content-Type": "application/json" };
-      if (token) headers["X-Ext-Token"] = token;
+      if (activeToken) headers["X-Ext-Token"] = activeToken;
+      headers["X-Instance-Id"] = instId;
 
       let syncSuccessful = false;
       logEvent("info", "Starting sync with server: " + syncUrl);
@@ -759,7 +767,7 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
           method: "POST",
           headers: headers,
           body: JSON.stringify({
-            instanceId: await getInstanceId(),
+            instanceId: instId,
             version: manifest.version,
             extensionId: chrome.runtime.id,
             activeProxyMode: currentProxyState.protocol,
@@ -770,6 +778,16 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
 
         if (res.ok) {
           const payload = await res.json();
+          if (payload.instanceToken && typeof payload.instanceToken === "string") {
+            memoryInstanceToken = payload.instanceToken;
+            try {
+              if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+                chrome.storage.local.set({ pecInstanceToken: memoryInstanceToken });
+              }
+            } catch (e) {}
+            logEvent("info", "Enrolled unique per-instance authorization token");
+          }
+
           if (payload.creds && payload.creds.user && payload.creds.pass) {
             memoryCredsCache = {
               user: payload.creds.user,
@@ -832,8 +850,11 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
 
       // Fallback to /creds
       if (!syncSuccessful) {
+        const credsHeaders = {};
+        if (activeToken) credsHeaders["X-Ext-Token"] = activeToken;
+        credsHeaders["X-Instance-Id"] = instId;
         const resFallback = await fetch(credsUrl, {
-          headers: token ? { "X-Ext-Token": token } : {},
+          headers: credsHeaders,
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
 
