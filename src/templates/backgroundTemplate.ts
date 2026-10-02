@@ -703,7 +703,7 @@ if (chrome.proxy && chrome.proxy.onProxyError && chrome.proxy.onProxyError.addLi
     const errDesc = details && details.error ? details.error : "unknown";
     const fatal = details && details.fatal;
     console.warn("[PEC] onProxyError:", errDesc, fatal ? "(FATAL - request failed)" : "(recovered)");
-    logEvent("error", "Proxy network/PAC error: " + errDesc + (fatal ? " (FATAL - request failed)" : " (recovered)"), details);
+    logEvent("warn", "Proxy network/PAC error: " + errDesc + (fatal ? " (FATAL - request failed)" : " (recovered)"), details);
   });
 }
 
