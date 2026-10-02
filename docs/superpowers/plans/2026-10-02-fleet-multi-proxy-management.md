@@ -456,12 +456,12 @@ Expected: FAIL
 3. In `src/packager.ts`:
 - In `renderBackgroundJs`, inject default proxy ID and user switch permission into background placeholder variables.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx tsx --test test/studioProxySelection.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/views/dashboardView.ts public/dashboard.js src/packager.ts test/studioProxySelection.test.ts
@@ -486,7 +486,7 @@ git commit -m "feat(studio): add default proxy selector and allowUserProxySwitch
 - Produces: Background listener for `SET_ACTIVE_PROXY` action.
 - Produces: Bidirectional sync sending `selectedProxyId` to `/api/sync`.
 
-- [ ] **Step 1: Write failing test in `test/popupProxySwitcher.test.ts`**
+- [x] **Step 1: Write failing test in `test/popupProxySwitcher.test.ts`**
 
 ```typescript
 import { test } from "node:test";
@@ -511,12 +511,12 @@ test("Task 6: popup.js and background.js handle SET_ACTIVE_PROXY action", () => 
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx tsx --test test/popupProxySwitcher.test.ts`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement popup UI, popup controller, and background handling**
+- [x] **Step 3: Implement popup UI, popup controller, and background handling**
 
 1. In `src/templates/popupHtmlTemplate.ts`:
 - On `#tab-routing`, immediately above `#cardCorporateRules`, add:
@@ -551,12 +551,12 @@ Expected: FAIL
   - Include `selectedProxyId: currentProxyState.activeProxyId` in body of `/api/sync`.
   - Read `availableProxies`, `activeProxyId`, `allowUserProxySwitch` from server response.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx tsx --test test/popupProxySwitcher.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/templates/popupHtmlTemplate.ts src/templates/popupJsTemplate.ts src/templates/backgroundTemplate.ts extension/popup.html extension/popup.js extension/background.js test/popupProxySwitcher.test.ts
@@ -574,27 +574,27 @@ git commit -m "feat(extension): implement client proxy switcher dropdown and bid
 - Run: `npm test`
 - Run: `npm run build`
 
-- [ ] **Step 1: Synchronize templates**
+- [x] **Step 1: Synchronize templates**
 
 Run: `npm run sync:templates`  
 Expected: Output `[sync:templates] Successfully synchronized extension templates to extension/*`
 
-- [ ] **Step 2: Run purity tests**
+- [x] **Step 2: Run purity tests**
 
 Run: `npx tsx --test test/purity.test.ts`  
 Expected: 23+ tests passing, 0 failures, 1:1 parity intact.
 
-- [ ] **Step 3: Run TypeScript linter**
+- [x] **Step 3: Run TypeScript linter**
 
 Run: `npm run lint`  
 Expected: 0 errors.
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 Run: `npm test`  
 Expected: All 275+ tests pass with 0 failures.
 
-- [ ] **Step 5: Run production build**
+- [x] **Step 5: Run production build**
 
 Run: `npm run build`  
 Expected: Exit code 0, `dist/server.cjs` created.
