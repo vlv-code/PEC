@@ -383,16 +383,31 @@ async function updateActiveTabBadge(tabId, url) {
   }
 }
 
-// Enable WebRTC leak protection if privacy permission is granted
+// Enable 3-tier WebRTC leak protection if privacy permission is granted
 async function applyWebRtcProtection() {
-  if (chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy) {
+  if (chrome.privacy && chrome.privacy.network) {
+    const net = chrome.privacy.network;
     try {
-      await chrome.privacy.network.webRTCIPHandlingPolicy.set({
-        value: "disable_non_proxied_udp",
-        scope: "regular",
-      });
-      console.log("[PEC] WebRTC IP leak protection enforced.");
-      logEvent("info", "WebRTC IP leak protection enforced (disable_non_proxied_udp)");
+      if (net.webRTCIPHandlingPolicy && net.webRTCIPHandlingPolicy.set) {
+        await net.webRTCIPHandlingPolicy.set({
+          value: "disable_non_proxied_udp",
+          scope: "regular",
+        });
+      }
+      if (net.webRTCMultipleRoutesEnabled && net.webRTCMultipleRoutesEnabled.set) {
+        await net.webRTCMultipleRoutesEnabled.set({
+          value: false,
+          scope: "regular",
+        });
+      }
+      if (net.webRTCNonProxiedUdpEnabled && net.webRTCNonProxiedUdpEnabled.set) {
+        await net.webRTCNonProxiedUdpEnabled.set({
+          value: false,
+          scope: "regular",
+        });
+      }
+      console.log("[PEC] 3-tier WebRTC IP leak protection enforced.");
+      logEvent("info", "WebRTC IP leak protection enforced (disable_non_proxied_udp, no_multiple_routes, no_non_proxied_udp)");
     } catch (e) {
       console.warn("[PEC] Could not set WebRTC IP handling policy:", e);
       logEvent("warn", "Could not set WebRTC IP handling policy: " + (e && e.message ? e.message : e));

@@ -565,22 +565,28 @@ function initPopup() {
       const startMs = Date.now();
       const base = window.__pecServerBase || "";
       try {
-        const c1 = new AbortController();
-        const t1 = setTimeout(() => c1.abort(), 4000);
-        let res = await fetch("https://api.ipify.org?format=json", { signal: c1.signal, cache: "no-store" }).catch(() => null);
-        clearTimeout(t1);
-        if (!res || !res.ok) {
-          const c2 = new AbortController();
-          const t2 = setTimeout(() => c2.abort(), 4000);
-          res = await fetch("https://icanhazip.com", { signal: c2.signal, cache: "no-store" }).catch(() => null);
-          clearTimeout(t2);
-        }
-        if (!res || !res.ok) {
-          res = await fetch(base + "/api/ip-echo", { cache: "no-store" }).catch(() => null);
-        }
-        if (!res || !res.ok) {
-          res = await fetch(base + "/ip-echo", { cache: "no-store" }).catch(() => null);
-        }
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 4000);
+        const pings = [
+          "https://api.ipify.org?format=json",
+          "https://checkip.amazonaws.com",
+          "https://ipv4.icanhazip.com"
+        ];
+        await Promise.any(
+          pings.map(async (url) => {
+            const res = await fetch(url, { signal: c.signal, cache: "no-store" });
+            if (!res || !res.ok) throw new Error("Ping failed");
+            return true;
+          })
+        ).catch(async () => {
+          if (base) {
+            let res = await fetch(base + "/api/ip-echo", { cache: "no-store" }).catch(() => null);
+            if (!res || !res.ok) res = await fetch(base + "/ip-echo", { cache: "no-store" }).catch(() => null);
+            if (!res || !res.ok) throw new Error("All ping fallbacks failed");
+          }
+        });
+        clearTimeout(t);
+        c.abort();
         const latencyMs = Date.now() - startMs;
         if (pingVal) {
           pingVal.textContent = latencyMs + " ms";
@@ -617,50 +623,49 @@ function initPopup() {
         return false;
       }
 
-      async function fetchCandidate(url, isJson, key) {
-        try {
-          const c = new AbortController();
-          const t = setTimeout(() => c.abort(), 3500);
-          const res = await fetch(url, { signal: c.signal, cache: "no-store" }).catch(() => null);
-          clearTimeout(t);
-          if (!res || !res.ok) return null;
-          if (isJson) {
-            const data = await res.json().catch(() => null);
-            const val = data && key ? data[key] : (data && data.ip ? data.ip : null);
-            return isIpAddress(val) ? String(val).trim() : null;
-          }
-          const text = await res.text().catch(() => "");
-          const clean = text.trim();
-          return isIpAddress(clean) ? clean : null;
-        } catch {
-          return null;
-        }
+      const candidates = [
+        { url: "https://api.ipify.org?format=json", isJson: true, key: "ip" },
+        { url: "https://checkip.amazonaws.com", isJson: false },
+        { url: "https://ipv4.icanhazip.com", isJson: false },
+        { url: "https://icanhazip.com", isJson: false },
+        { url: "https://yandex.ru/internet/api/v0/ip", isJson: false }
+      ];
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      try {
+        ip = await Promise.any(
+          candidates.map(async (cand) => {
+            const res = await fetch(cand.url, { signal: controller.signal, cache: "no-store" });
+            if (!res || !res.ok) throw new Error("HTTP error " + (res ? res.status : "unknown"));
+            let val = null;
+            if (cand.isJson) {
+              const data = await res.json();
+              val = data && cand.key ? data[cand.key] : (data && data.ip ? data.ip : null);
+            } else {
+              const text = await res.text();
+              val = text ? text.trim() : null;
+            }
+            if (!isIpAddress(val)) {
+              throw new Error("Invalid IP address");
+            }
+            return String(val).trim();
+          })
+        );
+        clearTimeout(timeoutId);
+        controller.abort();
+      } catch (err) {
+        clearTimeout(timeoutId);
+        controller.abort();
       }
 
-      // 1. Primary: https://api.ipify.org?format=json
-      ip = await fetchCandidate("https://api.ipify.org?format=json", true, "ip");
-
-      // 2. Fast global fallback: https://checkip.amazonaws.com
-      if (!ip) {
-        ip = await fetchCandidate("https://checkip.amazonaws.com", false);
-      }
-
-      // 3. Fallback: https://icanhazip.com
-      if (!ip) {
-        ip = await fetchCandidate("https://icanhazip.com", false);
-      }
-
-      // 4. Reliable Russian provider: https://yandex.ru/internet/api/v0/ip
-      if (!ip) {
-        ip = await fetchCandidate("https://yandex.ru/internet/api/v0/ip", false);
-      }
-
-      // 5. Intranet echo fallback
+      // Fallback to intranet echo endpoint
       if (!ip && base) {
         try {
-          let res = await fetch(base + "/api/ip-echo").catch(() => null);
+          let res = await fetch(base + "/api/ip-echo", { cache: "no-store" }).catch(() => null);
           if (!res || !res.ok) {
-            res = await fetch(base + "/ip-echo").catch(() => null);
+            res = await fetch(base + "/ip-echo", { cache: "no-store" }).catch(() => null);
           }
           if (res && res.ok) {
             const data = await res.json().catch(() => null);
