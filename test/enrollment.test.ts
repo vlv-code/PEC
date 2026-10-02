@@ -19,12 +19,14 @@ test("A1: per-instance token enrollment model", async (t) => {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   t.after(async () => {
+    deleteInstance(testInstanceId);
     clearInstances();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
   let enrolledToken: string = "";
-  const testInstanceId = "corp-laptop-pc-001";
+  const testInstanceId = `corp-laptop-${Date.now()}`;
+  deleteInstance(testInstanceId);
 
   await t.test("1. Initial sync with shared token generates and returns instanceToken", async () => {
     const res = await fetch(`${baseUrl}/api/sync`, {

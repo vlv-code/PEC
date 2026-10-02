@@ -2870,11 +2870,16 @@
         if (inst.status === 'STALE') badge = 'badge-stale';
         else if (inst.status === 'OFFLINE') badge = 'badge-offline';
 
-        const tokenBadge = inst.tokenHash
-          ? `<span class="badge badge-success" title="${isRu ? 'Индивидуальный токен выдан' : 'Enrolled per-instance token'}">🔑 ${isRu ? 'Токен' : 'Token'}</span>`
+        const hasToken = Boolean(inst.tokenHash);
+        const tokenBadge = hasToken
+          ? '<span class="badge badge-success" title="' + (isRu ? 'Индивидуальный токен выдан' : 'Enrolled per-instance token') + '">🔑 ' + (isRu ? 'Токен' : 'Token') + '</span>'
           : (inst.revoked
-            ? `<span class="badge badge-danger" title="${isRu ? 'Токен отозван' : 'Token revoked'}">🚫 ${isRu ? 'Отозван' : 'Revoked'}</span>`
-            : `<span class="badge badge-secondary" title="${isRu ? 'Использует общий токен' : 'Using shared token'}">${isRu ? 'Общий' : 'Shared'}</span>`);
+            ? '<span class="badge badge-danger" title="' + (isRu ? 'Токен отозван' : 'Token revoked') + '">🚫 ' + (isRu ? 'Отозван' : 'Revoked') + '</span>'
+            : '<span class="badge badge-secondary" title="' + (isRu ? 'Использует общий токен' : 'Using shared token') + '">' + (isRu ? 'Общий' : 'Shared') + '</span>');
+
+        const revokeBtnHtml = hasToken
+          ? '<button class="btn btn-sm btn-warning btn-revoke-token" data-id="' + escapeHtml(inst.instanceId) + '" title="' + (isRu ? 'Отозвать индивидуальный токен' : 'Revoke token') + '">🚫</button>'
+          : '';
 
         return `<tr>
           <td>
@@ -2895,7 +2900,7 @@
           </td>
           <td>
             <div style="display: inline-flex; gap: 6px; align-items: center;">
-              ${inst.tokenHash ? `<button class="btn btn-sm btn-warning btn-revoke-token" data-id="${escapeHtml(inst.instanceId)}" title="${isRu ? 'Отозвать индивидуальный токен' : 'Revoke token'}">🚫</button>` : ''}
+              ${revokeBtnHtml}
               <button class="btn btn-sm btn-danger btn-delete-instance" data-id="${escapeHtml(inst.instanceId)}" title="${isRu ? 'Удалить устройство' : 'Delete device'}"><img src="/icons/trash.png" class="icon-inline-sm" alt="del"></button>
             </div>
           </td>
