@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import express, { Router, Request, Response } from "express";
-import { getProxyConfig, registerHeartbeat, enrollInstanceToken, getInstanceMeta } from "../instances.js";
-import { probeProxyTcp } from "../proxies.js";
+import { getProxyConfig, registerHeartbeat, enrollInstanceToken, getInstanceMeta, assignInstanceProxy } from "../instances.js";
+import { probeProxyTcp, getAllProxies, getProxyById, getActiveProxy } from "../proxies.js";
 import { resolveProfileForInstance, getProfileById, generatePacScript, expandRuleDomains } from "../routing.js";
 import { readCurrentCredsAsync } from "../rotate.js";
 import { getBuildConfig } from "../packager.js";
@@ -138,7 +138,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     const xExtToken = Array.isArray(xExtTokenHeader) ? xExtTokenHeader[0] : xExtTokenHeader;
     const token = getSharedToken();
 
-    const { instanceId: bodyInstanceId, version, extensionId, activeProxyMode, group } = req.body || {};
+    const { instanceId: bodyInstanceId, version, extensionId, activeProxyMode, group, selectedProxyId } = req.body || {};
     const headerInstanceId = req.headers["x-instance-id"];
     const rawInstanceId = bodyInstanceId || (Array.isArray(headerInstanceId) ? headerInstanceId[0] : headerInstanceId);
     const instanceId = rawInstanceId ? String(rawInstanceId).trim().slice(0, 128) : undefined;
@@ -155,6 +155,10 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       return res.status(403).json({ detail: "Forbidden" });
     }
 
+    if (selectedProxyId && instanceId) {
+      assignInstanceProxy(instanceId, String(selectedProxyId).trim());
+    }
+
     let issuedInstanceToken: string | undefined;
     if (auth.shouldEnroll && instanceId) {
       if (enrollmentTracker.check(clientHost)) {
@@ -166,6 +170,29 @@ export function createCredsRouter(getSharedToken: () => string): Router {
 
     const currentCreds = await readCurrentCredsAsync();
     const proxyConfig = getProxyConfig();
+
+    const meta = instanceId ? getInstanceMeta(instanceId) : undefined;
+    const assignedProxyId = meta?.assignedProxyId;
+    let effectiveNode = assignedProxyId ? getProxyById(assignedProxyId) : undefined;
+    if (!effectiveNode) {
+      effectiveNode = getActiveProxy();
+    }
+
+    const effectiveCreds = effectiveNode
+      ? {
+          user: effectiveNode.username || (currentCreds ? currentCreds.user : ""),
+          pass: effectiveNode.password || (currentCreds ? currentCreds.pass : ""),
+        }
+      : (currentCreds ? { user: currentCreds.user, pass: currentCreds.pass } : null);
+
+    const effectiveConfig = effectiveNode
+      ? {
+          ...proxyConfig,
+          host: effectiveNode.host,
+          port: effectiveNode.port,
+          protocol: effectiveNode.protocol,
+        }
+      : proxyConfig;
 
     let assignedProfile = resolveProfileForInstance(instanceId, group);
 
@@ -192,7 +219,8 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     // Generate tailored PAC URL for this instance or profile (HMAC signed)
     const pacSecret = process.env.PAC_SIGNING_SECRET || getSharedToken() || "pec-pac-secret";
     const { exp, sig } = signPacUrlParams(assignedProfile.id, pacSecret, 86400);
-    const pacUrl = `${getBaseUrl(req)}/proxy.pac?profileId=${encodeURIComponent(assignedProfile.id)}&exp=${exp}&sig=${sig}`;
+    const pacProxyQuery = effectiveNode ? `&proxyId=${encodeURIComponent(effectiveNode.id)}` : "";
+    const pacUrl = `${getBaseUrl(req)}/proxy.pac?profileId=${encodeURIComponent(assignedProfile.id)}&exp=${exp}&sig=${sig}${pacProxyQuery}`;
 
     recordAudit({
       ip: clientHost,
@@ -202,8 +230,16 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       details: `Instance: ${instanceId || "anon"}, Profile: ${assignedProfile.name}${issuedInstanceToken ? " (enrolled)" : ""}`,
     });
 
+    const availableProxies = getAllProxies(true).map((p) => ({
+      id: p.id,
+      name: p.name || p.host,
+      tag: p.tag,
+      protocol: p.protocol,
+      host: p.host,
+      port: p.port,
+    }));
     const probeTimeout = process.env.NODE_ENV === "test" ? 300 : 1500;
-    const proxyReachable = await probeProxyTcp(proxyConfig.host, proxyConfig.port, probeTimeout);
+    const proxyReachable = await probeProxyTcp(effectiveConfig.host, effectiveConfig.port, probeTimeout);
 
     const bldCfg = getBuildConfig();
     const profileRules = Array.isArray(assignedProfile.rules)
@@ -219,7 +255,10 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       ok: true,
       serverTime: new Date().toISOString(),
       ...(issuedInstanceToken ? { instanceToken: issuedInstanceToken } : {}),
-      creds: currentCreds ? { user: currentCreds.user, pass: currentCreds.pass } : null,
+      activeProxyId: effectiveNode?.id,
+      allowUserProxySwitch: bldCfg.allowUserProxySwitch !== false,
+      availableProxies,
+      creds: effectiveCreds,
       profileId: assignedProfile.id,
       profileName: assignedProfile.name,
       profileDefaultPolicy: assignedProfile.defaultPolicy || "direct",
@@ -228,7 +267,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       uiLayout: bldCfg.uiLayout || "console",
       colorPalette: bldCfg.colorPalette || "cyber",
       config: {
-        ...proxyConfig,
+        ...effectiveConfig,
         pacUrl,
         uiLayout: bldCfg.uiLayout || "console",
         colorPalette: bldCfg.colorPalette || "cyber",
@@ -268,7 +307,12 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       }
     }
 
-    const pacContent = generatePacScript(profile, proxyConfig);
+    const proxyId = typeof req.query.proxyId === "string" ? req.query.proxyId : undefined;
+    const targetNode = proxyId ? getProxyById(proxyId) : undefined;
+    const targetProxyConfig = targetNode
+      ? { ...proxyConfig, host: targetNode.host, port: targetNode.port, protocol: targetNode.protocol, isExplicit: true }
+      : proxyConfig;
+    const pacContent = generatePacScript(profile, targetProxyConfig);
     res.setHeader("Content-Type", "application/x-ns-proxy-autoconfig");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.send(pacContent);

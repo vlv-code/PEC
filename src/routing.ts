@@ -287,14 +287,24 @@ export function expandRuleDomains(rule: RoutingRule): string[] {
 
 // Generate PAC script for a given routing profile and proxy server config
 export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyConfiguration): string {
-  if (proxyConfig.killSwitch || !proxyConfig.enabled) {
+  if (proxyConfig.killSwitch || proxyConfig.enabled === false) {
     return `// Corp Proxy: Kill-Switch Active\nfunction FindProxyForURL(url, host) { return "DIRECT"; }\n`;
   }
 
   const activeProxy = getActiveProxy();
-  const effectiveProtocol = (activeProxy?.protocol || proxyConfig.protocol || "http").toLowerCase();
-  const rawHost = activeProxy?.host || proxyConfig.host || "10.0.0.1";
-  const rawPort = activeProxy?.port || proxyConfig.port || 10809;
+  const isExplicit = Boolean(
+    (proxyConfig as any).isExplicit ||
+    (!("bypassList" in proxyConfig) && !("syncIntervalMs" in proxyConfig))
+  );
+  const effectiveProtocol = (
+    (isExplicit ? proxyConfig.protocol : (activeProxy?.protocol || proxyConfig.protocol)) || "http"
+  ).toLowerCase();
+  const rawHost = (
+    isExplicit ? proxyConfig.host : (activeProxy?.host || proxyConfig.host)
+  ) || "10.0.0.1";
+  const rawPort = (
+    isExplicit ? proxyConfig.port : (activeProxy?.port || proxyConfig.port)
+  ) || 10809;
 
   const safeHost = String(rawHost).replace(/[^a-zA-Z0-9.-]/g, "");
   const safePort = Math.min(65535, Math.max(1, parseInt(String(rawPort), 10) || 10809));
