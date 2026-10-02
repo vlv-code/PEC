@@ -53,6 +53,8 @@ export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
   // low-privilege EXT_SHARED_TOKEN, never ADMIN_TOKEN (which stays server-side).
   defaultToken: process.env.EXT_SHARED_TOKEN || "corp-proxy-secret-token-change-me",
   targetProfileId: "profile_default_split",
+  defaultProxyId: "",
+  allowUserProxySwitch: true,
   autoConfigureProxy: true,
 };
 
@@ -669,6 +671,8 @@ export function generateExtensionFiles(
   const popupJs = renderPopupJs(cfg);
   writeGeneratedFile("popup.js", popupJs, cfg, force);
 
+  const renderedBg = renderBackgroundJs(cfg);
+
   return {
     "manifest.json": manifestJson,
     "icon.png": iconPng,
@@ -676,7 +680,7 @@ export function generateExtensionFiles(
     "icon48.png": icon48,
     "icon128.png": icon128,
     "icon.svg": iconSvg,
-    "background.js": BACKGROUND_TEMPLATE,
+    "background.js": renderedBg,
     "managed_schema.json": MANAGED_SCHEMA_TEMPLATE,
     "popup.html": popupHtml,
     "popup.js": popupJs,
@@ -701,7 +705,7 @@ export async function buildExtensionFiles(cfg: ExtensionBuildConfig): Promise<Re
 
   const files: Record<string, string> = {
     "manifest.json": JSON.stringify(manifest, null, 2),
-    "background.js": BACKGROUND_TEMPLATE,
+    "background.js": renderBackgroundJs(mergedCfg),
     "managed_schema.json": MANAGED_SCHEMA_TEMPLATE,
     "popup.html": renderPopupHtml(mergedCfg, colors),
     "popup.js": renderPopupJs(mergedCfg),

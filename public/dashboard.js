@@ -634,6 +634,7 @@
         phExtDesc: 'Enterprise Chrome extension for automatic proxy synchronization',
         lblServerUrl: 'Sync Server Base URL (API Base URL)',
         phServerUrl: 'https://pec.example.corp',
+        lblBuilderDefaultProxy: 'Default Proxy for Extension Build',
         lblSecPolicies: 'Security & Leak Prevention Policies',
         lblWebrtcShield: 'WebRTC IP Shield (no UDP leak)',
         lblDnsGuard: 'DNS Leak Guard',
@@ -641,6 +642,7 @@
         lblAutoProxy: 'Dynamic Proxy Enforcement',
         lblAllowBypass: 'Allow Temporary User Bypass',
         lblIpGeo: 'Show Egress IP / Geo Verifier',
+        lblAllowUserProxySwitch: 'Allow User Proxy Switching in Extension',
         lblBypassTimeout: 'Bypass Auto-Timeout',
         lblSupportUrl: 'IT Helpdesk Contact',
         phSupportUrl: 'mailto:it-support@corp.local',
@@ -963,6 +965,7 @@
         phExtDesc: 'Корпоративное расширение Chrome для автоматической синхронизации прокси',
         lblServerUrl: 'Сервер синхронизации (API Base URL)',
         phServerUrl: 'https://pec.example.corp',
+        lblBuilderDefaultProxy: 'Прокси по умолчанию для сборки',
         lblSecPolicies: 'Политики безопасности и защита от утечек',
         lblWebrtcShield: 'Защита WebRTC (предотвращение утечки IP)',
         lblDnsGuard: 'Защита DNS (резолв через прокси)',
@@ -970,6 +973,7 @@
         lblAutoProxy: 'Принудительное применение PAC при старте',
         lblAllowBypass: 'Разрешить временный ручной обход',
         lblIpGeo: 'Отображать выходной IP и проверку гео',
+        lblAllowUserProxySwitch: 'Разрешить пользователю переключать прокси в расширении',
         lblBypassTimeout: 'Таймаут ручного обхода',
         lblSupportUrl: 'Контакт службы поддержки',
         phSupportUrl: 'mailto:it-support@corp.local',
@@ -2177,6 +2181,30 @@
         document.getElementById('bldBypassTimeout').value = cfg.bypassTimeoutMinutes || 15;
         document.getElementById('bldSupportUrl').value = cfg.supportUrl || 'mailto:it-support@corp.local';
 
+        const defProxyEl = document.getElementById('builderDefaultProxyId');
+        if (defProxyEl) {
+          if (!currentProxiesList || !currentProxiesList.length) {
+            try {
+              const pRes = await adminFetch('/api/proxies');
+              if (pRes.ok) currentProxiesList = (await pRes.json()) || [];
+            } catch (_) {}
+          }
+          const defaultProxy = (currentProxiesList || []).find(p => p.active);
+          const defaultProxyName = defaultProxy
+            ? (defaultProxy.name || `${defaultProxy.host}:${defaultProxy.port}`)
+            : (currentLang === 'ru' ? 'Активный на сервере' : 'Active Server Node');
+          defProxyEl.innerHTML = `<option value="">${currentLang === 'ru' ? 'По умолчанию (' + esc(defaultProxyName) + ')' : 'Default (' + esc(defaultProxyName) + ')'}</option>` +
+            (currentProxiesList || []).map(p => {
+              const pName = p.name || `${p.host}:${p.port}`;
+              return `<option value="${esc(p.id)}">${esc(pName)} (${esc(p.protocol)})</option>`;
+            }).join('');
+          defProxyEl.value = cfg.defaultProxyId || '';
+        }
+        const allowProxySwitchEl = document.getElementById('builderAllowUserProxySwitch');
+        if (allowProxySwitchEl) {
+          allowProxySwitchEl.checked = cfg.allowUserProxySwitch !== false;
+        }
+
         if (cfg.uiMode) {
           highlightTemplateChip(cfg.uiMode, false);
         } else if (cfg.presetTemplate) {
@@ -2747,6 +2775,8 @@
         showIpGeoCheck: document.getElementById('bldIpGeo').checked,
         bypassTimeoutMinutes: parseInt(document.getElementById('bldBypassTimeout').value, 10) || 15,
         supportUrl: document.getElementById('bldSupportUrl').value.trim(),
+        defaultProxyId: document.getElementById('builderDefaultProxyId') ? document.getElementById('builderDefaultProxyId').value.trim() : undefined,
+        allowUserProxySwitch: document.getElementById('builderAllowUserProxySwitch') ? document.getElementById('builderAllowUserProxySwitch').checked : true,
         presetTemplate: activeTemplatePreset,
         presetStyle: activeStylePreset,
         uiLayout: activeStudioLayout,

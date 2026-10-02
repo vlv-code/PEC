@@ -23,6 +23,8 @@ const SYNC_INTERVAL_MIN = /* __PEC_SYNC_INTERVAL_MIN__ */ 5;
 const BYPASS_TIMEOUT_MIN = /* __PEC_BYPASS_TIMEOUT_MIN__ */ 15;
 const BADGE_ENABLED = /* __PEC_BADGE_ENABLED__ */ true;
 const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
+const DEFAULT_PROXY_ID = "__PEC_DEFAULT_PROXY_ID__";
+const ALLOW_USER_PROXY_SWITCH = /* __PEC_ALLOW_USER_PROXY_SWITCH__ */ true;
 
 // Fail fast on un-substituted build placeholders (loaded extension/ instead of dist/unpacked)
 if (DEFAULT_SERVER_BASE.startsWith("__" + "PEC_")) {

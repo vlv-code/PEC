@@ -25,6 +25,8 @@ const SYNC_INTERVAL_MIN = /* __PEC_SYNC_INTERVAL_MIN__ */ 5;
 const BYPASS_TIMEOUT_MIN = /* __PEC_BYPASS_TIMEOUT_MIN__ */ 15;
 const BADGE_ENABLED = /* __PEC_BADGE_ENABLED__ */ true;
 const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
+const DEFAULT_PROXY_ID = "__PEC_DEFAULT_PROXY_ID__";
+const ALLOW_USER_PROXY_SWITCH = /* __PEC_ALLOW_USER_PROXY_SWITCH__ */ true;
 
 // Fail fast on un-substituted build placeholders (loaded extension/ instead of dist/unpacked)
 if (DEFAULT_SERVER_BASE.startsWith("__" + "PEC_")) {
@@ -1383,11 +1385,15 @@ export function renderBackgroundJs(cfg: {
   bypassAutoTimeoutMinutes?: number;
   badgeIndicator?: boolean;
   targetGroup?: string;
+  defaultProxyId?: string;
+  allowUserProxySwitch?: boolean;
 }): string {
   const serverBase = String(cfg.defaultServerUrl || "https://update.example.com").replace(/\/+$/, "");
   const syncInterval = Math.max(1, Math.round(Number(cfg.syncIntervalMinutes) || 5));
   const bypassTimeout = Math.max(1, Math.round(Number(cfg.bypassAutoTimeoutMinutes) || 15));
   const badgeEnabled = cfg.badgeIndicator === false ? "false" : "true";
+  const defaultProxyId = String(cfg.defaultProxyId || "");
+  const allowSwitch = cfg.allowUserProxySwitch !== false ? "true" : "false";
 
   return BACKGROUND_TEMPLATE
     .replace(/"__PEC_SERVER_BASE__"/g, JSON.stringify(serverBase))
@@ -1398,5 +1404,9 @@ export function renderBackgroundJs(cfg: {
     .replace(/const SYNC_INTERVAL_MIN = [^;]+;/g, `const SYNC_INTERVAL_MIN = ${syncInterval};`)
     .replace(/const BYPASS_TIMEOUT_MIN = [^;]+;/g, `const BYPASS_TIMEOUT_MIN = ${bypassTimeout};`)
     .replace(/const BADGE_ENABLED = [^;]+;/g, `const BADGE_ENABLED = ${badgeEnabled};`)
-    .replace(/"__PEC_TARGET_GROUP__"/g, JSON.stringify(String(cfg.targetGroup || "Default Fleet")));
+    .replace(/"__PEC_TARGET_GROUP__"/g, JSON.stringify(String(cfg.targetGroup || "Default Fleet")))
+    .replace(/"__PEC_DEFAULT_PROXY_ID__"/g, JSON.stringify(defaultProxyId))
+    .replace(/\/\*\s*__PEC_ALLOW_USER_PROXY_SWITCH__\s*\*\/[^\n;]+/g, allowSwitch)
+    .replace(/const DEFAULT_PROXY_ID = [^;]+;/g, `const DEFAULT_PROXY_ID = ${JSON.stringify(defaultProxyId)};`)
+    .replace(/const ALLOW_USER_PROXY_SWITCH = [^;]+;/g, `const ALLOW_USER_PROXY_SWITCH = ${allowSwitch};`);
 }

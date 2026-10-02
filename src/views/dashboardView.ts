@@ -445,6 +445,13 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           <label data-i18n="lblServerUrl">Sync Server Base URL (API Base URL)</label>
           <input type="text" id="bldServerUrl" oninput="onConfigChangeLive()" placeholder="https://pec.example.corp" data-i18n-ph="phServerUrl" />
 
+          <div style="margin-top: 10px; margin-bottom: 12px;">
+            <label for="builderDefaultProxyId" data-i18n="lblBuilderDefaultProxy">Прокси по умолчанию для сборки</label>
+            <select id="builderDefaultProxyId" onchange="onConfigChangeLive()" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
+              <option value="">По умолчанию (Активный на сервере)</option>
+            </select>
+          </div>
+
           <!-- 4. Security & User Feature Policies -->
           <div style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px;">
             <label style="margin-bottom: 8px;" data-i18n="lblSecPolicies">Security & Leak Prevention Policies</label>
@@ -472,6 +479,10 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               <label style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
                 <input type="checkbox" id="bldIpGeo" checked onchange="onConfigChangeLive()" style="width: auto; margin-bottom: 0;" />
                 <span data-i18n="lblIpGeo">Show Egress IP / Geo Verifier</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
+                <input type="checkbox" id="builderAllowUserProxySwitch" checked onchange="onConfigChangeLive()" style="width: auto; margin-bottom: 0;" />
+                <span data-i18n="lblAllowUserProxySwitch">Разрешить переключение прокси</span>
               </label>
             </div>
             
