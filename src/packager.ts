@@ -694,10 +694,14 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     );
   }
 
+  const envSyncInterval = process.env.PEC_SYNC_INTERVAL_MIN || process.env.PEC_SYNC_INTERVAL_MINUTES;
+  const syncInterval = envSyncInterval ? Math.max(1, parseInt(envSyncInterval, 10) || 15) : currentBuildConfig.syncIntervalMinutes;
+
   const buildConfigToPack: ExtensionBuildConfig = {
     ...currentBuildConfig,
     defaultServerUrl: effectiveBaseUrl,
     defaultToken: process.env.EXT_SHARED_TOKEN || currentBuildConfig.defaultToken,
+    ...(syncInterval ? { syncIntervalMinutes: syncInterval } : {}),
   };
 
   // Generate / refresh extension files based on build config to pack

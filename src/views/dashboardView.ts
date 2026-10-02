@@ -404,10 +404,15 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div>
               <label data-i18n="lblSyncInterval">Sync Interval</label>
               <select id="bldSyncInterval" onchange="onConfigChangeLive()">
+                <option value="1" data-i18n="optSync1">Every 1 minute (test)</option>
+                <option value="2" data-i18n="optSync2">Every 2 minutes</option>
                 <option value="5" data-i18n="optSync5">Every 5 minutes</option>
+                <option value="10" data-i18n="optSync10">Every 10 minutes</option>
                 <option value="15" selected data-i18n="optSync15">Every 15 minutes</option>
                 <option value="30" data-i18n="optSync30">Every 30 minutes</option>
                 <option value="60" data-i18n="optSync60">Every 1 hour</option>
+                <option value="120" data-i18n="optSync120">Every 2 hours</option>
+                <option value="360" data-i18n="optSync360">Every 6 hours</option>
               </select>
             </div>
           </div>
