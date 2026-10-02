@@ -13,21 +13,59 @@
     let currentLang = 'ru';
     let currentProxiesList = [];
 
-    // ----------------- Admin Authentication -----------------
+    // ----------------- Admin Authentication & Onboarding -----------------
     // Server-side sessions: the browser never holds the admin token. The
-    // operator logs in once (POST /api/auth/login) and receives an HttpOnly
-    // session cookie; every management API call carries only the CSRF marker
-    // header. Admin routes authenticate via that cookie - the fleet token
-    // (X-Ext-Token) is deliberately NOT accepted there.
+    // operator completes initial setup with ADMIN_TOKEN -> sets login/password,
+    // and logs in with HttpOnly session cookies.
+    function showAuthStep(step) {
+      const screen = document.getElementById('authScreen');
+      if (screen) screen.style.display = 'flex';
+      const stepToken = document.getElementById('authStepToken');
+      const stepCreds = document.getElementById('authStepCredentials');
+      const stepLogin = document.getElementById('authStepLogin');
+      if (stepToken) stepToken.style.display = 'none';
+      if (stepCreds) stepCreds.style.display = 'none';
+      if (stepLogin) stepLogin.style.display = 'none';
+
+      if (step === 'token') {
+        if (stepToken) stepToken.style.display = 'block';
+        const inp = document.getElementById('authTokenInput');
+        if (inp) { inp.value = ''; inp.focus(); }
+      } else if (step === 'credentials') {
+        if (stepCreds) stepCreds.style.display = 'block';
+        const inp = document.getElementById('authNewUsername');
+        if (inp) { inp.value = 'admin'; inp.focus(); }
+      } else {
+        if (stepLogin) stepLogin.style.display = 'block';
+        const inp = document.getElementById('loginUsernameInput');
+        if (inp) inp.focus();
+      }
+    }
+    function hideAuthScreen() {
+      const screen = document.getElementById('authScreen');
+      if (screen) screen.style.display = 'none';
+      const modal = document.getElementById('loginModal');
+      if (modal) modal.style.display = 'none';
+    }
     function showLoginModal() {
-      const m = document.getElementById('loginModal');
-      if (m) m.style.display = 'flex';
-      const i = document.getElementById('loginUsernameInput');
-      if (i) i.focus();
+      showAuthStep('login');
     }
     function hideLoginModal() {
-      const m = document.getElementById('loginModal');
-      if (m) m.style.display = 'none';
+      hideAuthScreen();
+    }
+    function setTokenError(msg) {
+      const el = document.getElementById('authTokenError');
+      if (el) {
+        el.textContent = msg || '';
+        el.style.display = msg ? 'block' : 'none';
+      }
+    }
+    function setAuthCredsError(msg) {
+      const el = document.getElementById('authCredsError');
+      if (el) {
+        el.textContent = msg || '';
+        el.style.display = msg ? 'block' : 'none';
+      }
     }
     function setLoginError(msg) {
       const el = document.getElementById('loginError');
@@ -44,9 +82,91 @@
       const res = await fetch(url, opts);
       if (res.status === 401) {
         loginPendingRetry = { url: url, opts: opts };
-        showLoginModal();
+        showAuthStep('login');
       }
       return res;
+    }
+    async function handleAuthVerifyToken() {
+      const input = document.getElementById('authTokenInput');
+      const token = ((input && input.value) || '').trim();
+      if (!token) {
+        if (input) input.focus();
+        setTokenError('Введите Admin Token');
+        return;
+      }
+      const btn = document.getElementById('btnAuthVerifyToken');
+      if (btn) btn.disabled = true;
+      setTokenError('');
+      try {
+        const res = await fetch('/api/auth/setup-verify', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: token })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          showAuthStep('credentials');
+        } else {
+          setTokenError(data.error || 'Неверный токен администратора');
+        }
+      } catch (e) {
+        setTokenError('Сетевая ошибка: ' + e);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    async function handleAuthSaveCredentials() {
+      const userInput = document.getElementById('authNewUsername');
+      const passInput = document.getElementById('authNewPassword');
+      const passConfInput = document.getElementById('authNewPasswordConfirm');
+      const u = ((userInput && userInput.value) || '').trim();
+      const p = ((passInput && passInput.value) || '');
+      const pc = ((passConfInput && passConfInput.value) || '');
+
+      setAuthCredsError('');
+      if (!u || u.length < 3) {
+        setAuthCredsError('Логин должен содержать от 3 до 64 символов');
+        if (userInput) userInput.focus();
+        return;
+      }
+      if (!p || p.length < 8) {
+        setAuthCredsError('Пароль должен содержать минимум 8 символов');
+        if (passInput) passInput.focus();
+        return;
+      }
+      if (p !== pc) {
+        setAuthCredsError('Пароли не совпадают');
+        if (passConfInput) passConfInput.focus();
+        return;
+      }
+
+      const btn = document.getElementById('btnAuthSaveCredentials');
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/api/auth/setup-credentials', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'pec-dashboard' },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          showAuthStep('login');
+          const banner = document.getElementById('authSetupSuccessBanner');
+          if (banner) banner.style.display = 'block';
+          const loginUser = document.getElementById('loginUsernameInput');
+          if (loginUser) loginUser.value = u;
+          const loginPass = document.getElementById('loginTokenInput');
+          if (loginPass) { loginPass.value = ''; loginPass.focus(); }
+        } else {
+          setAuthCredsError(data.error || 'Ошибка сохранения учётных данных');
+        }
+      } catch (e) {
+        setAuthCredsError('Сетевая ошибка: ' + e);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
     async function handleLoginSubmit() {
       const userInput = document.getElementById('loginUsernameInput');
@@ -68,7 +188,7 @@
         if (res.ok) {
           if (userInput) userInput.value = '';
           if (input) input.value = '';
-          hideLoginModal();
+          hideAuthScreen();
           if (loginPendingRetry) {
             const r = loginPendingRetry;
             loginPendingRetry = null;
@@ -94,7 +214,7 @@
           headers: { 'X-Requested-With': 'pec-dashboard' }
         });
       } catch (e) {}
-      showLoginModal();
+      showAuthStep('login');
     }
     // ----------------- Account settings: change login / password -----------------
     function setCredError(msg) {
@@ -3636,14 +3756,32 @@ ${JSON.stringify(json, null, 2)}`;
         }, 400);
       });
 
-      // First entry: ask the server whether a valid session already exists.
+      // Setup Step 1 & 2 Event Listeners
+      const btnVerify = document.getElementById('btnAuthVerifyToken');
+      if (btnVerify) btnVerify.addEventListener('click', handleAuthVerifyToken);
+      const tokenInp = document.getElementById('authTokenInput');
+      if (tokenInp) tokenInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') handleAuthVerifyToken(); });
+
+      const btnSaveCreds = document.getElementById('btnAuthSaveCredentials');
+      if (btnSaveCreds) btnSaveCreds.addEventListener('click', handleAuthSaveCredentials);
+      const passConfInp = document.getElementById('authNewPasswordConfirm');
+      if (passConfInp) passConfInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') handleAuthSaveCredentials(); });
+
+      // First entry: check auth status (setup required? authenticated?)
       try {
-        const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+        const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
         const data = await res.json();
         if (data && data.authenticated) {
+          hideAuthScreen();
           bootDashboard();
           return;
         }
-      } catch (e) {}
-      showLoginModal();
+        if (data && data.setupRequired) {
+          showAuthStep('token');
+          return;
+        }
+      } catch (e) {
+        console.warn('Auth status check failed:', e);
+      }
+      showAuthStep('login');
     })();

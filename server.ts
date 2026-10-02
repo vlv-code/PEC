@@ -87,13 +87,15 @@ if (PUBLIC_BASE_URL_RAW) {
 const CREDS_STORE = getCredsStorePath();
 
 // Dashboard login credentials (username + password, scrypt-hashed on disk).
-// Bootstrapped once from ADMIN_USERNAME / ADMIN_PASSWORD; without
-// ADMIN_PASSWORD the admin token serves as the initial password so a fresh
-// deployment still needs no extra configuration - the operator is expected
-// to change it in the dashboard settings (Settings -> Account).
+// Initialized from dashboard_auth.json, or awaits first-run onboarding
+// via ADMIN_TOKEN if the file is not yet created.
 const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase() || "admin";
-const credBootstrap = initDashboardCredentials({ username: ADMIN_USERNAME, fallbackPassword: ADMIN_TOKEN });
-if (credBootstrap.usingFallbackPassword) {
+const credBootstrap = initDashboardCredentials({ username: ADMIN_USERNAME, fallbackPassword: ADMIN_TOKEN, autoCreate: false });
+if (credBootstrap.setupRequired) {
+  console.log(
+    "[auth] Initial setup required. Open the dashboard to authenticate with ADMIN_TOKEN and configure your credentials."
+  );
+} else if (credBootstrap.usingFallbackPassword) {
   console.warn(
     "[SECURITY WARNING] Dashboard password defaults to ADMIN_TOKEN (username: " + ADMIN_USERNAME + "). " +
       "Set ADMIN_PASSWORD in .env or change the password in the dashboard settings."
@@ -133,9 +135,17 @@ app.use(express.urlencoded({ extended: true }));
 // /api/sync stays public at the routing layer because it carries its own
 // token verification and sliding-window rate limiter (the extension fleet
 // authenticates there); /api/ip-echo is a diagnostic echo endpoint used by
-// extension popups; /api/auth/login|session power the dashboard login.
+// extension popups; /api/auth/* power the dashboard onboarding and login.
 const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token", createCookieAuthenticator());
-const PUBLIC_API_PATHS = new Set(["/ip-echo", "/sync", "/auth/login", "/auth/session"]);
+const PUBLIC_API_PATHS = new Set([
+  "/ip-echo",
+  "/sync",
+  "/auth/status",
+  "/auth/setup-verify",
+  "/auth/setup-credentials",
+  "/auth/login",
+  "/auth/session",
+]);
 app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   if (PUBLIC_API_PATHS.has(req.path)) {
     return next();

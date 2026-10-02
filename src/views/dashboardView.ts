@@ -861,17 +861,55 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
   </div>
 
-  <div id="loginModal" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
-    <div style="max-width: 420px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px; text-align: center;">
-      <div style="margin-bottom: 8px;"><img src="/icons/lock.png" style="width: 28px; height: 28px;" alt="login"></div>
-      <h2 style="margin: 0 0 8px 0; font-size: 18px;">Authentication Required</h2>
-      <p style="color: #94a3b8; font-size: 12.5px; margin: 0 0 16px 0;">Введите логин и пароль администратора для входа в консоль управления PEC. Учётные данные проверяются на сервере и заменяются HttpOnly-сессией. Это НЕ токен расширений (EXT_SHARED_TOKEN).</p>
-      <input type="text" id="loginUsernameInput" placeholder="Логин" autocomplete="username" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
-      <input type="password" id="loginTokenInput" placeholder="Пароль" autocomplete="current-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
-      <div id="loginError" style="display: none; color: #ef4444; font-size: 12px; margin-bottom: 10px;"></div>
-      <button id="loginSubmitBtn" style="width: 100%;">Войти</button>
+  <!-- Fullscreen Authentication & Onboarding Screen -->
+  <div id="authScreen" style="display: none; position: fixed; inset: 0; z-index: 100000; background: #0b1120; align-items: center; justify-content: center;">
+    <div style="max-width: 440px; width: 92%; background: #131d36; border: 1px solid #22345c; border-radius: 16px; padding: 32px 28px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); box-sizing: border-box;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px;">
+        <img src="/icons/lock.png" style="width: 32px; height: 32px;" alt="PEC Auth">
+        <span style="font-size: 19px; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">PEC Management</span>
+      </div>
+
+      <!-- Step 1: Admin Token (Initial Setup) -->
+      <div id="authStepToken" style="display: none;">
+        <div style="display: inline-block; padding: 3px 10px; border-radius: 9999px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">Шаг 1 из 2 &bull; Первичная настройка</div>
+        <h2 style="margin: 0 0 8px 0; font-size: 18px; color: #f1f5f9;">Инициализация сервера</h2>
+        <p style="color: #94a3b8; font-size: 12.5px; line-height: 1.5; margin: 0 0 18px 0;">Для первого входа введите <code>ADMIN_TOKEN</code> из конфигурации (.env) сервера.</p>
+        <label style="display: block; font-size: 10.5px; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 6px; text-align: left;">Admin Token</label>
+        <input type="password" id="authTokenInput" placeholder="Введите ADMIN_TOKEN" autocomplete="off" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+        <div id="authTokenError" style="display: none; color: #f87171; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 8px 12px; font-size: 12px; margin-bottom: 12px; text-align: left;"></div>
+        <button id="btnAuthVerifyToken" style="width: 100%;">Подтвердить токен &rarr;</button>
+      </div>
+
+      <!-- Step 2: Set Username & Password (Initial Setup) -->
+      <div id="authStepCredentials" style="display: none;">
+        <div style="display: inline-block; padding: 3px 10px; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">Шаг 2 из 2 &bull; Учётная запись</div>
+        <h2 style="margin: 0 0 8px 0; font-size: 18px; color: #f1f5f9;">Создание учётной записи</h2>
+        <p style="color: #94a3b8; font-size: 12.5px; line-height: 1.5; margin: 0 0 16px 0;">Задайте логин и пароль для постоянного входа. После сохранения потребуется войти с новыми данными.</p>
+        <label style="display: block; font-size: 10.5px; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 6px; text-align: left;">Логин администратора</label>
+        <input type="text" id="authNewUsername" placeholder="admin" autocomplete="username" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+        <label style="display: block; font-size: 10.5px; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 6px; text-align: left;">Пароль (от 8 символов)</label>
+        <input type="password" id="authNewPassword" placeholder="••••••••" autocomplete="new-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+        <label style="display: block; font-size: 10.5px; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 6px; text-align: left;">Повторите пароль</label>
+        <input type="password" id="authNewPasswordConfirm" placeholder="••••••••" autocomplete="new-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+        <div id="authCredsError" style="display: none; color: #f87171; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 8px 12px; font-size: 12px; margin-bottom: 12px; text-align: left;"></div>
+        <button id="btnAuthSaveCredentials" style="width: 100%;">Сохранить и перейти ко входу</button>
+      </div>
+
+      <!-- Step 3: Regular Login -->
+      <div id="authStepLogin" style="display: none;">
+        <div id="authSetupSuccessBanner" style="display: none; color: #34d399; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 8px 12px; font-size: 12px; margin-bottom: 14px; text-align: left;">Учётная запись создана! Войдите с новым логином и паролем.</div>
+        <h2 style="margin: 0 0 8px 0; font-size: 18px; color: #f1f5f9;">Вход в консоль</h2>
+        <p style="color: #94a3b8; font-size: 12.5px; line-height: 1.5; margin: 0 0 16px 0;">Введите логин и пароль администратора для входа в консоль управления PEC.</p>
+        <label style="display: block; font-size: 10.5px; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 6px; text-align: left;">Логин</label>
+        <input type="text" id="loginUsernameInput" placeholder="Логин" autocomplete="username" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+        <label style="display: block; font-size: 10.5px; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 6px; text-align: left;">Пароль</label>
+        <input type="password" id="loginTokenInput" placeholder="Пароль" autocomplete="current-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
+        <div id="loginError" style="display: none; color: #f87171; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 8px 12px; font-size: 12px; margin-bottom: 12px; text-align: left;"></div>
+        <button id="loginSubmitBtn" style="width: 100%;">Войти</button>
+      </div>
     </div>
   </div>
+  <div id="loginModal" style="display: none;"></div>
 
   <div id="credsModal" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(3, 7, 18, 0.94); align-items: center; justify-content: center;">
     <div style="max-width: 440px; width: 90%; background: #131d36; border: 1px solid #22345c; border-radius: 12px; padding: 28px;">

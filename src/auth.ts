@@ -160,9 +160,57 @@ interface DashboardCredentials {
   username: string;
   passwordHash: string; // "scrypt$<saltHex>$<hashHex>"
   updatedAt: string;
+  setupCompleted?: boolean;
 }
 
 let credentials: DashboardCredentials | null = null;
+
+export function isSetupRequired(): boolean {
+  if (credentials) {
+    return credentials.setupCompleted !== true;
+  }
+  try {
+    if (fs.existsSync(AUTH_STORE_PATH)) {
+      const data = JSON.parse(fs.readFileSync(AUTH_STORE_PATH, "utf-8"));
+      if (data && typeof data.username === "string" && typeof data.passwordHash === "string") {
+        credentials = data;
+        if (credentials.setupCompleted === undefined) {
+          credentials.setupCompleted = true;
+        }
+        return credentials.setupCompleted !== true;
+      }
+    }
+  } catch (err) {
+    console.warn("[auth] dashboard_auth.json unreadable in isSetupRequired:", err);
+  }
+  return true;
+}
+
+export function resetDashboardCredentialsForTest(): void {
+  credentials = null;
+}
+
+export function setupInitialCredentials(username: string, password: string): { username: string } {
+  if (!isSetupRequired()) {
+    throw new Error("SETUP_ALREADY_COMPLETED");
+  }
+  const cleanUsername = username.trim().toLowerCase();
+  if (!cleanUsername || !/^[a-zA-Z0-9_.-]{3,64}$/.test(cleanUsername)) {
+    throw new Error("INVALID_USERNAME");
+  }
+  if (!password || password.length < 8 || password.length > 128) {
+    throw new Error("INVALID_PASSWORD");
+  }
+
+  credentials = {
+    username: cleanUsername,
+    passwordHash: hashPassword(password),
+    updatedAt: new Date().toISOString(),
+    setupCompleted: true,
+  };
+  persistCredentials();
+  return { username: cleanUsername };
+}
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16);
@@ -185,34 +233,51 @@ function persistCredentials(): void {
 }
 
 /**
- * Load the credential store, creating it on first run. The bootstrap
- * password comes from ADMIN_PASSWORD or falls back to the admin token so a
- * fresh deployment needs no extra configuration; the operator is expected
- * to change it in the dashboard settings.
+ * Load the credential store, creating it on first run if configured.
  */
-export function initDashboardCredentials(bootstrap: { username: string; fallbackPassword: string }): { usingFallbackPassword: boolean } {
+export function initDashboardCredentials(bootstrap: {
+  username: string;
+  fallbackPassword?: string;
+  autoCreate?: boolean;
+}): { usingFallbackPassword: boolean; setupRequired: boolean } {
   try {
     if (fs.existsSync(AUTH_STORE_PATH)) {
       const data = JSON.parse(fs.readFileSync(AUTH_STORE_PATH, "utf-8"));
       if (data && typeof data.username === "string" && typeof data.passwordHash === "string") {
         credentials = data;
-        return { usingFallbackPassword: false };
+        if (credentials.setupCompleted === undefined) {
+          credentials.setupCompleted = true;
+        }
+        return {
+          usingFallbackPassword: false,
+          setupRequired: credentials.setupCompleted !== true,
+        };
       }
     }
   } catch (err) {
     console.warn("[auth] dashboard_auth.json unreadable - re-bootstrapping credentials:", err);
   }
 
+  if (bootstrap.autoCreate === false && !process.env.ADMIN_PASSWORD) {
+    credentials = null;
+    return { usingFallbackPassword: false, setupRequired: true };
+  }
+
   const username = bootstrap.username;
-  const password = process.env.ADMIN_PASSWORD || bootstrap.fallbackPassword;
+  const password = process.env.ADMIN_PASSWORD || bootstrap.fallbackPassword || "";
+  if (!password) {
+    credentials = null;
+    return { usingFallbackPassword: false, setupRequired: true };
+  }
   const usingFallbackPassword = !process.env.ADMIN_PASSWORD;
   credentials = {
     username,
     passwordHash: hashPassword(password),
     updatedAt: new Date().toISOString(),
+    setupCompleted: true,
   };
   persistCredentials();
-  return { usingFallbackPassword };
+  return { usingFallbackPassword, setupRequired: false };
 }
 
 /**
