@@ -155,8 +155,15 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       return res.status(403).json({ detail: "Forbidden" });
     }
 
-    if (selectedProxyId && instanceId) {
-      assignInstanceProxy(instanceId, String(selectedProxyId).trim());
+    const bldCfg = getBuildConfig();
+
+    if (typeof selectedProxyId === "string" && instanceId && bldCfg.allowUserProxySwitch !== false) {
+      const cleanProxyId = selectedProxyId.trim();
+      if (cleanProxyId === "" || cleanProxyId === "default") {
+        assignInstanceProxy(instanceId, undefined);
+      } else if (getProxyById(cleanProxyId)) {
+        assignInstanceProxy(instanceId, cleanProxyId);
+      }
     }
 
     let issuedInstanceToken: string | undefined;
@@ -174,6 +181,9 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     const meta = instanceId ? getInstanceMeta(instanceId) : undefined;
     const assignedProxyId = meta?.assignedProxyId;
     let effectiveNode = assignedProxyId ? getProxyById(assignedProxyId) : undefined;
+    if (effectiveNode && (effectiveNode as any).enabled === false) {
+      effectiveNode = undefined;
+    }
     if (!effectiveNode) {
       effectiveNode = getActiveProxy();
     }
@@ -241,7 +251,6 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     const probeTimeout = process.env.NODE_ENV === "test" ? 300 : 1500;
     const proxyReachable = await probeProxyTcp(effectiveConfig.host, effectiveConfig.port, probeTimeout);
 
-    const bldCfg = getBuildConfig();
     const profileRules = Array.isArray(assignedProfile.rules)
       ? assignedProfile.rules
           .filter((r) => r.enabled)

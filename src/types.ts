@@ -184,6 +184,7 @@ export interface ProxyNode {
   username?: string;               // Auth username
   password?: string;               // Auth password
   isActive: boolean;               // If true, feeds PAC and active creds
+  enabled?: boolean;                // If false, node is disabled
   lastSync?: string;               // ISO timestamp of last sync / rotation
   status?: "OK" | "ERROR" | "IDLE";
   errorMessage?: string;

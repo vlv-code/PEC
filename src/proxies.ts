@@ -96,6 +96,7 @@ export function createProxy(data: CreateProxyInput): ProxyNode {
     username: data.username,
     password: data.password,
     isActive: shouldBeActive,
+    enabled: data.enabled !== undefined ? data.enabled : true,
     lastSync: data.lastSync,
     status: data.status || "OK",
     errorMessage: data.errorMessage,

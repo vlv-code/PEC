@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import express from "express";
 import http from "node:http";
 import { createCredsRouter } from "../src/routes/credsRoutes.js";
-import { createProxy, getAllProxies } from "../src/proxies.js";
+import { createProxy, getAllProxies, updateProxy } from "../src/proxies.js";
 import { assignInstanceProxy, getInstanceMeta, deleteInstance } from "../src/instances.js";
-import { getBuildConfig } from "../src/packager.js";
+import { getBuildConfig, saveBuildConfig } from "../src/packager.js";
 
 function setupApp(sharedToken = "test-sync-multi-token") {
   const app = express();
@@ -222,6 +222,121 @@ test("Task 3: GET /proxy.pac?proxyId=... generates tailored PAC script with targ
       `PAC script must contain SOCKS5 directive for socks5 node: ${res.text}`
     );
   } finally {
+    await close();
+  }
+});
+
+test("Task 3 Fix: When allowUserProxySwitch is false, selectedProxyId in /api/sync is ignored", async () => {
+  const { postSync, close } = setupApp();
+  const instId = "test-sync-switch-disabled-" + Date.now();
+  const origCfg = getBuildConfig();
+
+  try {
+    saveBuildConfig({ allowUserProxySwitch: false });
+
+    const nodeA = createProxy({
+      host: "192.0.2.31",
+      port: 10831,
+      protocol: "socks5",
+      name: "Node Alpha",
+      tag: "node-alpha-fix",
+      type: "manual",
+    });
+
+    const nodeB = createProxy({
+      host: "192.0.2.32",
+      port: 10832,
+      protocol: "socks5",
+      name: "Node Beta",
+      tag: "node-beta-fix",
+      type: "manual",
+    });
+
+    assignInstanceProxy(instId, nodeA.id);
+
+    const switchRes = await postSync({
+      instanceId: instId,
+      selectedProxyId: nodeB.id,
+    });
+
+    assert.equal(switchRes.status, 200);
+    assert.equal(switchRes.json.allowUserProxySwitch, false);
+    // Should still be node A, node B switch was ignored
+    assert.equal(switchRes.json.activeProxyId, nodeA.id);
+    const meta = getInstanceMeta(instId);
+    assert.equal(meta?.assignedProxyId, nodeA.id);
+  } finally {
+    saveBuildConfig({ allowUserProxySwitch: origCfg.allowUserProxySwitch });
+    deleteInstance(instId);
+    await close();
+  }
+});
+
+test("Task 3 Fix: When selectedProxyId is empty string or 'default', assignedProxyId is reset/unassigned", async () => {
+  const { postSync, close } = setupApp();
+  const instId = "test-sync-reset-" + Date.now();
+
+  try {
+    const node = createProxy({
+      host: "192.0.2.41",
+      port: 10841,
+      protocol: "socks5",
+      name: "Node Assigned",
+      tag: "node-assigned-fix",
+      type: "manual",
+    });
+
+    assignInstanceProxy(instId, node.id);
+    assert.equal(getInstanceMeta(instId)?.assignedProxyId, node.id);
+
+    // Send selectedProxyId: "default"
+    const resDefault = await postSync({
+      instanceId: instId,
+      selectedProxyId: "default",
+    });
+    assert.equal(resDefault.status, 200);
+    assert.equal(getInstanceMeta(instId)?.assignedProxyId, undefined);
+
+    // Re-assign and send empty string ""
+    assignInstanceProxy(instId, node.id);
+    assert.equal(getInstanceMeta(instId)?.assignedProxyId, node.id);
+
+    const resEmpty = await postSync({
+      instanceId: instId,
+      selectedProxyId: "   ",
+    });
+    assert.equal(resEmpty.status, 200);
+    assert.equal(getInstanceMeta(instId)?.assignedProxyId, undefined);
+  } finally {
+    deleteInstance(instId);
+    await close();
+  }
+});
+
+test("Task 3 Fix: If effectiveNode is disabled, sync falls back to active proxy", async () => {
+  const { postSync, close } = setupApp();
+  const instId = "test-sync-disabled-node-" + Date.now();
+
+  try {
+    const nodeDisabled = createProxy({
+      host: "192.0.2.51",
+      port: 10851,
+      protocol: "socks5",
+      name: "Node Disabled",
+      tag: "node-disabled-fix",
+      type: "manual",
+      enabled: false,
+    });
+
+    assignInstanceProxy(instId, nodeDisabled.id);
+
+    const res = await postSync({ instanceId: instId });
+    assert.equal(res.status, 200);
+    // Should NOT use the disabled node
+    assert.notEqual(res.json.activeProxyId, nodeDisabled.id);
+    assert.notEqual(res.json.config.host, "192.0.2.51");
+  } finally {
+    deleteInstance(instId);
     await close();
   }
 });
