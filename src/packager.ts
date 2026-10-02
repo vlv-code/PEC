@@ -80,10 +80,43 @@ export function saveBuildConfig(cfg: Partial<ExtensionBuildConfig>): ExtensionBu
 }
 
 export function ensureKeyExists(): crypto.KeyObject {
+  // 1. Explicit PEM string from environment
+  if (process.env.PEC_PRIVATE_KEY_PEM && process.env.PEC_PRIVATE_KEY_PEM.trim()) {
+    const rawPem = process.env.PEC_PRIVATE_KEY_PEM.trim().replace(/\\n/g, "\n");
+    try {
+      return crypto.createPrivateKey(rawPem);
+    } catch (e: any) {
+      console.warn("[packager] Failed to parse PEC_PRIVATE_KEY_PEM, falling back:", e?.message || e);
+    }
+  }
+
+  // 2. Explicit file path from environment
+  if (process.env.PEC_PRIVATE_KEY_PATH && process.env.PEC_PRIVATE_KEY_PATH.trim()) {
+    const keyPath = path.resolve(process.env.PEC_PRIVATE_KEY_PATH.trim());
+    if (fs.existsSync(keyPath)) {
+      try {
+        const pem = fs.readFileSync(keyPath, "utf-8");
+        return crypto.createPrivateKey(pem);
+      } catch (e: any) {
+        console.warn(`[packager] Failed to read private key from ${keyPath}, falling back:`, e?.message || e);
+      }
+    } else {
+      console.warn(`[packager] PEC_PRIVATE_KEY_PATH set but file does not exist: ${keyPath}`);
+    }
+  }
+
+  // 3. Existing extension/key.pem
   if (fs.existsSync(KEY_PATH)) {
     const pem = fs.readFileSync(KEY_PATH, "utf-8");
     return crypto.createPrivateKey(pem);
   }
+
+  // 4. Generate new RSA key with warning
+  console.warn(
+    "[packager] ⚠️ WARNING: No signing key found in PEC_PRIVATE_KEY_PEM, PEC_PRIVATE_KEY_PATH, or extension/key.pem. " +
+    "Generating a new RSA private key. Note: if this server was previously deployed, generating a new key WILL CHANGE " +
+    "the extension ID and break existing GPO forcelist policies! Store your key securely in production."
+  );
 
   // The extension dir may not exist yet (fresh clone, empty Docker volume,
   // isolated test run) - create it before writing the key.
