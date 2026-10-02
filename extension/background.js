@@ -67,7 +67,7 @@ let recentLogs = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecCredsCache", "pecBasePac"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
@@ -80,11 +80,20 @@ try {
       if (res && typeof res.pecEnabled === "boolean") {
         currentProxyState.enabled = res.pecEnabled;
       }
-      if (res && res.pecCredsCache && res.pecCredsCache.user && res.pecCredsCache.pass) {
-        memoryCredsCache = res.pecCredsCache;
-      }
       if (res && res.pecBasePac && typeof res.pecBasePac === "string" && !cachedBasePacText) {
         cachedBasePacText = res.pecBasePac;
+      }
+    });
+  }
+} catch (e) {}
+
+// A3: In-memory session-only storage for proxy credentials (survives service worker restarts, never written to disk)
+try {
+  const sessionStore = (typeof chrome !== "undefined" && chrome.storage && chrome.storage.session) ? chrome.storage.session : null;
+  if (sessionStore && sessionStore.get) {
+    sessionStore.get(["pecCredsCache"], (res) => {
+      if (res && res.pecCredsCache && res.pecCredsCache.user && res.pecCredsCache.pass) {
+        memoryCredsCache = res.pecCredsCache;
       }
     });
   }
@@ -768,8 +777,9 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
               fetchedAt: Date.now(),
             };
             try {
-              if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-                chrome.storage.local.set({ pecCredsCache: memoryCredsCache });
+              const sessionStore = (typeof chrome !== "undefined" && chrome.storage && chrome.storage.session) ? chrome.storage.session : null;
+              if (sessionStore && sessionStore.set) {
+                sessionStore.set({ pecCredsCache: memoryCredsCache });
               }
             } catch (e) {}
             syncSuccessful = true;
@@ -846,8 +856,9 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
           fetchedAt: Date.now(),
         };
         try {
-          if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-            chrome.storage.local.set({ pecCredsCache: memoryCredsCache });
+          const sessionStore = (typeof chrome !== "undefined" && chrome.storage && chrome.storage.session) ? chrome.storage.session : null;
+          if (sessionStore && sessionStore.set) {
+            sessionStore.set({ pecCredsCache: memoryCredsCache });
           }
         } catch (e) {}
         currentProxyState.online = true;
@@ -898,12 +909,13 @@ chrome.webRequest.onAuthRequired.addListener(
       return;
     }
 
-    // Fast path 2: check local storage directly before attempting slow network roundtrip
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-      chrome.storage.local.get(["pecCredsCache"], (stored) => {
+    // Fast path 2: check session storage directly before attempting slow network roundtrip
+    const sessionStore = (typeof chrome !== "undefined" && chrome.storage && chrome.storage.session) ? chrome.storage.session : null;
+    if (sessionStore && sessionStore.get) {
+      sessionStore.get(["pecCredsCache"], (stored) => {
         if (stored && stored.pecCredsCache && stored.pecCredsCache.user && stored.pecCredsCache.pass) {
           memoryCredsCache = stored.pecCredsCache;
-          provideCreds(memoryCredsCache.user, memoryCredsCache.pass, "storage");
+          provideCreds(memoryCredsCache.user, memoryCredsCache.pass, "session");
           return;
         }
 
