@@ -173,11 +173,12 @@ export function isSetupRequired(): boolean {
     if (fs.existsSync(AUTH_STORE_PATH)) {
       const data = JSON.parse(fs.readFileSync(AUTH_STORE_PATH, "utf-8"));
       if (data && typeof data.username === "string" && typeof data.passwordHash === "string") {
-        credentials = data;
-        if (credentials.setupCompleted === undefined) {
-          credentials.setupCompleted = true;
+        const loadedCreds: DashboardCredentials = data;
+        if (loadedCreds.setupCompleted === undefined) {
+          loadedCreds.setupCompleted = true;
         }
-        return credentials.setupCompleted !== true;
+        credentials = loadedCreds;
+        return loadedCreds.setupCompleted !== true;
       }
     }
   } catch (err) {
@@ -244,13 +245,14 @@ export function initDashboardCredentials(bootstrap: {
     if (fs.existsSync(AUTH_STORE_PATH)) {
       const data = JSON.parse(fs.readFileSync(AUTH_STORE_PATH, "utf-8"));
       if (data && typeof data.username === "string" && typeof data.passwordHash === "string") {
-        credentials = data;
-        if (credentials.setupCompleted === undefined) {
-          credentials.setupCompleted = true;
+        const loadedCreds: DashboardCredentials = data;
+        if (loadedCreds.setupCompleted === undefined) {
+          loadedCreds.setupCompleted = true;
         }
+        credentials = loadedCreds;
         return {
           usingFallbackPassword: false,
-          setupRequired: credentials.setupCompleted !== true,
+          setupRequired: loadedCreds.setupCompleted !== true,
         };
       }
     }

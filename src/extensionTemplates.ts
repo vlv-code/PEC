@@ -1176,6 +1176,7 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
     btnSyncShort: isRu ? "Синхронизация" : "Sync",
     btnPower: isRu ? "Включить / Выключить прокси" : "Enable / Disable Proxy",
     btnPause: isRu ? "Приостановить прокси на 15 минут" : "Pause Proxy for 15 min",
+    toggleTheme: isRu ? "Переключить тему (День / Ночь)" : "Toggle theme (Day / Night)",
     btnBypass: isRu ? `Временно отключить (${cfg?.bypassAutoTimeoutMinutes || 15}м)` : `Bypass Proxy Temporarily (${cfg?.bypassAutoTimeoutMinutes || 15}m)`,
     btnResume: isRu ? "Включить прокси" : "Resume Proxy Now",
     corpRules: isRu ? "Корпоративные правила" : "Corporate Rules",
