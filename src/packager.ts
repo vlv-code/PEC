@@ -48,7 +48,7 @@ export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
   supportUrl: "mailto:it-support@corp.local",
   pingTestUrl: "/healthz",
   syncIntervalMinutes: 15,
-  defaultServerUrl: "https://mini-server.ic.local",
+  defaultServerUrl: "https://update.example.com",
   // The fleet token baked into shipped artifacts. It must always be the
   // low-privilege EXT_SHARED_TOKEN, never ADMIN_TOKEN (which stays server-side).
   defaultToken: process.env.EXT_SHARED_TOKEN || "corp-proxy-secret-token-change-me",
@@ -684,7 +684,7 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
 
   const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
   const effectiveBaseUrl = envPublicBase
-    || ((currentBuildConfig.defaultServerUrl && !currentBuildConfig.defaultServerUrl.includes("mini-server.ic.local"))
+    || ((currentBuildConfig.defaultServerUrl && !currentBuildConfig.defaultServerUrl.includes("update.example.com"))
       ? currentBuildConfig.defaultServerUrl.trim().replace(/\/+$/, "")
       : (baseUrl ? baseUrl.trim().replace(/\/+$/, "") : "http://localhost:3000"));
 

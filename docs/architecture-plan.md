@@ -74,16 +74,16 @@ Squid в архитектуру не входит: фильтрацию доме
      - Путь: *User Configuration → Administrative Templates → Google Chrome → Extensions*
      - Политика: **Configure the list of force-installed apps and extensions** (`ExtensionInstallForcelist`):
        ```text
-       <extension_id>;https://mini-server.ic.local/updates/updates.xml
+       <extension_id>;https://update.example.com/updates/updates.xml
        ```
      - Политика: **Extension management settings** (`ExtensionSettings`) — JSON конфигурация:
        ```json
        {
          "<extension_id>": {
            "installation_mode": "force_installed",
-           "update_url": "https://mini-server.ic.local/updates/updates.xml",
+           "update_url": "https://update.example.com/updates/updates.xml",
            "extToken": "<ВАШ_EXT_SHARED_TOKEN_ИЗ_ENV>",
-           "credsUrl": "https://mini-server.ic.local/creds"
+           "credsUrl": "https://update.example.com/creds"
          }
        }
        ```

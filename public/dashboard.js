@@ -2029,7 +2029,7 @@
         document.getElementById('bldDesc').value = cfg.description || 'Enterprise Chrome extension for automatic proxy synchronization';
         const srvInput = document.getElementById('bldServerUrl');
         if (srvInput) {
-          srvInput.value = (cfg.defaultServerUrl && !cfg.defaultServerUrl.includes('mini-server.ic.local'))
+          srvInput.value = (cfg.defaultServerUrl && !cfg.defaultServerUrl.includes('update.example.com'))
             ? cfg.defaultServerUrl
             : window.location.origin;
         }

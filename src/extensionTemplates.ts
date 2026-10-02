@@ -1137,7 +1137,7 @@ export function renderBackgroundJs(cfg: {
   badgeIndicator?: boolean;
   targetGroup?: string;
 }): string {
-  const serverBase = String(cfg.defaultServerUrl || "https://mini-server.ic.local").replace(/\/+$/, "");
+  const serverBase = String(cfg.defaultServerUrl || "https://update.example.com").replace(/\/+$/, "");
   const syncInterval = Math.max(1, Math.round(Number(cfg.syncIntervalMinutes) || 5));
   const bypassTimeout = Math.max(1, Math.round(Number(cfg.bypassAutoTimeoutMinutes) || 15));
   const badgeEnabled = cfg.badgeIndicator === false ? "false" : "true";
