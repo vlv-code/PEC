@@ -331,7 +331,7 @@ async function updateActiveTabBadge(tabId, url) {
     }
 
     if (currentProxyState.bypassActive) {
-      chrome.action.setBadgeText({ text: "BYP", tabId: tabId });
+      chrome.action.setBadgeText({ text: "●", tabId: tabId });
       if (chrome.action.setBadgeBackgroundColor) {
         chrome.action.setBadgeBackgroundColor({ color: "#f59e0b", tabId: tabId });
       }
@@ -342,9 +342,9 @@ async function updateActiveTabBadge(tabId, url) {
     }
 
     if (currentProxyState.enabled === false) {
-      chrome.action.setBadgeText({ text: "OFF", tabId: tabId });
+      chrome.action.setBadgeText({ text: "●", tabId: tabId });
       if (chrome.action.setBadgeBackgroundColor) {
-        chrome.action.setBadgeBackgroundColor({ color: "#6b7280", tabId: tabId });
+        chrome.action.setBadgeBackgroundColor({ color: "#64748b", tabId: tabId });
       }
       if (chrome.action.setBadgeTextColor) {
         chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
@@ -356,7 +356,7 @@ async function updateActiveTabBadge(tabId, url) {
     const routing = evaluateHostRouting(host);
 
     if (routing === "proxy") {
-      chrome.action.setBadgeText({ text: "ON", tabId: tabId });
+      chrome.action.setBadgeText({ text: "●", tabId: tabId });
       if (chrome.action.setBadgeBackgroundColor) {
         chrome.action.setBadgeBackgroundColor({ color: "#10b981", tabId: tabId });
       }
@@ -364,7 +364,7 @@ async function updateActiveTabBadge(tabId, url) {
         chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
       }
     } else if (routing === "block") {
-      chrome.action.setBadgeText({ text: "BLK", tabId: tabId });
+      chrome.action.setBadgeText({ text: "●", tabId: tabId });
       if (chrome.action.setBadgeBackgroundColor) {
         chrome.action.setBadgeBackgroundColor({ color: "#ef4444", tabId: tabId });
       }
@@ -372,9 +372,9 @@ async function updateActiveTabBadge(tabId, url) {
         chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
       }
     } else {
-      chrome.action.setBadgeText({ text: "DIR", tabId: tabId });
+      chrome.action.setBadgeText({ text: "●", tabId: tabId });
       if (chrome.action.setBadgeBackgroundColor) {
-        chrome.action.setBadgeBackgroundColor({ color: "#f59e0b", tabId: tabId });
+        chrome.action.setBadgeBackgroundColor({ color: "#38bdf8", tabId: tabId });
       }
       if (chrome.action.setBadgeTextColor) {
         chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
@@ -790,9 +790,9 @@ async function applyPacScript(pacUrl, config, forcePacFetch = false) {
     }
   }
   if (currentProxyState.proxyReachable === false) {
-    updateBadge("ERR", "#ef4444");
+    updateBadge("●", "#ef4444");
   } else {
-    updateBadge("P", "#0284c7");
+    updateBadge("●", "#10b981");
   }
   await verifyAppliedProxySettings("pac_script");
 }
@@ -833,7 +833,13 @@ async function applyProxyConfig(config) {
         value: { mode: "direct" },
         scope: "regular",
       });
-      updateBadge("D", "#f59e0b");
+      if (currentProxyState.bypassActive) {
+        updateBadge("●", "#f59e0b");
+      } else if (!isEnabled) {
+        updateBadge("●", "#64748b");
+      } else {
+        updateBadge("●", "#38bdf8");
+      }
       await verifyAppliedProxySettings("direct");
       return;
     }
@@ -870,15 +876,15 @@ async function applyProxyConfig(config) {
       scope: "regular",
     });
     if (currentProxyState.proxyReachable === false) {
-      updateBadge("ERR", "#ef4444");
+      updateBadge("●", "#ef4444");
     } else {
-      updateBadge(scheme === "socks5" ? "S" : "P", "#10b981");
+      updateBadge("●", "#10b981");
     }
     await verifyAppliedProxySettings("fixed_servers");
   } catch (err) {
     console.error("[PEC] Error applying proxy settings:", err);
     logEvent("error", "Error applying proxy settings: " + (err && err.message ? err.message : err));
-    updateBadge("ERR", "#ef4444");
+    updateBadge("●", "#ef4444");
   }
 }
 

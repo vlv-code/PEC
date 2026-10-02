@@ -78,3 +78,58 @@ test("popupHtmlTemplate provides high contrast on action buttons in light mode",
   );
 });
 
+test("dashboard.css protects header .btn-icon sizing and expands customization-popover width", () => {
+  const css = fs.readFileSync(path.resolve("public/dashboard.css"), "utf8");
+
+  assert.ok(
+    css.includes(".btn-icon") && (css.includes("flex-shrink: 0") || css.includes("min-width")),
+    "dashboard.css must protect .btn-icon from shrinking in console header"
+  );
+  assert.ok(
+    /customization-popover[^{]*\{[^}]*width:\s*28[0-9]px/s.test(css),
+    "dashboard.css must set customization popover width to at least 280px"
+  );
+});
+
+test("popupHtmlTemplate standardizes header action elements and terminal tabs symmetry", () => {
+  const html = renderPopupHtml();
+
+  // Header elements (brand-icon, version-tag, btn-theme-toggle, status-badge) unified 24px height
+  assert.match(
+    html,
+    /\.version-tag[^{]*\{[^}]*height:\s*24px/s,
+    "version-tag must be unified to 24px height"
+  );
+  assert.match(
+    html,
+    /\.btn-theme-toggle[^{]*\{[^}]*height:\s*24px/s,
+    "btn-theme-toggle must be unified to 24px height"
+  );
+  assert.match(
+    html,
+    /\.status-badge[^{]*\{[^}]*height:\s*24px/s,
+    "status-badge must be unified to 24px height"
+  );
+
+  // Terminal layout tabs symmetrical borders
+  assert.match(
+    html,
+    /\[data-layout="terminal"\]\s+\.tabs[^{]*\{/s,
+    "popupHtmlTemplate must style terminal layout tabs with clean symmetry"
+  );
+});
+
+test("background.js implements native dot indicator with proxy/direct/bypass/error colors", () => {
+  const bg = fs.readFileSync(path.resolve("extension/background.js"), "utf8");
+
+  assert.ok(
+    bg.includes('text: "●"') || bg.includes("text: '●'"),
+    "background.js must use dot indicator ● instead of letter badges"
+  );
+  assert.ok(
+    bg.includes("#10b981") && bg.includes("#38bdf8") && bg.includes("#f59e0b") && bg.includes("#ef4444") && bg.includes("#64748b"),
+    "background.js must support green (proxy), blue (direct), amber (bypass), red (error), and gray (disabled)"
+  );
+});
+
+

@@ -364,9 +364,10 @@
       background: var(--card-inner);
       border: 1px solid var(--border);
       color: var(--text-muted);
-      width: 30px;
-      height: 30px;
-      padding: 0;
+      width: 32px;
+      min-width: 32px;
+      height: 32px;
+      padding: 0 !important;
       border-radius: 6px;
       display: inline-flex;
       align-items: center;
@@ -374,6 +375,7 @@
       cursor: pointer;
       transition: all 0.15s ease;
       line-height: 1;
+      flex-shrink: 0;
     }
     .btn-icon:hover {
       background: rgba(255, 255, 255, 0.08);
@@ -389,7 +391,7 @@
       position: absolute;
       right: 0;
       top: calc(100% + 6px);
-      width: 250px;
+      width: 285px;
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -467,9 +469,16 @@
       font-family: var(--mono);
     }
     body[data-layout="console"] .customization-popover,
-    body[data-layout="console"] .popover-layout-btn,
+    body[data-layout="console"] .popover-layout-btn {
+      border-radius: 4px;
+    }
     body[data-layout="console"] .btn-icon {
       border-radius: 4px;
+      width: 32px !important;
+      min-width: 32px !important;
+      height: 32px !important;
+      padding: 0 !important;
+      flex-shrink: 0 !important;
     }
 
     /* Universal Modern Scrollbar (removes Windows retro scrollbar) */
