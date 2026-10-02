@@ -1153,9 +1153,13 @@
         const id = b.id || '';
         return oc.includes(name) ||
           ((name === 'rotation' || name === 'proxy-settings') && (oc.includes('rotation') || oc.includes('proxy-settings'))) ||
-          ((name === 'fleet' || name === 'instances') && (oc.includes('fleet') || oc.includes('instances') || id === 'tab-instances' || id === 'tabBtnFleet'));
+          ((name === 'fleet' || name === 'instances') && (oc.includes('fleet') || oc.includes('instances') || id === 'tabBtnInstances' || id === 'tab-instances' || id === 'tabBtnFleet'));
       });
       if (btn) btn.classList.add('active');
+
+      if (name === 'instances' || name === 'fleet') {
+        loadInstances();
+      }
     }
 
     // ----------------- Routing & Profiles -----------------

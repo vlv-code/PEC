@@ -149,7 +149,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     <div class="tabs-nav">
       <button id="tabBtnRouting" class="tab-btn active" onclick="switchTab('routing')" data-i18n="tabBtnRouting"><img src="/icons/routing.png" class="icon-inline" alt="routing"> Routing & GeoBases</button>
       <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder"><img src="/icons/palette.png" class="icon-inline" alt="builder"> Extension Constructor Studio</button>
-      <button id="tab-instances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances"><img src="/icons/devices.png" class="icon-inline" alt="devices"> Устройства</button>
+      <button id="tabBtnInstances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances"><img src="/icons/devices.png" class="icon-inline" alt="devices"> Устройства</button>
       <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo"><img src="/icons/building.png" class="icon-inline" alt="gpo"> GPO Deployment</button>
       <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings"><img src="/icons/server.png" class="icon-inline" alt="proxy"> Proxy Settings</button>
       <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs"><img src="/icons/logs.png" class="icon-inline" alt="logs"> Audit & Tester</button>
