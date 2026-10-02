@@ -1,0 +1,834 @@
+import type { ExtensionBuildConfig } from "../types.js";
+import { getPopupTranslations } from "./translations.js";
+
+export function renderPopupHtml(cfg?: ExtensionBuildConfig, colors?: Record<string, string>): string {
+  const safeCfg = cfg || ({} as ExtensionBuildConfig);
+  const t = getPopupTranslations(safeCfg);
+  const palette = (safeCfg as any).colorPalette || "cyber";
+  const layout = (safeCfg as any).uiLayout || "console";
+  const themeMode = (safeCfg as any).defaultThemeMode || "dark";
+  const effectiveColors = {
+    primary: safeCfg.themeColor || "#38bdf8",
+    bg: safeCfg.themeBackground || "#0b1120",
+    card: safeCfg.themeCard || "#131d36",
+    border: "#334155",
+    text: "#f8fafc",
+    ...colors,
+  };
+
+  return `<!DOCTYPE html>
+<html lang="${safeCfg.locale || "ru"}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${safeCfg.name || "PEC Corp Proxy"}</title>
+  <style>
+    :root, [data-theme="dark"] {
+      --primary: ${effectiveColors.primary};
+      --bg: ${effectiveColors.bg};
+      --card: ${effectiveColors.card};
+      --card-inner: #1e293b;
+      --border: ${effectiveColors.border};
+      --text: ${effectiveColors.text};
+      --text-muted: #94a3b8;
+      --primary-rgb: 56, 189, 248;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --border-color: var(--border);
+      --text-main: var(--text);
+      --bg-hover: rgba(255, 255, 255, 0.08);
+      --accent-color: var(--primary);
+    }
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --card-inner: #f1f5f9;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --border-color: var(--border);
+      --text-main: var(--text);
+      --bg-hover: rgba(0, 0, 0, 0.06);
+      --accent-color: var(--primary);
+    }
+
+    /* 5 Color Palettes */
+    [data-palette="cyber"] { --primary: #38bdf8; --primary-rgb: 56, 189, 248; }
+    [data-palette="obsidian"] { --primary: #c084fc; --primary-rgb: 192, 132, 252; }
+    [data-palette="obsidian"]:not([data-theme="light"]), [data-palette="obsidian"][data-theme="dark"] {
+      --bg: #09090b; --card: #18181b; --card-inner: #27272a; --border: #3f3f46;
+    }
+    [data-palette="obsidian"][data-theme="light"] {
+      --bg: #faf5ff; --card: #ffffff; --card-inner: #f3e8ff; --border: #e9d5ff;
+    }
+    [data-palette="nord"] { --primary: #88c0d0; --primary-rgb: 136, 192, 208; }
+    [data-palette="nord"]:not([data-theme="light"]), [data-palette="nord"][data-theme="dark"] {
+      --bg: #242933; --card: #2e3440; --card-inner: #3b4252; --border: #4c566a;
+    }
+    [data-palette="nord"][data-theme="light"] {
+      --bg: #eceff4; --card: #ffffff; --card-inner: #e5e9f0; --border: #d8dee9;
+    }
+    [data-palette="emerald"] { --primary: #34d399; --primary-rgb: 52, 211, 153; }
+    [data-palette="emerald"]:not([data-theme="light"]), [data-palette="emerald"][data-theme="dark"] {
+      --bg: #061e14; --card: #0d3322; --card-inner: #134e35; --border: #1a6344;
+    }
+    [data-palette="emerald"][data-theme="light"] {
+      --bg: #f0fdf4; --card: #ffffff; --card-inner: #dcfce7; --border: #bbf7d0;
+    }
+    [data-palette="light"] { --primary: #2563eb; --primary-rgb: 37, 99, 235; }
+    [data-palette="light"]:not([data-theme="light"]), [data-palette="light"][data-theme="dark"] {
+      --bg: #0f172a; --card: #1e293b; --card-inner: #334155; --border: #475569;
+    }
+    [data-palette="light"][data-theme="light"] {
+      --bg: #f8fafc; --card: #ffffff; --card-inner: #f1f5f9; --border: #cbd5e1;
+    }
+
+    /* Layout Terminal & Console: 0px razor-sharp retro-terminal corners matching dashboard */
+    [data-layout="terminal"],
+    [data-layout="terminal"] *,
+    [data-layout="terminal"] *::before,
+    [data-layout="terminal"] *::after,
+    [data-layout="console"],
+    [data-layout="console"] *,
+    [data-layout="console"] *::before,
+    [data-layout="console"] *::after {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+      border-radius: 0 !important;
+    }
+    [data-layout="terminal"] .card,
+    [data-layout="console"] .card {
+      border-radius: 0 !important;
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.2);
+    }
+    [data-layout="terminal"] .btn-sec,
+    [data-layout="terminal"] .btn-sm,
+    [data-layout="terminal"] .form-input,
+    [data-layout="terminal"] .form-select,
+    [data-layout="terminal"] .btn-primary-sm,
+    [data-layout="terminal"] .btn-quick-add,
+    [data-layout="terminal"] .tab-btn,
+    [data-layout="terminal"] .badge,
+    [data-layout="terminal"] .tag,
+    [data-layout="terminal"] .switch,
+    [data-layout="terminal"] .slider,
+    [data-layout="terminal"] .status-dot,
+    [data-layout="terminal"] .btn-icon,
+    [data-layout="console"] .btn-sec,
+    [data-layout="console"] .btn-sm,
+    [data-layout="console"] .form-input,
+    [data-layout="console"] .form-select,
+    [data-layout="console"] .btn-primary-sm,
+    [data-layout="console"] .btn-quick-add,
+    [data-layout="console"] .tab-btn,
+    [data-layout="console"] .badge,
+    [data-layout="console"] .tag,
+    [data-layout="console"] .switch,
+    [data-layout="console"] .slider,
+    [data-layout="console"] .status-dot,
+    [data-layout="console"] .btn-icon {
+      border-radius: 0 !important;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 380px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.4;
+      user-select: none;
+      transition: background 0.2s, color 0.2s;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .brand-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #0b1120;
+      flex-shrink: 0;
+    }
+    .version-tag {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--card-inner);
+      padding: 1px 5px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .btn-theme-toggle {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.15s;
+    }
+    .btn-theme-toggle:hover {
+      background: var(--border);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+    .status-badge.offline {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .status-badge.offline .dot { background: var(--danger); }
+    .status-badge.bypass {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+    .status-badge.bypass .dot { background: var(--warning); }
+
+    /* Tabs */
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 7px 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+      background: var(--card-inner);
+    }
+    .tab-btn.active {
+      background: var(--card);
+      color: var(--primary);
+      border-color: var(--border);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Cards */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .tab-content > .card:last-child {
+      margin-bottom: 0;
+    }
+    .card-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-icon-minimal {
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    .btn-icon-minimal:hover {
+      background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+      border-color: var(--accent-color);
+    }
+    .btn-icon-minimal:active,
+    .btn-theme-toggle:active,
+    .btn-sm:active,
+    .btn-sec:active,
+    .btn-primary-sm:active,
+    .btn-action:active,
+    .tab-btn:active {
+      transform: translateY(1px) scale(0.95) !important;
+      filter: brightness(0.85) contrast(1.15) !important;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    /* Inline PNG icon pack */
+    .icon-inline {
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .icon-inline-lg {
+      width: 18px;
+      height: 18px;
+      vertical-align: -4px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .icon-inline-sm {
+      width: 12px;
+      height: 12px;
+      vertical-align: -1px;
+      display: inline-block;
+      object-fit: contain;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .card-title {
+      font-weight: 700;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--card-inner);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .tag.corp-tag {
+      color: var(--primary);
+      border-color: rgba(56, 189, 248, 0.3);
+      background: rgba(56, 189, 248, 0.1);
+    }
+    .tag.user-tag {
+      color: var(--warning);
+      border-color: rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.1);
+    }
+
+    /* Hero Card in Conn Tab */
+    .hero-card {
+      text-align: center;
+      padding: 14px 12px;
+    }
+    .hero-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .status-orb {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.2);
+      border: 2px solid var(--danger);
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+      transition: all 0.3s;
+    }
+    .status-orb.active {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--success);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+    }
+    .status-orb.bypass {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--warning);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+    }
+    .hero-status-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .hero-meta {
+      background: var(--card-inner);
+      border-radius: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
+      font-size: 11px;
+    }
+    .meta-label { color: var(--text-muted); }
+    .meta-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 600;
+      color: var(--text);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 3 Action Buttons */
+    .action-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .btn-action {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 4px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .btn-action:hover {
+      background: var(--card-inner);
+      border-color: var(--primary);
+    }
+    .btn-action:active {
+      transform: scale(0.98);
+    }
+    .action-icon {
+      color: var(--primary);
+    }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    button.btn-icon-minimal.spin, button.spin { animation: none !important; }
+    .sync-icon { display: inline-block; line-height: 1; transform-origin: center center; }
+    .sync-icon.spin, span.spin { display: inline-block; animation: spin 0.8s linear infinite; transform-origin: center center; }
+    .action-label {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    /* Rows */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .label { color: var(--text-muted); font-size: 11px; }
+    .val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .val.success-val { color: var(--success); }
+    .row-action {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Form and Inputs in Routing */
+    .rules-notice {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    .btn-quick-add {
+      width: 100%;
+      background: var(--card-inner);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      color: var(--primary);
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      margin-bottom: 8px;
+      transition: all 0.15s;
+    }
+    .btn-quick-add:hover {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.05);
+    }
+    .rule-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .form-input {
+      width: 100%;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      color: var(--text);
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      outline: none;
+    }
+    .form-input:focus {
+      border-color: var(--primary);
+    }
+    .rule-form-row {
+      display: flex;
+      gap: 6px;
+    }
+    .form-select {
+      flex: 1;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      color: var(--text);
+      font-size: 11px;
+      outline: none;
+    }
+    .btn-primary-sm {
+      background: var(--primary);
+      color: #0b1120;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary-sm:hover { opacity: 0.9; }
+
+    .user-rules-list {
+      max-height: 140px;
+      overflow-y: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+      margin-top: 4px;
+    }
+    .empty-rules {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 10px 0;
+    }
+    .user-rule-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 11px;
+      border-bottom: 1px dashed var(--border);
+    }
+    .user-rule-item:last-child { border-bottom: none; }
+    .rule-pattern {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .rule-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rule-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .rule-badge.proxy {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+    }
+    .rule-badge.direct {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+    .rule-del-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    .rule-del-btn:hover {
+      color: var(--danger);
+    }
+
+    /* Diagnostics & Terminal */
+    .btn-sm {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-sm:hover {
+      background: var(--border);
+    }
+    .log-terminal {
+      background: #050914;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      color: #94a3b8;
+      height: 120px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin: 4px 0 8px 0;
+    }
+    [data-theme="light"] .log-terminal {
+      background: #0f172a;
+      color: #cbd5e1;
+    }
+    .log-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-sec {
+      flex: 1;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-weight: 500;
+      padding: 5px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .btn-sec:hover { background: var(--border); }
+  </style>
+</head>
+<body data-palette="${palette}" data-layout="${layout}" data-theme="${themeMode}">
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <span>${safeCfg.shortName || safeCfg.name || "PEC"}</span>
+      <span class="version-tag">v${safeCfg.version || "1.4.0"}</span>
+    </div>
+    <div class="header-actions">
+      <button id="btnThemeToggle" class="btn-theme-toggle" title="${t.toggleTheme || "Переключить тему (День / Ночь)"}" aria-label="Toggle theme"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg></button>
+      <div class="status-badge offline" id="statusPill">
+        <span class="dot"></span>
+        <span id="statusText">${t.offline}</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">${t.tabConn || "Главная"}</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">${t.tabRules || "Роутинг"}</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">${t.tabDiag || "Инфо"}</button>
+  </div>
+
+  <!-- TAB 1: Main (Главная) -->
+  <div class="tab-content active" id="tab-status">
+    <div class="card" id="cardConnection">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><path d="M9 2v6M15 2v6M6 8h12a2 2 0 0 1 2 2v2a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6v-2a2 2 0 0 1 2-2zM12 18v4"/></svg> ${t.connGateway || "Подключение к прокси"}</span>
+        <div class="card-header-actions">
+          <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}"><span class="sync-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg></span></button>
+          <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg></button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || "Приостановить прокси на 15 минут"}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg></button>
+        </div>
+      </div>
+      <div class="hero-meta">
+        <div class="meta-row">
+          <span class="meta-label">${t.routingProfile}</span>
+          <span class="meta-val" id="profileVal">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">${t.activeEndpoint}</span>
+          <span class="meta-val" id="serverVal">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">${t.proxyMode}</span>
+          <span class="meta-val" id="modeVal">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: Routing -->
+  <div class="tab-content" id="tab-routing">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">${t.corpRules || "Корпоративные правила"}</span>
+        <span class="tag corp-tag">${t.fromServer || "От сервера"}</span>
+      </div>
+      <div class="row" style="margin-top: 6px;">
+        <span class="label">${t.defaultFallback}</span>
+        <span class="tag" id="tabRulesDefaultPolicy">DIRECT</span>
+      </div>
+      <div class="rules-notice" style="margin-top: 8px;">
+        ${t.rulesNotice}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">${t.userOverrides || "Мои исключения"}</span>
+        <span class="tag user-tag">${t.localBadge || "Локально"}</span>
+      </div>
+      <button id="btnAddCurrentSite" class="btn-quick-add" style="display: none;">
+        ${t.addCurrentSite || "+ Добавить текущий сайт"}
+      </button>
+      <div class="rule-form">
+        <input type="text" id="inputPattern" placeholder="${t.patternPlaceholder || "*.example.com или домен"}" class="form-input" autocomplete="off" spellcheck="false">
+        <div class="rule-form-row">
+          <select id="selectAction" class="form-select">
+            <option value="PROXY">${t.throughProxy || "PROXY (через прокси)"}</option>
+            <option value="DIRECT">${t.directConn || "DIRECT (напрямую)"}</option>
+          </select>
+          <button id="btnAddRule" class="btn-primary-sm">${t.addRule || "+ Добавить"}</button>
+        </div>
+      </div>
+      <div id="userRulesList" class="user-rules-list">
+        <div class="empty-rules">${t.emptyUserRules || "Нет пользовательских правил"}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: Diagnostics & Info -->
+  <div class="tab-content" id="tab-info">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">${t.connParams || "Параметры соединения"}</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.webrtcShield}</span>
+        <span class="val success-val" id="webrtcVal">${safeCfg.webRtcProtection !== false ? t.webrtcStatus : "Disabled"}</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.dnsGuard}</span>
+        <span class="val success-val" id="dnsVal">${safeCfg.dnsLeakProtection !== false ? t.dnsStatus : "Off"}</span>
+      </div>
+      <div class="row">
+        <span class="label">${t.latency}</span>
+        <div class="row-action">
+          <span class="val" id="pingVal">—</span>
+          <button id="btnTestLatency" class="btn-sm">${t.testBtn || "Тест"}</button>
+        </div>
+      </div>
+      <div class="row">
+        <span class="label">${t.exitIp}</span>
+        <div class="row-action">
+          <span class="val" id="exitIpVal">—</span>
+          <button id="btnCheckIp" class="btn-sm">${t.checkBtn || "Проверить"}</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--border);">
+        <span class="label">${t.helpdesk}</span>
+        <span class="val" style="font-size: 11px;"><a href="${safeCfg.supportUrl || "mailto:it-support@corp.local"}" target="_blank" style="color: var(--primary); text-decoration: none;">${(safeCfg.supportUrl || "it-support@corp.local").replace(/^mailto:/i, "")}</a></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom: 6px;">
+        <span class="label" style="font-weight: 600;">${t.eventLog}</span>
+        <span class="tag" id="logCountTag" style="font-size: 10px;">${t.zeroEntries}</span>
+      </div>
+      <pre id="logContainer" class="log-terminal"></pre>
+      <div class="log-actions">
+        <button id="btnCopyLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> ${t.copyLogs}</button>
+        <button id="btnClearLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> ${t.clearLogs}</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>`;
+}
