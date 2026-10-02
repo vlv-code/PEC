@@ -67,10 +67,13 @@ let currentProxyState = {
 const MAX_LOGS = 100;
 let recentLogs = [];
 let memoryInstanceToken = "";
+let cachedProfileRules = [];
+let cachedProfileDefaultPolicy = "direct";
+let cachedUserRules = [];
 
 try {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac", "pecInstanceToken"], (res) => {
+    chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac", "pecInstanceToken", "pecProfileRules", "pecProfileDefaultPolicy", "pecUserRules"], (res) => {
       if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
         recentLogs = res.pecLogs.slice(-MAX_LOGS);
       }
@@ -89,6 +92,16 @@ try {
       if (res && res.pecInstanceToken && typeof res.pecInstanceToken === "string") {
         memoryInstanceToken = res.pecInstanceToken;
       }
+      if (res && Array.isArray(res.pecProfileRules)) {
+        cachedProfileRules = res.pecProfileRules;
+      }
+      if (res && typeof res.pecProfileDefaultPolicy === "string") {
+        cachedProfileDefaultPolicy = res.pecProfileDefaultPolicy;
+      }
+      if (res && Array.isArray(res.pecUserRules)) {
+        cachedUserRules = res.pecUserRules;
+      }
+      updateActiveTabBadge();
     });
   }
 } catch (e) {}
@@ -211,6 +224,164 @@ function updateBadge(text, color) {
         chrome.action.setBadgeTextColor({ color: "#ffffff" });
       }
     } catch {}
+  }
+}
+
+// Clean wildcard and suffix domain matching for host evaluation
+function domainMatchesPattern(host, pattern) {
+  if (!host || !pattern) return false;
+  host = String(host).toLowerCase().trim();
+  pattern = String(pattern).toLowerCase().trim();
+  if (pattern.indexOf("://") !== -1) {
+    try {
+      pattern = new URL(pattern).hostname;
+    } catch (e) {
+      pattern = (pattern.split("://")[1] || pattern).split("/")[0].split(":")[0];
+    }
+  } else if (pattern.indexOf("/") !== -1) {
+    pattern = pattern.split("/")[0].trim();
+  }
+  if (pattern.indexOf(":") !== -1 && pattern.indexOf("]") === -1) {
+    pattern = pattern.split(":")[0].trim();
+  }
+  pattern = pattern.replace(/["'\\\\;]/g, "").trim();
+  if (!pattern) return false;
+
+  if (host === pattern) return true;
+  if (pattern.startsWith("*.")) {
+    const suffix = pattern.slice(2);
+    return host === suffix || host.endsWith("." + suffix);
+  }
+  if (pattern.startsWith(".")) {
+    const suffix = pattern.slice(1);
+    return host === suffix || host.endsWith("." + suffix);
+  }
+  return host === pattern || host.endsWith("." + pattern);
+}
+
+// Evaluate routing for a given hostname based on user overrides and profile rules
+function evaluateHostRouting(host) {
+  if (!host) return "direct";
+  host = String(host).toLowerCase().trim();
+
+  // 1. User overrides take precedence
+  if (Array.isArray(cachedUserRules)) {
+    for (let i = 0; i < cachedUserRules.length; i++) {
+      const rule = cachedUserRules[i];
+      if (rule && rule.enabled !== false && rule.pattern && domainMatchesPattern(host, rule.pattern)) {
+        return rule.action === "proxy" || rule.action === "block" ? rule.action : "direct";
+      }
+    }
+  }
+
+  // 2. Profile rules
+  if (Array.isArray(cachedProfileRules)) {
+    for (let i = 0; i < cachedProfileRules.length; i++) {
+      const rule = cachedProfileRules[i];
+      if (rule && rule.action && Array.isArray(rule.domains)) {
+        for (let j = 0; j < rule.domains.length; j++) {
+          const dom = rule.domains[j];
+          if (dom && domainMatchesPattern(host, dom)) {
+            return rule.action === "proxy" || rule.action === "block" ? rule.action : "direct";
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Fallback to profile default policy
+  return cachedProfileDefaultPolicy === "proxy" ? "proxy" : "direct";
+}
+
+// Update toolbar action badge reflecting the active tab's routing
+async function updateActiveTabBadge(tabId, url) {
+  if (!BADGE_ENABLED) return;
+  if (typeof chrome === "undefined" || !chrome.action || !chrome.action.setBadgeText) return;
+
+  try {
+    if (!tabId || !url) {
+      if (chrome.tabs && chrome.tabs.query) {
+        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (Array.isArray(tabs) && tabs.length > 0 && tabs[0]) {
+          tabId = tabs[0].id;
+          url = tabs[0].url;
+        }
+      }
+    }
+
+    if (!tabId) return;
+
+    if (!url || typeof url !== "string") {
+      chrome.action.setBadgeText({ text: "", tabId: tabId });
+      return;
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      chrome.action.setBadgeText({ text: "", tabId: tabId });
+      return;
+    }
+
+    // Don't badge internal browser pages
+    if (parsedUrl.protocol === "chrome:" || parsedUrl.protocol === "chrome-extension:" || parsedUrl.protocol === "edge:" || parsedUrl.protocol === "about:") {
+      chrome.action.setBadgeText({ text: "", tabId: tabId });
+      return;
+    }
+
+    if (currentProxyState.bypassActive) {
+      chrome.action.setBadgeText({ text: "BYP", tabId: tabId });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color: "#f59e0b", tabId: tabId });
+      }
+      if (chrome.action.setBadgeTextColor) {
+        chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
+      }
+      return;
+    }
+
+    if (currentProxyState.enabled === false) {
+      chrome.action.setBadgeText({ text: "OFF", tabId: tabId });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color: "#6b7280", tabId: tabId });
+      }
+      if (chrome.action.setBadgeTextColor) {
+        chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
+      }
+      return;
+    }
+
+    const host = parsedUrl.hostname;
+    const routing = evaluateHostRouting(host);
+
+    if (routing === "proxy") {
+      chrome.action.setBadgeText({ text: "ON", tabId: tabId });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color: "#10b981", tabId: tabId });
+      }
+      if (chrome.action.setBadgeTextColor) {
+        chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
+      }
+    } else if (routing === "block") {
+      chrome.action.setBadgeText({ text: "BLK", tabId: tabId });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color: "#ef4444", tabId: tabId });
+      }
+      if (chrome.action.setBadgeTextColor) {
+        chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
+      }
+    } else {
+      chrome.action.setBadgeText({ text: "DIR", tabId: tabId });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color: "#f59e0b", tabId: tabId });
+      }
+      if (chrome.action.setBadgeTextColor) {
+        chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
+      }
+    }
+  } catch (badgeErr) {
+    // Graceful fallback
   }
 }
 
@@ -832,6 +1003,22 @@ async function syncWithServer(forceRefresh = false, applyConfig = true) {
             persistProxyState();
             logEvent("info", "Sync successful: profile=" + currentProxyState.profileName + ", mode=" + currentProxyState.protocol + ", host=" + (currentProxyState.host || "pac"));
 
+            if (Array.isArray(payload.profileRules)) {
+              cachedProfileRules = payload.profileRules;
+            }
+            if (payload.profileDefaultPolicy) {
+              cachedProfileDefaultPolicy = payload.profileDefaultPolicy;
+            }
+            try {
+              if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+                chrome.storage.local.set({
+                  pecProfileRules: cachedProfileRules,
+                  pecProfileDefaultPolicy: cachedProfileDefaultPolicy,
+                });
+              }
+            } catch (e) {}
+            updateActiveTabBadge();
+
             if (!proxyReachable) {
               logEvent("warn", "Configured proxy " + (currentProxyState.host || "") + ":" + currentProxyState.port + " is unreachable from server");
             }
@@ -1016,9 +1203,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const rules = Array.isArray(msg.rules) ? msg.rules : [];
     (async () => {
       try {
+        cachedUserRules = rules;
         await chrome.storage.local.set({ pecUserRules: rules });
         logEvent("info", "Saved " + rules.length + " user routing overrides");
         await applyProxySettings();
+        updateActiveTabBadge();
         sendResponse({ ok: true, count: rules.length });
       } catch (err) {
         logEvent("error", "Failed to save user rules: " + (err && err.message ? err.message : err));
@@ -1036,6 +1225,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await chrome.storage.local.set({ pecEnabled: enabled });
         logEvent("info", "Proxy power toggled: " + (enabled ? "ENABLED" : "DISABLED"));
         await applyProxySettings();
+        updateActiveTabBadge();
         sendResponse({ ok: true, enabled: enabled });
       } catch (err) {
         logEvent("error", "Failed to set proxy enabled: " + (err && err.message ? err.message : err));
@@ -1062,6 +1252,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     syncWithServer(true)
       .then(() => {
         persistProxyState();
+        updateActiveTabBadge();
         sendResponse({ ok: true, ...currentProxyState });
       })
       .catch(() => {
@@ -1082,9 +1273,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     logEvent("info", "Proxy bypass toggled: " + (currentProxyState.bypassActive ? "ON (expires in " + BYPASS_TIMEOUT_MIN + "m)" : "OFF"));
     persistProxyState();
+    updateActiveTabBadge();
     syncWithServer(true)
       .then(() => {
         persistProxyState();
+        updateActiveTabBadge();
         sendResponse({ ok: true, bypassActive: currentProxyState.bypassActive, ...currentProxyState });
       })
       .catch(() => {
@@ -1093,6 +1286,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 });
+
+// Tab routing status listeners for dynamic action badge
+if (typeof chrome !== "undefined" && chrome.tabs) {
+  if (chrome.tabs.onActivated && chrome.tabs.onActivated.addListener) {
+    chrome.tabs.onActivated.addListener((activeInfo) => {
+      if (activeInfo && activeInfo.tabId && chrome.tabs.get) {
+        try {
+          chrome.tabs.get(activeInfo.tabId, (tab) => {
+            if (chrome.runtime && chrome.runtime.lastError) return;
+            if (tab && tab.url) {
+              updateActiveTabBadge(tab.id, tab.url);
+            }
+          });
+        } catch (e) {}
+      }
+    });
+  }
+
+  if (chrome.tabs.onUpdated && chrome.tabs.onUpdated.addListener) {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo && (changeInfo.status === "complete" || changeInfo.url)) {
+        const url = changeInfo.url || (tab && tab.url);
+        if (url) {
+          updateActiveTabBadge(tabId, url);
+        }
+      }
+    });
+  }
+}
+
+if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged && chrome.storage.onChanged.addListener) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local") {
+      if (changes.pecUserRules && Array.isArray(changes.pecUserRules.newValue)) {
+        cachedUserRules = changes.pecUserRules.newValue;
+        updateActiveTabBadge();
+      }
+      if (changes.pecProfileRules && Array.isArray(changes.pecProfileRules.newValue)) {
+        cachedProfileRules = changes.pecProfileRules.newValue;
+        updateActiveTabBadge();
+      }
+    }
+  });
+}
 
 // Alarm handler: periodic sync + bypass expiry
 chrome.alarms.onAlarm.addListener((alarm) => {

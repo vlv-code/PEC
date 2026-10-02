@@ -10,7 +10,8 @@
     "storage",
     "proxy",
     "alarms",
-    "privacy"
+    "privacy",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"

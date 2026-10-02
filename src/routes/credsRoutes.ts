@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import express, { Router, Request, Response } from "express";
 import { getProxyConfig, registerHeartbeat, enrollInstanceToken, getInstanceMeta } from "../instances.js";
 import { probeProxyTcp } from "../proxies.js";
-import { resolveProfileForInstance, getProfileById, generatePacScript } from "../routing.js";
+import { resolveProfileForInstance, getProfileById, generatePacScript, expandRuleDomains } from "../routing.js";
 import { readCurrentCredsAsync } from "../rotate.js";
 import { getBuildConfig } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
@@ -206,6 +206,15 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     const proxyReachable = await probeProxyTcp(proxyConfig.host, proxyConfig.port, probeTimeout);
 
     const bldCfg = getBuildConfig();
+    const profileRules = Array.isArray(assignedProfile.rules)
+      ? assignedProfile.rules
+          .filter((r) => r.enabled)
+          .map((r) => ({
+            action: r.action,
+            domains: expandRuleDomains(r),
+          }))
+      : [];
+
     return res.json({
       ok: true,
       serverTime: new Date().toISOString(),
@@ -214,6 +223,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       profileId: assignedProfile.id,
       profileName: assignedProfile.name,
       profileDefaultPolicy: assignedProfile.defaultPolicy || "direct",
+      profileRules,
       proxyReachable,
       uiLayout: bldCfg.uiLayout || "console",
       colorPalette: bldCfg.colorPalette || "cyber",

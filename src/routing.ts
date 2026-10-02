@@ -120,12 +120,37 @@ const DEFAULT_PROFILES: RoutingProfile[] = [
 
 let profiles: RoutingProfile[] = [...DEFAULT_PROFILES];
 
+export function autoHealProfiles(profileList: RoutingProfile[]): boolean {
+  let changed = false;
+  const splitProfile = profileList.find((p) => p.id === "profile_default_split");
+  if (splitProfile && Array.isArray(splitProfile.rules)) {
+    const hasIpCheck = splitProfile.rules.some(
+      (r) => r.id === "r_ip_check" || r.pattern === "preset:ip_check"
+    );
+    if (!hasIpCheck) {
+      splitProfile.rules.push({
+        id: "r_ip_check",
+        name: "Route IP & Network Diagnostics to Proxy",
+        targetType: "preset",
+        pattern: "preset:ip_check",
+        action: "proxy",
+        enabled: true,
+      });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 try {
   if (fs.existsSync(PROFILES_FILE)) {
     const raw = fs.readFileSync(PROFILES_FILE, "utf-8");
     const loaded = JSON.parse(raw);
     if (Array.isArray(loaded) && loaded.length > 0) {
       profiles = loaded;
+      if (autoHealProfiles(profiles)) {
+        persistProfiles();
+      }
     }
   }
 } catch (e) {

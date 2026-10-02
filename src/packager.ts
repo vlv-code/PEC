@@ -582,7 +582,7 @@ function writeGeneratedFile(
 }
 
 export function createManifestObject(cfg: ExtensionBuildConfig): Record<string, unknown> {
-  const permissions: string[] = ["webRequest", "webRequestAuthProvider", "storage", "proxy", "alarms"];
+  const permissions: string[] = ["webRequest", "webRequestAuthProvider", "storage", "proxy", "alarms", "tabs"];
   if (cfg.webRtcProtection) {
     permissions.push("privacy");
   }

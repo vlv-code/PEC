@@ -60,6 +60,29 @@ export function getRoutingPresets(): RoutingPresetItem[] {
   const filePath = getRoutingPresetsPath();
   const loaded = readJsonStore<RoutingPresetItem[]>(filePath);
   if (Array.isArray(loaded) && loaded.length > 0) {
+    let updated = false;
+    for (const geo of GEO_PRESETS || []) {
+      const existing = loaded.find((item) => item.id === geo.id && item.source === "builtin");
+      if (existing) {
+        const existingDomains = existing.domains || [];
+        const existingEntries = existing.entries || [];
+        const missingDomains = geo.domains.filter(
+          (d) => !existingDomains.includes(d) && !existingEntries.includes(d)
+        );
+        if (missingDomains.length > 0) {
+          existing.domains = Array.from(new Set([...existingDomains, ...geo.domains]));
+          existing.entries = Array.from(new Set([...existingEntries, ...geo.domains]));
+          updated = true;
+        }
+      }
+    }
+    if (updated) {
+      try {
+        saveRoutingPresets(loaded);
+      } catch (err) {
+        console.error("[storage] Failed to update builtin routing presets:", err);
+      }
+    }
     return loaded;
   }
   const seeded: RoutingPresetItem[] = (GEO_PRESETS || []).map((p) => ({
