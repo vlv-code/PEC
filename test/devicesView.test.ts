@@ -14,18 +14,14 @@ const dashboardJs = readFileSync(
   "utf-8"
 );
 
-test("Dashboard renders Devices navigation and titles without Fleet references", () => {
+test("Dashboard renders Fleet navigation and titles", () => {
   const html = renderDashboardHtml({});
-  assert.match(html, /devices\.png.*Устройства/);
+  assert.match(html, /Флот/);
   assert.match(html, /id="tab-instances"/);
-  assert.match(html, /Устройства корпоративной сети/);
-  assert.match(html, /Список активных установок расширения и их текущий статус/);
-  assert.match(html, /Зарегистрированные устройства/);
+  assert.match(html, /Флот корпоративной сети/);
+  assert.match(html, /Централизованное управление инстансами расширения, профилями и прокси-нодами/);
+  assert.match(html, /Зарегистрированный флот/);
   assert.match(html, /Действия/);
-  assert.doesNotMatch(html, /Флот установок/);
-  assert.doesNotMatch(html, /Управление флотом/);
-  assert.doesNotMatch(html, /Подключенный флот/);
-  assert.doesNotMatch(html, /Группа флота/);
 });
 
 test("public/dashboard.js defines delete device functionality and updated dictionary", () => {
@@ -34,10 +30,8 @@ test("public/dashboard.js defines delete device functionality and updated dictio
   assert.match(dashboardJs, /DELETE/);
   assert.match(dashboardJs, /\/api\/instances\//);
   assert.match(dashboardJs, /renderInstancesTable/);
-  // Ensure Russian translations use Устройства rather than Флот
-  assert.doesNotMatch(dashboardJs, /'Подключенный флот:'/);
-  assert.doesNotMatch(dashboardJs, /'Группа флота'/);
-  assert.doesNotMatch(dashboardJs, /'Основной флот'/);
+  // Ensure Russian translations use Флот
+  assert.match(dashboardJs, /'Группа флота'/);
 });
 
 test("DELETE /api/instances/:id deletes an existing instance", async () => {

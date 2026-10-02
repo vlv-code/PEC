@@ -84,6 +84,8 @@ export interface ExtensionInstance {
   group?: string;
   assignedProfileId?: string;
   appliedProfileName?: string;
+  assignedProxyId?: string;
+  appliedProxyName?: string;
   tokenHash?: string;
   enrolledAt?: string;
   revoked?: boolean;
@@ -146,6 +148,8 @@ export interface ExtensionBuildConfig {
   defaultServerUrl?: string;
   defaultToken?: string;
   targetProfileId?: string;
+  defaultProxyId?: string;
+  allowUserProxySwitch?: boolean;
   autoConfigureProxy?: boolean;
   targetGroup?: string;
   /** Source files manually edited in the Studio; regeneration never clobbers them. */

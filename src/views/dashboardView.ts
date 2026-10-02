@@ -152,7 +152,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     <div class="tabs-nav">
       <button id="tabBtnRouting" class="tab-btn active" onclick="switchTab('routing')" data-i18n="tabBtnRouting"><img src="/icons/routing.png" class="icon-inline" alt="routing"> Routing & GeoBases</button>
       <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder"><img src="/icons/palette.png" class="icon-inline" alt="builder"> Extension Constructor Studio</button>
-      <button id="tabBtnInstances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances"><img src="/icons/devices.png" class="icon-inline" alt="devices"> Устройства</button>
+      <button id="tabBtnInstances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances">💻 Флот</button>
       <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo"><img src="/icons/building.png" class="icon-inline" alt="gpo"> GPO Deployment</button>
       <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings"><img src="/icons/server.png" class="icon-inline" alt="proxy"> Proxy Settings</button>
       <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs"><img src="/icons/logs.png" class="icon-inline" alt="logs"> Audit & Tester</button>
@@ -599,18 +599,18 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       </div>
     </div>
 
-    <!-- ==================== TAB 3: DEVICES & TARGET ASSIGNMENT ==================== -->
+    <!-- ==================== TAB 3: FLEET & TARGET ASSIGNMENT ==================== -->
     <div id="tab-instances" class="tab-pane">
       <div class="card">
         <h2>
-          <span data-i18n="titleFleetInstances">Устройства корпоративной сети</span>
+          <span data-i18n="titleFleetInstances">Флот корпоративной сети</span>
           <span id="badgeFleetOnline" class="badge badge-online">0 online</span>
         </h2>
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;" data-i18n="subFleetInstances">
-          Список активных установок расширения и их текущий статус
+          Централизованное управление инстансами расширения, профилями и прокси-нодами
         </p>
 
-        <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;" data-i18n="titleRegisteredDevices">Зарегистрированные устройства</div>
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;" data-i18n="titleRegisteredDevices">Зарегистрированный флот</div>
         <div class="table-container">
           <table>
             <thead>
@@ -618,7 +618,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <th data-i18n="thInstId">Instance ID</th>
                 <th data-i18n="thInstIp">IP Address</th>
                 <th data-i18n="thInstVer">Version</th>
-                <th data-i18n="thInstGroup">Группа устройств</th>
+                <th data-i18n="thInstGroup">Группа флота</th>
                 <th data-i18n="thInstProfile">Assigned Profile</th>
                 <th data-i18n="thInstSyncs">Syncs</th>
                 <th data-i18n="thInstStatus">Status</th>
@@ -627,7 +627,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </tr>
             </thead>
             <tbody id="fleetTableBody">
-              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);" data-i18n="txtNoFleet">Зарегистрированные устройства отсутствуют</td></tr>
+              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);" data-i18n="txtNoFleet">Зарегистрированный флот отсутствует</td></tr>
             </tbody>
           </table>
         </div>
