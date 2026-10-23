@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background squircle -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#bgGrad)" stroke="#38bdf8" stroke-width="2.5" stroke-opacity="0.4"/>
+  <rect x="8" y="8" width="112" height="112" rx="24" fill="none" stroke="#ffffff" stroke-width="1" stroke-opacity="0.12"/>
+
+  <!-- Corporate Shield -->
+  <path d="M64 21 L100 37 C100 73 82 96 64 107 C46 96 28 73 28 37 Z" 
+        fill="#0f172a" fill-opacity="0.88" 
+        stroke="url(#shieldGrad)" stroke-width="5.5" stroke-linejoin="round"
+        filter="url(#glow)"/>
+
+  <!-- Routing Directional Chevrons -->
+  <path d="M46 54 L64 37 L82 54" fill="none" stroke="url(#accentGrad)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M46 71 L64 54 L82 71" fill="none" stroke="#38bdf8" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Central Proxy Nexus Point -->
+  <circle cx="64" cy="86" r="6" fill="#10b981" filter="url(#glow)"/>
+  <circle cx="64" cy="86" r="3" fill="#ffffff"/>
+  <line x1="64" y1="73" x2="64" y2="80" stroke="#38bdf8" stroke-width="4" stroke-linecap="round"/>
+</svg>

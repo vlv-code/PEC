@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "PEC - Proxy Extension Corp",
+  "short_name": "PEC Corp",
+  "version": "1.0.0",
+  "description": "Корпоративное расширение Chrome для автоматической синхронизации HTTP/SOCKS5 прокси и ротируемой аутентификации.",
+  "permissions": [
+    "webRequest",
+    "webRequestAuthProvider",
+    "storage",
+    "proxy",
+    "alarms",
+    "privacy",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "storage": {
+    "managed_schema": "managed_schema.json"
+  },
+  "minimum_chrome_version": "108",
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "action": {
+    "default_title": "PEC - Proxy Extension Corp",
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  }
+}

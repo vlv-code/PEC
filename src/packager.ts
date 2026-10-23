@@ -1,0 +1,1209 @@
+import "./loadEnv.js";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import zlib from "node:zlib";
+import AdmZip from "adm-zip";
+import {
+  BACKGROUND_TEMPLATE,
+  MANAGED_SCHEMA_TEMPLATE,
+  renderBackgroundJs,
+  renderPopupHtml,
+  renderPopupJs,
+} from "./extensionTemplates.js";
+import {
+  renderDeployGpoScript,
+  renderVerifyGpoScript,
+  renderGpoReadme,
+} from "./templates/gpoTemplates.js";
+import { writeJsonAtomic } from "./jsonStore.js";
+import { getBuilderConfigPath, getReleasesDir } from "./storage.js";
+import { recordRelease } from "./releases.js";
+import type { ExtensionBuildConfig, ExtensionBuildInfo } from "./types.js";
+
+const EXTENSION_DIR = path.resolve(process.env.PEC_EXTENSION_DIR || "./extension");
+const KEY_PATH = path.join(EXTENSION_DIR, "key.pem");
+const UPDATES_DIR = path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
+const UNPACKED_DIR = path.resolve(process.env.PEC_UNPACKED_DIR || path.join(path.dirname(UPDATES_DIR), "unpacked"));
+const BUILD_CONFIG_PATH = getBuilderConfigPath();
+
+export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
+  name: "PEC - Proxy Extension Corp",
+  shortName: "PEC Corp",
+  version: "1.0.0",
+  description: "Корпоративное расширение Chrome для автоматической синхронизации HTTP/SOCKS5 прокси и ротируемой аутентификации.",
+  uiMode: "popup",
+  presetTemplate: "self-service-pro",
+  presetStyle: "cyber-blue",
+  uiLayout: "console",
+  colorPalette: "cyber",
+  defaultThemeMode: "dark",
+  themeColor: "#0284c7",
+  themeBackground: "#0b1120",
+  themeCard: "#131d36",
+  iconEmoji: "🛡️",
+  iconType: "shield",
+  locale: "ru",
+  webRtcProtection: true,
+  dnsLeakProtection: true,
+  badgeIndicator: true,
+  allowUserBypass: true,
+  bypassAutoTimeoutMinutes: 15,
+  showIpGeoChecker: true,
+  showSupportButton: true,
+  supportUrl: "mailto:it-support@corp.local",
+  pingTestUrl: "/healthz",
+  syncIntervalMinutes: 15,
+  defaultServerUrl: "https://update.example.com",
+  updateUrl: "",
+  // The fleet token baked into shipped artifacts. It must always be the
+  // low-privilege EXT_SHARED_TOKEN, never ADMIN_TOKEN (which stays server-side).
+  defaultToken: process.env.EXT_SHARED_TOKEN || "corp-proxy-secret-token-change-me",
+  targetProfileId: "profile_default_split",
+  defaultProxyId: "",
+  allowUserProxySwitch: true,
+  autoConfigureProxy: true,
+};
+
+let currentBuildConfig: ExtensionBuildConfig = { ...DEFAULT_BUILD_CONFIG };
+
+try {
+  if (fs.existsSync(BUILD_CONFIG_PATH)) {
+    const raw = fs.readFileSync(BUILD_CONFIG_PATH, "utf-8");
+    currentBuildConfig = { ...DEFAULT_BUILD_CONFIG, ...JSON.parse(raw) };
+  }
+} catch {}
+
+export function getBuildConfig(): ExtensionBuildConfig {
+  return { ...currentBuildConfig };
+}
+
+export function saveBuildConfig(cfg: Partial<ExtensionBuildConfig>): ExtensionBuildConfig {
+  currentBuildConfig = { ...currentBuildConfig, ...cfg };
+  try {
+    writeJsonAtomic(BUILD_CONFIG_PATH, currentBuildConfig);
+  } catch (e) {
+    console.error("[packager] Error persisting build config:", e);
+  }
+  return { ...currentBuildConfig };
+}
+
+export function ensureKeyExists(): crypto.KeyObject {
+  // 1. Explicit PEM string from environment
+  if (process.env.PEC_PRIVATE_KEY_PEM && process.env.PEC_PRIVATE_KEY_PEM.trim()) {
+    const rawPem = process.env.PEC_PRIVATE_KEY_PEM.trim().replace(/\\n/g, "\n");
+    try {
+      return crypto.createPrivateKey(rawPem);
+    } catch (e: any) {
+      console.warn("[packager] Failed to parse PEC_PRIVATE_KEY_PEM, falling back:", e?.message || e);
+    }
+  }
+
+  // 2. Explicit file path from environment
+  if (process.env.PEC_PRIVATE_KEY_PATH && process.env.PEC_PRIVATE_KEY_PATH.trim()) {
+    const keyPath = path.resolve(process.env.PEC_PRIVATE_KEY_PATH.trim());
+    if (fs.existsSync(keyPath)) {
+      try {
+        const pem = fs.readFileSync(keyPath, "utf-8");
+        return crypto.createPrivateKey(pem);
+      } catch (e: any) {
+        console.warn(`[packager] Failed to read private key from ${keyPath}, falling back:`, e?.message || e);
+      }
+    } else {
+      console.warn(`[packager] PEC_PRIVATE_KEY_PATH set but file does not exist: ${keyPath}`);
+    }
+  }
+
+  // 3. Existing extension/key.pem
+  if (fs.existsSync(KEY_PATH)) {
+    const pem = fs.readFileSync(KEY_PATH, "utf-8");
+    return crypto.createPrivateKey(pem);
+  }
+
+  // 4. Generate new RSA key with warning
+  console.warn(
+    "[packager] ⚠️ WARNING: No signing key found in PEC_PRIVATE_KEY_PEM, PEC_PRIVATE_KEY_PATH, or extension/key.pem. " +
+    "Generating a new RSA private key. Note: if this server was previously deployed, generating a new key WILL CHANGE " +
+    "the extension ID and break existing GPO forcelist policies! Store your key securely in production."
+  );
+
+  // The extension dir may not exist yet (fresh clone, empty Docker volume,
+  // isolated test run) - create it before writing the key.
+  fs.mkdirSync(EXTENSION_DIR, { recursive: true });
+
+  const { privateKey } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+
+  fs.writeFileSync(KEY_PATH, privateKey, { encoding: "utf-8", mode: 0o600 });
+  return crypto.createPrivateKey(privateKey);
+}
+
+export function getPublicKeySpkiDer(privateKey: crypto.KeyObject): Buffer {
+  const pub = crypto.createPublicKey(privateKey);
+  return pub.export({ type: "spki", format: "der" });
+}
+
+export function calculateExtensionId(spkiDer: Buffer): string {
+  const hash = crypto.createHash("sha256").update(spkiDer).digest().subarray(0, 16);
+  let id = "";
+  for (let i = 0; i < hash.length; i++) {
+    const byte = hash[i];
+    id += String.fromCharCode(97 + (byte >> 4));
+    id += String.fromCharCode(97 + (byte & 0x0f));
+  }
+  return id;
+}
+
+export function buildUpdatesXml(extensionId: string, version: string, codebaseUrl: string): string {
+  return `<?xml version='1.0' encoding='UTF-8'?>
+<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+  <app appid='${extensionId}'>
+    <updatecheck codebase='${codebaseUrl}' version='${version}' />
+  </app>
+</gupdate>
+`;
+}
+
+export interface GpoConfigOptions {
+  scope?: "user" | "machine";
+  targetGroup?: string;
+  autoConfigureProxy?: boolean;
+  updateUrl?: string;
+}
+
+export interface ExtensionSettingsItem {
+  installation_mode?: "force_installed" | "normal_installed" | "allowed" | "blocked";
+  update_url?: string;
+  override_update_url?: boolean;
+  install_sources?: string[];
+  extToken?: string;
+  credsUrl?: string;
+  syncUrl?: string;
+  targetGroup?: string;
+  [key: string]: any;
+}
+
+export function generateGpoConfig(
+  extensionId: string,
+  serverBaseUrl: string,
+  token: string,
+  options?: GpoConfigOptions
+) {
+  // .reg string values: escape backslashes and quotes, flatten line breaks -
+  // a raw quote or backslash in any value would corrupt the registry file.
+  const regEscape = (s: string) =>
+    String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n]/g, " ");
+
+  const updateUrl = options?.updateUrl?.trim() || `${serverBaseUrl}/updates/updates.xml`;
+  const credsUrl = `${serverBaseUrl}/creds`;
+  const syncUrl = `${serverBaseUrl}/api/sync`;
+  const targetGroup = options?.targetGroup ? regEscape(options.targetGroup) : "";
+  const autoConfigDword =
+    options?.autoConfigureProxy !== false ? "dword:00000001" : "dword:00000000";
+
+  const forcelistEntry = `${regEscape(extensionId)};${regEscape(updateUrl)}`;
+
+  const forcelistEntries = {
+    chrome: forcelistEntry,
+    edge: forcelistEntry,
+    yandex: forcelistEntry,
+    opera: forcelistEntry,
+  };
+
+  const installSources = [`${serverBaseUrl}/*`];
+
+  const buildExtensionSettingsForBrowser = (mode: "force_installed" | "normal_installed") => ({
+    "*": {
+      install_sources: installSources,
+    },
+    [extensionId]: {
+      installation_mode: mode,
+      update_url: updateUrl,
+      override_update_url: true,
+      extToken: token,
+      credsUrl: credsUrl,
+      syncUrl: syncUrl,
+      ...(options?.targetGroup ? { targetGroup: options.targetGroup } : {}),
+    },
+  });
+
+  const chromeSettings: Record<string, ExtensionSettingsItem> = buildExtensionSettingsForBrowser("force_installed");
+  const edgeSettings: Record<string, ExtensionSettingsItem> = buildExtensionSettingsForBrowser("force_installed");
+  // CRITICAL: Unmanaged Yandex Browser disables force_installed extensions via its security layer.
+  // normal_installed is required unless managed via Yandex Corp Console.
+  const yandexSettings: Record<string, ExtensionSettingsItem> = buildExtensionSettingsForBrowser("normal_installed");
+  const operaSettings: Record<string, ExtensionSettingsItem> = buildExtensionSettingsForBrowser("force_installed");
+
+  const extensionSettingsEntries: Record<string, Record<string, ExtensionSettingsItem>> = {
+    chrome: chromeSettings,
+    edge: edgeSettings,
+    yandex: yandexSettings,
+    opera: operaSettings,
+  };
+
+  const extensionSettingsJson: Record<string, ExtensionSettingsItem> = chromeSettings;
+
+  const buildRegistrySection = (root: string) => {
+    const browsers: Array<{
+      name: string;
+      key: string;
+      browserId: "chrome" | "edge" | "yandex" | "opera";
+    }> = [
+      { name: "Google Chrome", key: "Google\\Chrome", browserId: "chrome" },
+      { name: "Microsoft Edge", key: "Microsoft\\Edge", browserId: "edge" },
+      { name: "Yandex Browser", key: "YandexBrowser", browserId: "yandex" },
+      { name: "Opera", key: "Opera Software\\Opera", browserId: "opera" },
+      { name: "Chromium (Fallback / Generic)", key: "Chromium", browserId: "chrome" },
+    ];
+
+    let content = `Windows Registry Editor Version 5.00\n\n`;
+
+    for (const b of browsers) {
+      const browserSettings = extensionSettingsEntries[b.browserId] || chromeSettings;
+
+      content += `; ============================================================================\n`;
+      content += `; ${b.name} Enterprise Policies\n`;
+      content += `; ============================================================================\n\n`;
+
+      // Modern GPP ExtensionSettings (REG_SZ with escaped JSON)
+      content += `[${root}\\${b.key}]\n`;
+      content += `"ExtensionSettings"="${regEscape(JSON.stringify(browserSettings))}"\n\n`;
+
+      // Force install extension via GPO (ExtensionInstallForcelist)
+      content += `; NOTE: Static .reg files use index "1" for ExtensionInstallForcelist.\n`;
+      content += `; For AD domain deployments, use deploy-pec-extension.ps1 to avoid index collisions.\n`;
+      content += `[${root}\\${b.key}\\ExtensionInstallForcelist]\n`;
+      content += `"1"="${forcelistEntry}"\n\n`;
+
+      // Configure managed settings (token & URLs)
+      content += `[${root}\\${b.key}\\3rdparty\\extensions\\${regEscape(extensionId)}\\policy]\n`;
+      content += `"extToken"="${regEscape(token)}"\n`;
+      content += `"credsUrl"="${regEscape(credsUrl)}"\n`;
+      content += `"syncUrl"="${regEscape(syncUrl)}"\n`;
+      if (targetGroup) {
+        content += `"targetGroup"="${targetGroup}"\n`;
+      }
+      content += `"autoConfigureProxy"=${autoConfigDword}\n\n`;
+
+      // Allowlist for manual install and activation
+      content += `[${root}\\${b.key}\\ExtensionInstallAllowlist]\n`;
+      content += `"1"="${regEscape(extensionId)}"\n\n`;
+    }
+
+    return content;
+  };
+
+  const regContentUser = buildRegistrySection("HKEY_CURRENT_USER\\Software\\Policies");
+  const regContentMachine = buildRegistrySection("HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies");
+
+  // Default regContent respects option.scope or defaults to User (HKCU)
+  const regContent = options?.scope === "machine" ? regContentMachine : regContentUser;
+
+  const deployScript = renderDeployGpoScript(
+    extensionId,
+    serverBaseUrl,
+    token,
+    options?.targetGroup || ""
+  );
+  const verifyScript = renderVerifyGpoScript(extensionId, serverBaseUrl, token);
+  const readmeContent = renderGpoReadme(extensionId, serverBaseUrl);
+
+  return {
+    forcelistEntry,
+    forcelistEntries,
+    extensionSettingsJson,
+    extensionSettingsEntries,
+    regContent,
+    regContentUser,
+    regContentMachine,
+    deployScript,
+    verifyScript,
+    readmeContent,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CRX3 packaging
+//
+// Chrome (since v70) rejects CRX version 2 outright ("CRX version 3 expected").
+// The format is defined in chromium's components/crx_file/crx3.proto:
+//
+//   [4]  "Cr24" magic
+//   [4]  format version (3), little-endian
+//   [4]  header length N, little-endian
+//   [N]  protobuf CrxFileHeader {
+//          sha256_with_rsa   = field 2:  AsymmetricKeyProof {
+//                                               public_key = 1 (SPKI DER)
+//                                               signature  = 2 }
+//          signed_header_data = field 10000: SignedData { crx_id = 1 }
+//        }
+//   [M]  the ZIP archive
+//
+// Every proof signs:
+//   "CRX3 SignedData\0" + uint32_le(len(signed_header_data))
+//   + signed_header_data + archive
+// with RSA-SHA256 (PKCS#1 v1.5). crx_id = SHA256(public_key)[0..16].
+// This implementation is byte-identical to the reference `crx3` npm package.
+// ---------------------------------------------------------------------------
+
+function protobufVarint(value: number): Buffer {
+  const bytes: number[] = [];
+  let v = value;
+  while (v > 0x7f) {
+    bytes.push((v & 0x7f) | 0x80);
+    v = Math.floor(v / 128);
+  }
+  bytes.push(v);
+  return Buffer.from(bytes);
+}
+
+function protobufBytesField(fieldNo: number, value: Buffer): Buffer {
+  const tag = protobufVarint((fieldNo << 3) | 2); // wire type 2: length-delimited
+  return Buffer.concat([tag, protobufVarint(value.length), value]);
+}
+
+export function packCrxBuffer(zipBuffer: Buffer, privateKey: crypto.KeyObject): Buffer {
+  const pubDer = getPublicKeySpkiDer(privateKey);
+  const crxId = crypto.createHash("sha256").update(pubDer).digest().subarray(0, 16);
+
+  // SignedData { crx_id = 1 }
+  const signedData = protobufBytesField(1, crxId);
+
+  const signedDataLen = Buffer.alloc(4);
+  signedDataLen.writeUInt32LE(signedData.length, 0);
+
+  // Proof input: context string + length-prefixed signed data + archive
+  const signatureInput = Buffer.concat([
+    Buffer.from("CRX3 SignedData\0", "utf8"),
+    signedDataLen,
+    signedData,
+    zipBuffer,
+  ]);
+
+  const signer = crypto.createSign("RSA-SHA256");
+  signer.update(signatureInput);
+  const signature = signer.sign(privateKey);
+
+  // AsymmetricKeyProof { public_key = 1, signature = 2 }
+  const proof = Buffer.concat([protobufBytesField(1, pubDer), protobufBytesField(2, signature)]);
+
+  // CrxFileHeader { sha256_with_rsa = 2, signed_header_data = 10000 }
+  const header = Buffer.concat([protobufBytesField(2, proof), protobufBytesField(10000, signedData)]);
+
+  const out = Buffer.alloc(12);
+  out.write("Cr24", 0, "latin1");
+  out.writeUInt32LE(3, 4); // CRX version 3
+  out.writeUInt32LE(header.length, 8);
+  return Buffer.concat([out, header, zipBuffer]);
+}
+
+export const EXTENSION_STYLES_MAP: Record<string, { primary: string; bg: string; card: string; border: string; text: string }> = {
+  "cyber-blue": { primary: "#38bdf8", bg: "#0b1120", card: "#131d36", border: "#22345c", text: "#f8fafc" },
+  "dark-obsidian": { primary: "#c084fc", bg: "#09090b", card: "#18181b", border: "#27272a", text: "#fafafa" },
+  "nordic-arctic": { primary: "#88c0d0", bg: "#242933", card: "#2e3440", border: "#4c566a", text: "#eceff4" },
+  "emerald-secops": { primary: "#34d399", bg: "#061e14", card: "#0d3322", border: "#1a6344", text: "#ecfdf5" },
+  "enterprise-light": { primary: "#2563eb", bg: "#f8fafc", card: "#ffffff", border: "#cbd5e1", text: "#0f172a" },
+  "emerald-sentinel": { primary: "#34d399", bg: "#061e14", card: "#0d3322", border: "#1a6344", text: "#ecfdf5" },
+  "sunset-amber": { primary: "#f59e0b", bg: "#1c1307", card: "#261805", border: "#78350f", text: "#fef3c7" },
+  "minimal-light": { primary: "#2563eb", bg: "#f8fafc", card: "#ffffff", border: "#cbd5e1", text: "#0f172a" },
+};
+
+export function getThemeStyles(cfg: Partial<ExtensionBuildConfig>) {
+  const paletteColors: Record<string, { primary: string; bg: string; card: string; border: string; text: string }> = {
+    cyber: { primary: "#38bdf8", bg: "#0b1120", card: "#131d36", border: "#22345c", text: "#f8fafc" },
+    obsidian: { primary: "#c084fc", bg: "#09090b", card: "#18181b", border: "#27272a", text: "#fafafa" },
+    nord: { primary: "#88c0d0", bg: "#242933", card: "#2e3440", border: "#4c566a", text: "#eceff4" },
+    emerald: { primary: "#34d399", bg: "#061e14", card: "#0d3322", border: "#1a6344", text: "#ecfdf5" },
+    amber: { primary: "#f59e0b", bg: "#1c1307", card: "#261805", border: "#78350f", text: "#fef3c7" },
+    light: { primary: "#2563eb", bg: "#f8fafc", card: "#ffffff", border: "#cbd5e1", text: "#0f172a" },
+  };
+
+  const stylesMap = EXTENSION_STYLES_MAP;
+
+  const selectedPalette = cfg.colorPalette ? paletteColors[cfg.colorPalette] : null;
+  const selectedStyle = stylesMap[cfg.presetStyle || ""] || stylesMap["cyber-blue"];
+  const selected = selectedPalette || selectedStyle;
+  return {
+    primary: cfg.themeColor || selected.primary,
+    bg: cfg.themeBackground || selected.bg,
+    card: cfg.themeCard || selected.card,
+    border: selected.border,
+    text: selected.text,
+  };
+}
+
+function escapeSvgAttr(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function generateSvgIcon(cfg: ExtensionBuildConfig, colors: { primary: string; bg: string }): string {
+  if (cfg.customIconDataUrl) {
+    const safeHref = escapeSvgAttr(cfg.customIconDataUrl);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${colors.primary}"/>
+      <stop offset="100%" stop-color="${colors.bg}"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bgGrad)" />
+  <rect x="6" y="6" width="116" height="116" rx="24" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.15"/>
+  <image href="${safeHref}" x="16" y="16" width="96" height="96" preserveAspectRatio="xMidYMid meet"/>
+</svg>`;
+  }
+
+  const glyphMap: Record<string, string> = {
+    shield: `<path d="M64 20 L102 36 C102 72 84 98 64 108 C44 98 26 72 26 36 Z" fill="none" stroke="#ffffff" stroke-width="8" stroke-linejoin="round"/>
+             <path d="M64 42 L80 58 L60 78 L48 66" fill="none" stroke="${colors.primary}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`,
+    lock: `<rect x="36" y="52" width="56" height="52" rx="10" fill="none" stroke="#ffffff" stroke-width="8"/>
+           <path d="M48 52 V38 C48 29.1 55.2 22 64 22 C72.8 22 80 29.1 80 38 V52" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+           <circle cx="64" cy="74" r="6" fill="${colors.primary}"/>
+           <line x1="64" y1="80" x2="64" y2="88" stroke="${colors.primary}" stroke-width="5" stroke-linecap="round"/>`,
+    globe: `<circle cx="64" cy="64" r="44" fill="none" stroke="#ffffff" stroke-width="7"/>
+            <ellipse cx="64" cy="64" rx="22" ry="44" fill="none" stroke="#ffffff" stroke-width="6"/>
+            <line x1="20" y1="64" x2="108" y2="64" stroke="#ffffff" stroke-width="6"/>
+            <line x1="28" y1="44" x2="100" y2="44" stroke="#ffffff" stroke-width="4" stroke-opacity="0.7"/>
+            <line x1="28" y1="84" x2="100" y2="84" stroke="#ffffff" stroke-width="4" stroke-opacity="0.7"/>`,
+    bolt: `<polygon points="68,16 34,68 62,68 56,112 94,56 68,56" fill="${colors.primary}" stroke="#ffffff" stroke-width="5" stroke-linejoin="round"/>`,
+    server: `<rect x="28" y="24" width="72" height="22" rx="5" fill="none" stroke="#ffffff" stroke-width="6"/>
+             <circle cx="42" cy="35" r="4" fill="${colors.primary}"/>
+             <rect x="28" y="53" width="72" height="22" rx="5" fill="none" stroke="#ffffff" stroke-width="6"/>
+             <circle cx="42" cy="64" r="4" fill="${colors.primary}"/>
+             <rect x="28" y="82" width="72" height="22" rx="5" fill="none" stroke="#ffffff" stroke-width="6"/>
+             <circle cx="42" cy="93" r="4" fill="${colors.primary}"/>`,
+    key: `<circle cx="48" cy="64" r="22" fill="none" stroke="#ffffff" stroke-width="7"/>
+          <line x1="70" y1="64" x2="106" y2="64" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+          <line x1="92" y1="64" x2="92" y2="78" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+          <line x1="104" y1="64" x2="104" y2="74" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>`,
+  };
+
+  const vectorGlyph = cfg.iconType && glyphMap[cfg.iconType] ? glyphMap[cfg.iconType] : null;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${colors.primary}"/>
+      <stop offset="100%" stop-color="${colors.bg}"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bgGrad)" />
+  <rect x="6" y="6" width="116" height="116" rx="24" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.15"/>
+  ${vectorGlyph ? vectorGlyph : `<text x="64" y="78" font-size="52" text-anchor="middle" font-family="system-ui, sans-serif">${cfg.iconEmoji || "🛡️"}</text>`}
+</svg>`;
+}
+
+function crc32(buf: Buffer): number {
+  let table = (globalThis as unknown as { _pecCrcTable?: Uint32Array })._pecCrcTable;
+  if (!table) {
+    table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      table[i] = c;
+    }
+    (globalThis as unknown as { _pecCrcTable?: Uint32Array })._pecCrcTable = table;
+  }
+  let crc = -1;
+  for (let i = 0; i < buf.length; i++) crc = (crc >>> 8) ^ table[(crc ^ buf[i]) & 0xff];
+  return (crc ^ -1) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length, 0);
+  const typeBuf = Buffer.from(type, "ascii");
+  const body = Buffer.concat([typeBuf, data]);
+  const crcBuf = Buffer.alloc(4);
+  crcBuf.writeUInt32BE(crc32(body), 0);
+  return Buffer.concat([len, body, crcBuf]);
+}
+
+export function parseDataUrlBuffer(dataUrl?: string): Buffer | null {
+  if (!dataUrl || typeof dataUrl !== "string") return null;
+  try {
+    const comma = dataUrl.indexOf(",");
+    if (comma !== -1) {
+      const b64 = dataUrl.slice(comma + 1);
+      const buf = Buffer.from(b64, "base64");
+      return buf.length > 0 ? buf : null;
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Generate a valid RGBA PNG icon in pure Node.js (defaults to 128x128).
+ * Chrome Manifest V3 strictly requires PNG icons (SVG causes "Could not decode image" install error).
+ */
+export function generatePngIcon(primaryHex = "#00f0ff", bgHex = "#0a1020", size = 128): Buffer {
+  const width = size;
+  const height = size;
+  const pR = parseInt(primaryHex.slice(1, 3), 16) || 0;
+  const pG = parseInt(primaryHex.slice(3, 5), 16) || 240;
+  const pB = parseInt(primaryHex.slice(5, 7), 16) || 255;
+  const bR = parseInt(bgHex.slice(1, 3), 16) || 10;
+  const bG = parseInt(bgHex.slice(3, 5), 16) || 16;
+  const bB = parseInt(bgHex.slice(5, 7), 16) || 32;
+
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6; // RGBA
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  const rowSize = 1 + width * 4;
+  const raw = Buffer.alloc(height * rowSize);
+  const scale = size / 128;
+
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * rowSize;
+    raw[rowOffset] = 0;
+    const t = y / height;
+    const bgR = Math.round(pR * (1 - t) * 0.4 + bR);
+    const bgG = Math.round(pG * (1 - t) * 0.4 + bG);
+    const bgB = Math.round(pB * (1 - t) * 0.4 + bB);
+
+    for (let x = 0; x < width; x++) {
+      const px = rowOffset + 1 + x * 4;
+      let inCard = false;
+      const margin = Math.max(1, Math.round(8 * scale));
+      const rad = Math.max(2, Math.round(24 * scale));
+      const left = margin + rad;
+      const right = width - margin - rad;
+      const top = margin + rad;
+      const bottom = height - margin - rad;
+      if (x >= margin && x < width - margin && y >= margin && y < height - margin) {
+        if (x < left && y < top) inCard = (x - left) ** 2 + (y - top) ** 2 <= rad ** 2;
+        else if (x > right && y < top) inCard = (x - right) ** 2 + (y - top) ** 2 <= rad ** 2;
+        else if (x < left && y > bottom) inCard = (x - left) ** 2 + (y - bottom) ** 2 <= rad ** 2;
+        else if (x > right && y > bottom) inCard = (x - right) ** 2 + (y - bottom) ** 2 <= rad ** 2;
+        else inCard = true;
+      }
+
+      if (!inCard) {
+        raw[px] = 0;
+        raw[px + 1] = 0;
+        raw[px + 2] = 0;
+        raw[px + 3] = 0;
+        continue;
+      }
+
+      const dx = Math.abs(x - 64 * scale);
+      const isShieldTop = y >= 34 * scale && y <= 60 * scale && dx <= 30 * scale;
+      const isShieldBottom = y > 60 * scale && y <= 94 * scale && dx <= 30 * scale * (1 - (y - 60 * scale) / Math.max(1, 38 * scale));
+      const inShield = isShieldTop || isShieldBottom;
+
+      const isShieldInner =
+        inShield &&
+        ((y >= 40 * scale && y <= 58 * scale && dx <= 24 * scale) ||
+         (y > 58 * scale && y <= 88 * scale && dx <= 24 * scale * (1 - (y - 58 * scale) / Math.max(1, 34 * scale))));
+
+      if (inShield && !isShieldInner) {
+        raw[px] = 255;
+        raw[px + 1] = 255;
+        raw[px + 2] = 255;
+        raw[px + 3] = 255;
+      } else if (inShield && isShieldInner) {
+        raw[px] = Math.round(pR * 0.9);
+        raw[px + 1] = Math.round(pG * 0.9);
+        raw[px + 2] = Math.round(pB * 0.9);
+        raw[px + 3] = 255;
+      } else {
+        raw[px] = bgR;
+        raw[px + 1] = bgG;
+        raw[px + 2] = bgB;
+        raw[px + 3] = 255;
+      }
+    }
+  }
+
+  const idat = zlib.deflateSync(raw);
+  return Buffer.concat([sig, pngChunk("IHDR", ihdr), pngChunk("IDAT", idat), pngChunk("IEND", Buffer.alloc(0))]);
+}
+
+// Generate customizable extension files based on BuildConfig
+const EXTENSION_SOURCE_FILES = [
+  "manifest.json",
+  "background.js",
+  "popup.html",
+  "popup.js",
+  "managed_schema.json",
+  "icon.svg",
+] as const;
+
+/**
+ * Write a generated file unless the operator manually edited it in the
+ * Studio (overriddenFiles) - manual edits must never be silently clobbered
+ * by a rebuild. `force` (the "Regenerate templates" action) resets overrides.
+ */
+function writeGeneratedFile(
+  fileName: string,
+  content: string | Buffer,
+  cfg: ExtensionBuildConfig,
+  force = false
+): void {
+  const overridden = (cfg.overriddenFiles || []).includes(fileName);
+
+  if (!fs.existsSync(UNPACKED_DIR)) {
+    fs.mkdirSync(UNPACKED_DIR, { recursive: true });
+  }
+
+  if (overridden && !force && fs.existsSync(path.join(EXTENSION_DIR, fileName))) {
+    const extContent = fs.readFileSync(path.join(EXTENSION_DIR, fileName));
+    fs.writeFileSync(path.join(UNPACKED_DIR, fileName), extContent);
+  } else {
+    const unpackedPath = path.join(UNPACKED_DIR, fileName);
+    if (Buffer.isBuffer(content)) {
+      fs.writeFileSync(unpackedPath, content);
+    } else {
+      fs.writeFileSync(unpackedPath, content, "utf-8");
+    }
+  }
+
+  if (!fs.existsSync(EXTENSION_DIR)) {
+    fs.mkdirSync(EXTENSION_DIR, { recursive: true });
+  }
+  const extPath = path.join(EXTENSION_DIR, fileName);
+  if (force || process.env.PEC_KEEP_EXTENSION_DIR === "1" || !fs.existsSync(extPath)) {
+    if (Buffer.isBuffer(content)) {
+      fs.writeFileSync(extPath, content);
+    } else {
+      fs.writeFileSync(extPath, content, "utf-8");
+    }
+  }
+}
+
+export function createManifestObject(cfg: ExtensionBuildConfig): Record<string, unknown> {
+  const permissions: string[] = ["webRequest", "webRequestAuthProvider", "storage", "proxy", "alarms", "tabs"];
+  if (cfg.webRtcProtection) {
+    permissions.push("privacy");
+  }
+
+  const explicitUpdateUrl = (cfg.updateUrl || "").trim();
+  const baseServer = (cfg.serverUrl || cfg.defaultServerUrl || "").trim().replace(/\/+$/, "");
+  const updateUrl = explicitUpdateUrl || (baseServer ? `${baseServer}/updates/updates.xml` : "");
+
+  const manifest: Record<string, unknown> = {
+    manifest_version: 3,
+    name: cfg.name || "PEC - Proxy Extension Corp",
+    short_name: cfg.shortName || "PEC Corp",
+    version: cfg.version || "1.0.0",
+    description: cfg.description || "",
+    ...(updateUrl ? { update_url: updateUrl } : {}),
+    permissions: Array.from(new Set(permissions)),
+    host_permissions: ["<all_urls>", "http://127.0.0.1/*"],
+    background: {
+      service_worker: "background.js",
+    },
+    storage: {
+      managed_schema: "managed_schema.json",
+    },
+    // webRequestAuthProvider (proxy auth interception) shipped in Chrome 108;
+    // declaring 96 previously allowed installs where auth silently broke.
+    minimum_chrome_version: "108",
+    icons: {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png",
+    },
+  };
+
+  if (cfg.uiMode !== "stealth") {
+    manifest.action = {
+      default_title: cfg.name || "PEC - Proxy Extension Corp",
+      default_popup: "popup.html",
+      default_icon: "icon48.png",
+    };
+  }
+
+  return manifest;
+}
+
+export function generateExtensionFiles(
+  cfg: ExtensionBuildConfig,
+  opts?: { force?: boolean }
+): Record<string, string | Buffer> {
+  if (!fs.existsSync(EXTENSION_DIR)) {
+    fs.mkdirSync(EXTENSION_DIR, { recursive: true });
+  }
+
+  const mergedCfg: ExtensionBuildConfig = {
+    ...DEFAULT_BUILD_CONFIG,
+    ...cfg,
+  };
+
+  const force = Boolean(opts?.force);
+  if (force) {
+    mergedCfg.overriddenFiles = [];
+    saveBuildConfig({ overriddenFiles: [] });
+  }
+
+  const colors = getThemeStyles(mergedCfg);
+
+  // 1. Manifest (Unified)
+  const manifest = createManifestObject(mergedCfg);
+  const manifestJson = JSON.stringify(manifest, null, 2);
+  writeGeneratedFile("manifest.json", manifestJson, mergedCfg, force);
+
+  // 2. Icon (both PNG for Chrome runtime and SVG for Studio vector preview/editor)
+  const customBuf = parseDataUrlBuffer(mergedCfg.customIconDataUrl);
+  const icon16 = customBuf || generatePngIcon(colors.primary, colors.bg, 16);
+  const icon48 = customBuf || generatePngIcon(colors.primary, colors.bg, 48);
+  const icon128 = customBuf || generatePngIcon(colors.primary, colors.bg, 128);
+  const iconPng = icon128;
+  const iconSvg = generateSvgIcon(mergedCfg, colors);
+
+  writeGeneratedFile("icon.png", iconPng, mergedCfg, force);
+  writeGeneratedFile("icon16.png", icon16, mergedCfg, force);
+  writeGeneratedFile("icon48.png", icon48, mergedCfg, force);
+  writeGeneratedFile("icon128.png", icon128, mergedCfg, force);
+  writeGeneratedFile("icon.svg", iconSvg, mergedCfg, force);
+
+  // 2b. Service worker template + managed storage schema.
+  writeGeneratedFile("background.js", BACKGROUND_TEMPLATE, mergedCfg, force);
+  writeGeneratedFile("managed_schema.json", MANAGED_SCHEMA_TEMPLATE, mergedCfg, force);
+
+  // 3. Popup HTML & JS
+  // Always render into memory and disk so the Studio preview and editor always have content
+  const popupHtml = renderPopupHtml(mergedCfg, colors);
+  writeGeneratedFile("popup.html", popupHtml, mergedCfg, force);
+
+  const popupJs = renderPopupJs(mergedCfg);
+  writeGeneratedFile("popup.js", popupJs, mergedCfg, force);
+
+  const renderedBg = renderBackgroundJs(mergedCfg);
+
+  return {
+    "manifest.json": manifestJson,
+    "icon.png": iconPng,
+    "icon16.png": icon16,
+    "icon48.png": icon48,
+    "icon128.png": icon128,
+    "icon.svg": iconSvg,
+    "background.js": renderedBg,
+    "managed_schema.json": MANAGED_SCHEMA_TEMPLATE,
+    "popup.html": popupHtml,
+    "popup.js": popupJs,
+  };
+}
+
+export async function buildExtensionFiles(cfg: ExtensionBuildConfig): Promise<Record<string, string>> {
+  const effectiveBaseUrl = (cfg.serverUrl || cfg.defaultServerUrl || currentBuildConfig.defaultServerUrl || "http://localhost:3000").trim().replace(/\/+$/, "");
+  const effectiveToken = cfg.token || cfg.defaultToken || currentBuildConfig.defaultToken;
+
+  const mergedCfg: ExtensionBuildConfig = {
+    ...DEFAULT_BUILD_CONFIG,
+    ...cfg,
+    defaultServerUrl: effectiveBaseUrl,
+    defaultToken: effectiveToken,
+  };
+
+  generateExtensionFiles(mergedCfg);
+
+  const colors = getThemeStyles(mergedCfg);
+  const manifest = createManifestObject(mergedCfg);
+
+  const files: Record<string, string> = {
+    "manifest.json": JSON.stringify(manifest, null, 2),
+    "background.js": renderBackgroundJs(mergedCfg),
+    "managed_schema.json": MANAGED_SCHEMA_TEMPLATE,
+    "popup.html": renderPopupHtml(mergedCfg, colors),
+    "popup.js": renderPopupJs(mergedCfg),
+  };
+
+  return files;
+}
+
+let lastExtensionBuildLog: string[] = [];
+
+export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { zipPath: string; crxPath: string; xmlPath: string } {
+  if (!fs.existsSync(UPDATES_DIR)) {
+    fs.mkdirSync(UPDATES_DIR, { recursive: true });
+  }
+
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const effectiveBaseUrl = envPublicBase
+    || ((currentBuildConfig.defaultServerUrl && !currentBuildConfig.defaultServerUrl.includes("update.example.com"))
+      ? currentBuildConfig.defaultServerUrl.trim().replace(/\/+$/, "")
+      : (baseUrl ? baseUrl.trim().replace(/\/+$/, "") : "http://localhost:3000"));
+
+  if (process.env.EXT_SHARED_TOKEN && currentBuildConfig.defaultToken && currentBuildConfig.defaultToken !== process.env.EXT_SHARED_TOKEN) {
+    console.warn(
+      "[packager] Saved build-config defaultToken differs from EXT_SHARED_TOKEN - overriding with env value."
+    );
+  }
+
+  const envSyncInterval = process.env.PEC_SYNC_INTERVAL_MIN || process.env.PEC_SYNC_INTERVAL_MINUTES;
+  const syncInterval = envSyncInterval ? Math.max(1, parseInt(envSyncInterval, 10) || 15) : currentBuildConfig.syncIntervalMinutes;
+
+  const buildConfigToPack: ExtensionBuildConfig = {
+    ...currentBuildConfig,
+    defaultServerUrl: effectiveBaseUrl,
+    defaultToken: process.env.EXT_SHARED_TOKEN || currentBuildConfig.defaultToken,
+    ...(syncInterval ? { syncIntervalMinutes: syncInterval } : {}),
+  };
+
+  // Generate / refresh extension files based on build config to pack
+  generateExtensionFiles(buildConfigToPack);
+
+  const extLog: string[] = [];
+  const log = (msg: string) => {
+    const ts = new Date().toISOString().substring(11, 19);
+    extLog.push("[" + ts + "] " + msg);
+  };
+
+  log("Starting PEC Extension package build v" + (buildConfigToPack.version || "1.2.0") + " (" + (buildConfigToPack.uiMode || "popup") + ")...");
+  log("Effective Base URL: " + effectiveBaseUrl);
+  log("Generating MV3 manifest.json and background scripts...");
+
+  const privKey = ensureKeyExists();
+  const spkiDer = getPublicKeySpkiDer(privKey);
+  const extensionId = calculateExtensionId(spkiDer);
+
+  const manifestPath = fs.existsSync(path.join(UNPACKED_DIR, "manifest.json"))
+    ? path.join(UNPACKED_DIR, "manifest.json")
+    : path.join(EXTENSION_DIR, "manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+  const version = manifest.version || buildConfigToPack.version || "1.2.0";
+  const name = manifest.name || buildConfigToPack.name || "Corp Proxy Auth & Sync";
+
+  function isExcludedFromPackage(fileName: string): boolean {
+    const lower = fileName.toLowerCase();
+    return (
+      fileName.startsWith(".") ||
+      fileName.endsWith(".pem") ||
+      fileName === "scripts" ||
+      fileName.endsWith(".crx") ||
+      fileName.endsWith(".zip") ||
+      lower === "readme.md" ||
+      fileName.endsWith(".example") ||
+      fileName.endsWith(".svg")
+    );
+  }
+
+  if (!fs.existsSync(UNPACKED_DIR)) {
+    fs.mkdirSync(UNPACKED_DIR, { recursive: true });
+  }
+
+  // Render background.js with substituted placeholders directly into UNPACKED_DIR
+  // unless explicitly overridden by operator in overriddenFiles
+  const isBgOverridden = (buildConfigToPack.overriddenFiles || []).includes("background.js");
+  if (!isBgOverridden || !fs.existsSync(path.join(EXTENSION_DIR, "background.js"))) {
+    const renderedBg = renderBackgroundJs(buildConfigToPack);
+    fs.writeFileSync(path.join(UNPACKED_DIR, "background.js"), renderedBg, "utf-8");
+  } else {
+    const customBg = fs.readFileSync(path.join(EXTENSION_DIR, "background.js"), "utf-8");
+    const renderedBg = renderBackgroundJs(buildConfigToPack, customBg);
+    fs.writeFileSync(path.join(UNPACKED_DIR, "background.js"), renderedBg, "utf-8");
+  }
+
+  // Render manifest.json directly into UNPACKED_DIR based on build config to pack
+  const isManifestOverridden = (buildConfigToPack.overriddenFiles || []).includes("manifest.json");
+  if (!isManifestOverridden || !fs.existsSync(path.join(EXTENSION_DIR, "manifest.json"))) {
+    const manifestObj = createManifestObject(buildConfigToPack);
+    fs.writeFileSync(path.join(UNPACKED_DIR, "manifest.json"), JSON.stringify(manifestObj, null, 2), "utf-8");
+  } else {
+    fs.copyFileSync(path.join(EXTENSION_DIR, "manifest.json"), path.join(UNPACKED_DIR, "manifest.json"));
+  }
+
+  // Copy any custom/extra non-excluded files from EXTENSION_DIR into UNPACKED_DIR
+  if (fs.existsSync(EXTENSION_DIR)) {
+    for (const item of fs.readdirSync(EXTENSION_DIR)) {
+      if (isExcludedFromPackage(item)) continue;
+      if (item === "manifest.json" && !isManifestOverridden) continue;
+      if (item === "background.js" && !isBgOverridden) continue;
+      const full = path.join(EXTENSION_DIR, item);
+      const dest = path.join(UNPACKED_DIR, item);
+      const stat = fs.statSync(full);
+      if (stat.isFile()) {
+        fs.copyFileSync(full, dest);
+      } else if (stat.isDirectory()) {
+        fs.cpSync(full, dest, { recursive: true, force: true });
+      }
+    }
+  }
+
+  // Remove any excluded files from UNPACKED_DIR
+  for (const f of fs.readdirSync(UNPACKED_DIR)) {
+    if (isExcludedFromPackage(f)) {
+      try { fs.rmSync(path.join(UNPACKED_DIR, f), { recursive: true, force: true }); } catch {}
+    }
+  }
+
+  // In stealth mode, package without popup.html and popup.js
+  if (buildConfigToPack.uiMode === "stealth") {
+    try { fs.rmSync(path.join(UNPACKED_DIR, "popup.html"), { force: true }); } catch {}
+    try { fs.rmSync(path.join(UNPACKED_DIR, "popup.js"), { force: true }); } catch {}
+  }
+
+  // Create ZIP directly from the clean UNPACKED_DIR
+  const zip = new AdmZip();
+  for (const item of fs.readdirSync(UNPACKED_DIR)) {
+    if (isExcludedFromPackage(item)) continue;
+    const full = path.join(UNPACKED_DIR, item);
+    const stat = fs.statSync(full);
+    if (stat.isFile()) {
+      zip.addLocalFile(full);
+    } else if (stat.isDirectory()) {
+      zip.addLocalFolder(full, item);
+    }
+  }
+
+  const rootLicense = path.resolve("./LICENSE");
+  if (fs.existsSync(rootLicense)) {
+    zip.addLocalFile(rootLicense);
+  }
+
+  const zipBuffer = zip.toBuffer();
+  const zipPath = path.join(UPDATES_DIR, "extension.zip");
+  fs.writeFileSync(zipPath, zipBuffer);
+
+  log("Packing extension files into ZIP archive (" + Math.round(zipBuffer.length / 1024) + " KB)");
+  log("Signing CRX package with RSA private key...");
+  const crxBuffer = packCrxBuffer(zipBuffer, privKey);
+  log("CRX package generated (" + Math.round(crxBuffer.length / 1024) + " KB)");
+  const crxPath = path.join(UPDATES_DIR, "extension.crx");
+  fs.writeFileSync(crxPath, crxBuffer);
+  const pecCrxPath = path.join(UPDATES_DIR, "pec-extension.crx");
+  fs.writeFileSync(pecCrxPath, crxBuffer);
+
+  const codebaseUrl = `${effectiveBaseUrl}/updates/extension.crx`;
+  const xmlContent = buildUpdatesXml(extensionId, version, codebaseUrl);
+  const xmlPath = path.join(UPDATES_DIR, "updates.xml");
+  fs.writeFileSync(xmlPath, xmlContent, "utf-8");
+
+  // Archive versioned release and record in releases store
+  try {
+    const releasesDir = path.join(getReleasesDir(), "extensions", version);
+    fs.mkdirSync(releasesDir, { recursive: true });
+    const versionedCrx = path.join(releasesDir, "pec-extension.crx");
+    fs.writeFileSync(versionedCrx, crxBuffer);
+    fs.writeFileSync(path.join(releasesDir, "extension.crx"), crxBuffer);
+    fs.writeFileSync(path.join(releasesDir, "updates.xml"), xmlContent, "utf-8");
+    if (fs.existsSync(path.join(UNPACKED_DIR, "manifest.json"))) {
+      fs.copyFileSync(path.join(UNPACKED_DIR, "manifest.json"), path.join(releasesDir, "manifest.json"));
+    }
+    const crxSha256 = crypto.createHash("sha256").update(crxBuffer).digest("hex");
+    log("Archiving release v" + version + " to store (SHA-256: " + crxSha256 + ")");
+    recordRelease({
+      type: "extension",
+      version,
+      builtAt: new Date().toISOString(),
+      sha256: crxSha256,
+      fileName: "pec-extension.crx",
+      filePath: versionedCrx,
+      size: crxBuffer.length,
+      isActive: true,
+    });
+  } catch (relErr) {
+    console.warn("[packager] Warning: failed recording extension release:", relErr);
+  }
+
+  const result = {
+    extensionId,
+    version,
+    name,
+    hasPrivateKey: true,
+    crxExists: true,
+    zipExists: true,
+    updatesXmlExists: true,
+    unpackedExists: true,
+    unpackedPath: UNPACKED_DIR,
+    uiMode: currentBuildConfig.uiMode,
+    lastPackTime: new Date().toISOString(),
+    buildLog: extLog,
+    zipPath,
+    crxPath,
+    xmlPath,
+  };
+
+  try {
+    generateGpoDeploymentPack(effectiveBaseUrl, buildConfigToPack.defaultToken);
+  } catch (e) {
+    console.warn("[packager] Could not build gpo deployment pack during packaging:", e);
+  }
+
+  return result;
+}
+
+export function generateGpoDeploymentPack(
+  baseUrl: string = "",
+  token: string = ""
+): { zipBuffer: Buffer; zipPath: string } {
+  if (!fs.existsSync(UPDATES_DIR)) {
+    fs.mkdirSync(UPDATES_DIR, { recursive: true });
+  }
+
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const effectiveBaseUrl =
+    baseUrl.trim().replace(/\/+$/, "") ||
+    envPublicBase ||
+    ((currentBuildConfig.defaultServerUrl && !currentBuildConfig.defaultServerUrl.includes("update.example.com"))
+      ? currentBuildConfig.defaultServerUrl.trim().replace(/\/+$/, "")
+      : "http://localhost:3000");
+
+  const effectiveToken =
+    token.trim() ||
+    process.env.EXT_SHARED_TOKEN ||
+    currentBuildConfig.defaultToken ||
+    "";
+
+  const privKey = ensureKeyExists();
+  const spkiDer = getPublicKeySpkiDer(privKey);
+  const extensionId = calculateExtensionId(spkiDer);
+
+  const gpo = generateGpoConfig(extensionId, effectiveBaseUrl, effectiveToken, {
+    targetGroup: currentBuildConfig.targetGroup,
+    autoConfigureProxy: currentBuildConfig.autoConfigureProxy,
+    updateUrl: currentBuildConfig.updateUrl,
+  });
+
+  const zip = new AdmZip();
+  zip.addFile("pec-policy-user-hkcu.reg", Buffer.from(gpo.regContentUser, "utf-8"));
+  zip.addFile("pec-policy-machine-hklm.reg", Buffer.from(gpo.regContentMachine, "utf-8"));
+  zip.addFile("deploy-pec-gpo.ps1", Buffer.from(gpo.deployScript, "utf-8"));
+  zip.addFile("verify-pec-gpo.ps1", Buffer.from(gpo.verifyScript, "utf-8"));
+  zip.addFile(
+    "extension-settings.json",
+    Buffer.from(JSON.stringify(gpo.extensionSettingsJson, null, 2), "utf-8")
+  );
+  zip.addFile(
+    "extension-settings-chrome.json",
+    Buffer.from(JSON.stringify(gpo.extensionSettingsEntries.chrome, null, 2), "utf-8")
+  );
+  zip.addFile(
+    "extension-settings-edge.json",
+    Buffer.from(JSON.stringify(gpo.extensionSettingsEntries.edge, null, 2), "utf-8")
+  );
+  zip.addFile(
+    "extension-settings-yandex.json",
+    Buffer.from(JSON.stringify(gpo.extensionSettingsEntries.yandex, null, 2), "utf-8")
+  );
+  zip.addFile("README-GPO.md", Buffer.from(gpo.readmeContent, "utf-8"));
+  const gpoLicense = path.resolve("./LICENSE");
+  if (fs.existsSync(gpoLicense)) {
+    zip.addFile("LICENSE", fs.readFileSync(gpoLicense));
+  }
+
+  const zipBuffer = zip.toBuffer();
+  const zipPath = path.join(UPDATES_DIR, "pec-gpo-deployment-pack.zip");
+  try {
+    fs.writeFileSync(zipPath, zipBuffer);
+  } catch (e) {
+    console.warn("[packager] Could not write gpo pack to disk:", e);
+  }
+
+  return { zipBuffer, zipPath };
+}
+
+export function getBuildInfo(serverUrl: string = ""): ExtensionBuildInfo {
+  const privKey = ensureKeyExists();
+  const spkiDer = getPublicKeySpkiDer(privKey);
+  const extensionId = calculateExtensionId(spkiDer);
+
+  const manifestPath = path.join(EXTENSION_DIR, "manifest.json");
+  let version = currentBuildConfig.version || "1.2.0";
+  let name = currentBuildConfig.name || "Corp Proxy Auth & Sync";
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+      version = manifest.version || version;
+      name = manifest.name || name;
+    } catch {}
+  }
+
+  const crxPath = path.join(UPDATES_DIR, "extension.crx");
+  const zipPath = path.join(UPDATES_DIR, "extension.zip");
+  const xmlPath = path.join(UPDATES_DIR, "updates.xml");
+
+  return {
+    extensionId,
+    version,
+    name,
+    hasPrivateKey: fs.existsSync(KEY_PATH),
+    crxExists: fs.existsSync(crxPath),
+    zipExists: fs.existsSync(zipPath),
+    updatesXmlExists: fs.existsSync(xmlPath),
+    uiMode: currentBuildConfig.uiMode,
+    lastPackTime: fs.existsSync(crxPath) ? fs.statSync(crxPath).mtime.toISOString() : undefined,
+    buildLog: lastExtensionBuildLog.length > 0 ? lastExtensionBuildLog : undefined,
+  };
+}
+
+export function getExtensionSourceFiles(): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!fs.existsSync(EXTENSION_DIR)) return result;
+
+  const files = ["manifest.json", "background.js", "popup.html", "popup.js", "managed_schema.json", "icon.svg"];
+  for (const f of files) {
+    const full = path.join(EXTENSION_DIR, f);
+    if (fs.existsSync(full)) {
+      result[f] = fs.readFileSync(full, "utf-8");
+    }
+  }
+  return result;
+}
+
+export function saveExtensionSourceFile(fileName: string, content: string): boolean {
+  const allowed = ["manifest.json", "background.js", "popup.html", "popup.js", "managed_schema.json", "icon.svg"];
+  if (!allowed.includes(fileName)) {
+    throw new Error(`File name ${fileName} is not allowed for editing`);
+  }
+  const full = path.join(EXTENSION_DIR, fileName);
+  fs.writeFileSync(full, content, "utf-8");
+  // Remember the manual edit so a later rebuild does not clobber it.
+  const overrides = new Set(currentBuildConfig.overriddenFiles || []);
+  overrides.add(fileName);
+  currentBuildConfig.overriddenFiles = Array.from(overrides);
+  saveBuildConfig({ overriddenFiles: currentBuildConfig.overriddenFiles });
+  return true;
+}
+
+export function updateManifestVersion(newVersion: string, newName?: string) {
+  const manifestPath = path.join(EXTENSION_DIR, "manifest.json");
+  if (fs.existsSync(manifestPath)) {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+    manifest.version = newVersion;
+    if (newName) manifest.name = newName;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+  }
+  currentBuildConfig.version = newVersion;
+  if (newName) currentBuildConfig.name = newName;
+  saveBuildConfig(currentBuildConfig);
+}
+
+export function isPackageStale(): boolean {
+  const zipPath = path.join(UPDATES_DIR, "extension.zip");
+  if (!fs.existsSync(zipPath)) {
+    return true;
+  }
+  const zipMtime = fs.statSync(zipPath).mtimeMs;
+  if (fs.existsSync(BUILD_CONFIG_PATH) && fs.statSync(BUILD_CONFIG_PATH).mtimeMs > zipMtime) {
+    return true;
+  }
+  if (fs.existsSync(EXTENSION_DIR)) {
+    try {
+      const items = fs.readdirSync(EXTENSION_DIR);
+      for (const item of items) {
+        if (item.endsWith(".crx") || item.endsWith(".zip") || item.endsWith(".pem")) continue;
+        const p = path.join(EXTENSION_DIR, item);
+        if (fs.existsSync(p) && fs.statSync(p).mtimeMs > zipMtime) {
+          return true;
+        }
+      }
+    } catch {}
+  }
+  return false;
+}
