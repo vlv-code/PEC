@@ -43,12 +43,20 @@ static HANDLE             g_hLoopbackThread = NULL;
 static SOCKET             g_loopbackSocket = INVALID_SOCKET;
 static volatile BOOL      g_syncRunning = FALSE;
 static volatile BOOL      g_syncEverSucceeded = FALSE;
+static volatile BOOL      g_isSyncing = FALSE;
 static volatile DWORD     g_lastSyncError = 0;
+static volatile DWORD     g_lastSyncTick = 0;
+static SYSTEMTIME         g_lastSyncTime = { 0 };
 static wchar_t            g_lastSyncStatusStr[128] = L"Ожидание синхронизации...";
 static HWND               g_hSyncMainWnd = NULL;
 static wchar_t            g_appInstanceId[128] = { 0 };
 static wchar_t            g_selectedProxyHost[128] = { 0 };
 static int                g_selectedProxyPort = 0;
+
+static void PecSyncTriggerNow(void)
+{
+    if (g_hSyncWakeEvent) SetEvent(g_hSyncWakeEvent);
+}
 
 static void PecSyncSetSelectedProxy(const wchar_t* host, int port)
 {
@@ -661,6 +669,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                             LeaveCriticalSection(&g_syncLock);
 
                             DWORD bodyLen = (DWORD)strlen(jsonBody);
+                            g_isSyncing = TRUE;
                             if (WinHttpSendRequest(hRequest, hdrs, (DWORD)wcslen(hdrs), jsonBody, bodyLen, bodyLen, 0) &&
                                 WinHttpReceiveResponse(hRequest, NULL))
                             {
@@ -672,6 +681,8 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                 {
                                     g_syncEverSucceeded = TRUE;
                                     g_lastSyncError = 0;
+                                    g_lastSyncTick = GetTickCount();
+                                    GetLocalTime((SYSTEMTIME*)&g_lastSyncTime);
                                     _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Синхронизировано (%ls)", host);
                                     PB_WriteAppLog("PecSync: Синхронизация с сервером %ls выполнена успешно (HTTP 200)", host);
                                     DWORD avail = 0;
@@ -883,6 +894,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                 PB_WriteAppLog("PecSync: Ошибка отправки запроса на %ls (WinHttp err %lu)", host, err);
                             }
                             WinHttpCloseHandle(hRequest);
+                            g_isSyncing = FALSE;
                         }
                         else
                         {

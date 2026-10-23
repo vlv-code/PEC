@@ -961,6 +961,49 @@ static void RenderHeader()
         }
     }
 
+    // PEC Server Sync Status Indicator & Force Sync
+    ImGui::SameLine(0, 10.0f);
+    char syncTimeStr[64] = "";
+    if (g_lastSyncTime.wYear > 0) {
+        snprintf(syncTimeStr, sizeof(syncTimeStr), "%02d:%02d:%02d",
+            g_lastSyncTime.wHour, g_lastSyncTime.wMinute, g_lastSyncTime.wSecond);
+    }
+
+    if (g_isSyncing) {
+        RenderPill(u8"● Сервер: Синхронизация...", ImVec4(0.08f, 0.20f, 0.35f, 1.0f), PecTheme::HoverAccent);
+    } else if (g_syncEverSucceeded) {
+        char pillText[96];
+        snprintf(pillText, sizeof(pillText), u8"● Сервер PEC (%s)", syncTimeStr[0] ? syncTimeStr : u8"ОК");
+        RenderPill(pillText, ImVec4(0.08f, 0.28f, 0.18f, 1.0f), PecTheme::SuccessDirect);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(u8"Синхронизация с сервером PEC активна\nПоследний обмен: %s\nСтатус: %ls\nСервер: %ls",
+                syncTimeStr[0] ? syncTimeStr : u8"Недавно",
+                g_lastSyncStatusStr,
+                g_profile.pecSync.serverUrl[0] ? g_profile.pecSync.serverUrl : L"—");
+        }
+    } else if (g_lastSyncError != 0) {
+        RenderPill(u8"● Сервер: Ошибка связи", ImVec4(0.35f, 0.10f, 0.10f, 1.0f), PecTheme::DangerRed);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(u8"Ошибка связи с сервером PEC (код %lu)\n%ls\nСервер: %ls",
+                g_lastSyncError,
+                g_lastSyncStatusStr,
+                g_profile.pecSync.serverUrl[0] ? g_profile.pecSync.serverUrl : L"—");
+        }
+    } else {
+        RenderPill(u8"● Сервер: Ожидание", PecTheme::CardBg, PecTheme::TextMuted);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(u8"Синхронизация с сервером PEC\n%ls", g_lastSyncStatusStr);
+        }
+    }
+
+    ImGui::SameLine(0, 6.0f);
+    if (ImGui::Button(u8"🔄##forcesyncheader")) {
+        PecSyncTriggerNow();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(u8"Синхронизировать конфигурацию с сервером PEC сейчас");
+    }
+
     // Status Toggle Button placed in the far right corner
     float btnWidth = 180.0f;
     float rightOffset = ImGui::GetWindowWidth() - btnWidth - 16.0f;
@@ -1097,7 +1140,7 @@ static void RenderRulesTab()
 
     if (ImGui::BeginTable("RulesTable", 5, tableFlags, ImVec2(0.0f, availY))) {
         ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 32.0f);
-        ImGui::TableSetupColumn("##actions", ImGuiTableColumnFlags_WidthFixed, 75.0f);
+        ImGui::TableSetupColumn("##actions", ImGuiTableColumnFlags_WidthFixed, 80.0f);
         ImGui::TableSetupColumn(u8"Правило", ImGuiTableColumnFlags_WidthStretch, 2.5f);
         ImGui::TableSetupColumn(u8"Действие", ImGuiTableColumnFlags_WidthFixed, 85.0f);
         ImGui::TableSetupColumn(u8"Прокси-сервер", ImGuiTableColumnFlags_WidthStretch, 1.5f);
@@ -1143,8 +1186,8 @@ static void RenderRulesTab()
 
             ImGui::SameLine(0, 8.0f);
             char editBtn[32];
-            snprintf(editBtn, sizeof(editBtn), u8"✏##editrule%d", i);
-            if (ImGui::Button(editBtn)) {
+            snprintf(editBtn, sizeof(editBtn), u8"✎##editrule%d", i);
+            if (ImGui::Button(editBtn, ImVec2(28.0f, 22.0f))) {
                 g_selectedRuleIdx = i;
                 OpenRuleModal(i);
             }
@@ -1203,12 +1246,12 @@ static void RenderRulesTab()
     }
 
     // Modal Dialog: Add / Edit Rule
+    const char* ruleModalTitle = g_isEditRule ? u8"Редактирование правила###RuleModalPopup" : u8"Новое правило маршрутизации###RuleModalPopup";
     if (g_openRuleModal) {
-        ImGui::OpenPopup("RuleModalPopup");
+        ImGui::OpenPopup(ruleModalTitle);
         g_openRuleModal = false;
     }
 
-    const char* ruleModalTitle = g_isEditRule ? u8"Редактирование правила###RuleModalPopup" : u8"Новое правило маршрутизации###RuleModalPopup";
     if (ImGui::BeginPopupModal(ruleModalTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Spacing();
 
@@ -1512,10 +1555,6 @@ static void RenderProxiesTab()
         OpenProxyModal(-1);
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"Редактировать##editproxy") && g_selectedProxyIdx >= 0 && g_selectedProxyIdx < g_profile.cfgCount) {
-        OpenProxyModal(g_selectedProxyIdx);
-    }
-    ImGui::SameLine();
     if (ImGui::Button(u8"Удалить##delproxy") && g_selectedProxyIdx >= 0 && g_selectedProxyIdx < g_profile.cfgCount) {
         if (g_profile.cfgCount > 1) {
             UINT32 delStoredId = g_profile.cfg[g_selectedProxyIdx].storedId;
@@ -1546,6 +1585,13 @@ static void RenderProxiesTab()
             TestProxyLatencyAsync(i);
         }
     }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"🔄 Синхронизировать с сервером")) {
+        PecSyncTriggerNow();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(u8"Запросить актуальный список корпоративных прокси-узлов с сервера PEC");
+    }
 
     ImGui::Spacing();
 
@@ -1556,7 +1602,7 @@ static void RenderProxiesTab()
 
     if (ImGui::BeginTable("ProxiesTable", 8, tableFlags, ImVec2(0.0f, availY))) {
         ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 32.0f);
-        ImGui::TableSetupColumn("##actions", ImGuiTableColumnFlags_WidthFixed, 75.0f);
+        ImGui::TableSetupColumn("##actions", ImGuiTableColumnFlags_WidthFixed, 80.0f);
         ImGui::TableSetupColumn(u8"Название", ImGuiTableColumnFlags_WidthStretch, 1.5f);
         ImGui::TableSetupColumn(u8"Тип", ImGuiTableColumnFlags_WidthFixed, 75.0f);
         ImGui::TableSetupColumn(u8"Адрес (Хост : Порт)", ImGuiTableColumnFlags_WidthStretch, 2.0f);
@@ -1590,8 +1636,8 @@ static void RenderProxiesTab()
 
             ImGui::SameLine(0, 8.0f);
             char editBtn[32];
-            snprintf(editBtn, sizeof(editBtn), u8"✏##editproxy%d", i);
-            if (ImGui::Button(editBtn)) {
+            snprintf(editBtn, sizeof(editBtn), u8"✎##editproxy%d", i);
+            if (ImGui::Button(editBtn, ImVec2(28.0f, 22.0f))) {
                 g_selectedProxyIdx = i;
                 OpenProxyModal(i);
             }
@@ -1646,12 +1692,12 @@ static void RenderProxiesTab()
     }
 
     // Modal: Add / Edit Proxy
+    const char* proxyModalTitle = g_isEditProxy ? u8"Редактирование прокси###ProxyModalPopup" : u8"Новый прокси-сервер###ProxyModalPopup";
     if (g_openProxyModal) {
-        ImGui::OpenPopup("ProxyModalPopup");
+        ImGui::OpenPopup(proxyModalTitle);
         g_openProxyModal = false;
     }
 
-    const char* proxyModalTitle = g_isEditProxy ? u8"Редактирование прокси###ProxyModalPopup" : u8"Новый прокси-сервер###ProxyModalPopup";
     if (ImGui::BeginPopupModal(proxyModalTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Spacing();
 
@@ -2193,6 +2239,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         0x25A0, 0x25FF, // Geometric shapes (●, ▲, ▼, etc.)
         0x2300, 0x23FF, // Miscellaneous Technical (⏸, etc.)
         0x2190, 0x21FF, // Arrows
+        0x2700, 0x27BF, // Dingbats (✏ 0x270F, ✎ 0x270E, etc.)
         0
     };
 
@@ -2200,7 +2247,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
     builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
     builder.AddRanges(extraGlyphs);
-    builder.AddText(u8"●⏸▲▼🔀📡📋🛡📂⚙✓✗");
+    builder.AddText(u8"●⏸▲▼🔀📡📋🛡📂⚙✓✗✏✎🔄");
     ImVector<ImWchar> glyphRanges;
     builder.BuildRanges(&glyphRanges);
 

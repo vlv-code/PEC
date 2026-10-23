@@ -60,6 +60,10 @@ test("popup HTML has 380px width, 3 tabs, user overrides, and theme toggle", () 
   assert.ok(html.includes('id="btnCopyLogs"'), "Copy logs button must exist");
   assert.ok(html.includes('id="btnClearLogs"'), "Clear logs button must exist");
 
+  // Corporate rules container in routing tab
+  assert.ok(html.includes('id="corpRulesContainer"'), "corpRulesContainer must exist in popup HTML");
+  assert.ok(html.includes('id="corpRulesCountBadge"'), "corpRulesCountBadge must exist in popup HTML");
+
   // Check no inline onclick handlers (MV3 CSP)
   assert.ok(!html.includes("onclick="), "No inline onclick handlers allowed");
 });
@@ -72,9 +76,20 @@ test("extension/popup.html matches modern structure", () => {
   assert.ok(rawHtml.includes('id="btnPowerToggle"'));
   assert.ok(rawHtml.includes('id="btnPauseToggle"'));
   assert.ok(rawHtml.includes('id="btnAddCurrentSite"'));
+  assert.ok(rawHtml.includes('id="corpRulesContainer"'), "corpRulesContainer must exist in extension/popup.html");
+  assert.ok(rawHtml.includes('id="corpRulesCountBadge"'), "corpRulesCountBadge must exist in extension/popup.html");
   assert.ok(rawHtml.includes("Инфо"), "extension/popup.html must have tab 3 renamed to Инфо");
   assert.ok(rawHtml.includes("grid-template-columns: repeat(3, 1fr);"), "extension/popup.html .tabs must use grid");
   assert.ok(rawHtml.includes("padding: 12px 14px;"), "extension/popup.html .card padding must be 12px 14px");
   assert.ok(rawHtml.includes(".tab-content > .card:last-child"), "Symmetrical padding rule must exist in popup.html");
   assert.ok(!rawHtml.includes("onclick="));
+});
+
+test("PEC-App GUI has server sync indicator, force sync button, and no redundant edit button", () => {
+  const guiSrc = fs.readFileSync("client/Windows/gui/main_imgui.cpp", "utf8");
+  assert.ok(!guiSrc.includes("Редактировать##editproxy"), "Redundant toolbar edit button must be removed");
+  assert.ok(guiSrc.includes("forcesyncheader"), "Force sync button must exist in header");
+  assert.ok(guiSrc.includes("PecSyncTriggerNow()"), "PecSyncTriggerNow must be called on manual sync");
+  assert.ok(guiSrc.includes("Синхронизировать с сервером"), "Proxies tab must have manual sync button");
+  assert.ok(guiSrc.includes("0x2700, 0x27BF"), "Dingbats glyph range must be loaded for pencil icons");
 });

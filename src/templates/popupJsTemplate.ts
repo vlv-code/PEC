@@ -277,7 +277,100 @@ window.applyPopupState = function(response) {
     selectActiveProxy.innerHTML = defaultOpt + optionsHtml;
     selectActiveProxy.value = currentActiveId;
   }
+
+  if (response.profileRules !== undefined || response.profileName || response.profileDefaultPolicy) {
+    renderCorporateRules(
+      response.profileRules || [],
+      response.profileName || currentProxyState.profileName,
+      response.profileDefaultPolicy || currentProxyState.profileDefaultPolicy
+    );
+  }
 };
+
+function renderCorporateRules(rules, profileName, defaultPolicy) {
+  const container = document.getElementById("corpRulesContainer");
+  const countBadge = document.getElementById("corpRulesCountBadge");
+  const nameBadge = document.getElementById("corpProfileNameBadge");
+  const defaultPolicyTag = document.getElementById("tabRulesDefaultPolicy");
+
+  if (nameBadge && profileName) {
+    nameBadge.textContent = profileName;
+  }
+  if (defaultPolicyTag && defaultPolicy) {
+    const isTunnel = defaultPolicy === "proxy";
+    defaultPolicyTag.textContent = isTunnel ? "PROXY (туннель)" : "DIRECT (селективный)";
+  }
+
+  if (!container) return;
+  const ruleList = Array.isArray(rules) ? rules : [];
+  if (countBadge) {
+    countBadge.textContent = ruleList.length;
+  }
+
+  if (!ruleList.length) {
+    container.innerHTML = '<div class="empty-rules" id="corpRulesEmpty">\${t.isRu ? "Правила маршрутизации не заданы (все запросы по умолчанию)" : "No routing rules defined (all requests follow default policy)"}</div>';
+    return;
+  }
+
+  container.innerHTML = "";
+  ruleList.forEach((rule) => {
+    const item = document.createElement("div");
+    item.className = "user-rule-item";
+
+    const left = document.createElement("div");
+    left.style.display = "flex";
+    left.style.flexDirection = "column";
+    left.style.gap = "2px";
+    left.style.minWidth = "0";
+    left.style.flex = "1";
+
+    const titleRow = document.createElement("div");
+    titleRow.style.display = "flex";
+    titleRow.style.alignItems = "center";
+    titleRow.style.gap = "6px";
+
+    const dot = document.createElement("span");
+    dot.style.width = "6px";
+    dot.style.height = "6px";
+    dot.style.borderRadius = "50%";
+    const act = (rule.action || "proxy").toLowerCase();
+    dot.style.backgroundColor = act === "proxy" ? "#38bdf8" : act === "direct" ? "#10b981" : "#ef4444";
+
+    const title = document.createElement("span");
+    title.className = "rule-pattern";
+    title.style.fontWeight = "600";
+    title.textContent = rule.name || (rule.pattern ? rule.pattern : "Правило");
+
+    titleRow.appendChild(dot);
+    titleRow.appendChild(title);
+
+    const domainList = Array.isArray(rule.domains) && rule.domains.length > 0
+      ? rule.domains.slice(0, 3).join(", ") + (rule.domains.length > 3 ? " + " + (rule.domains.length - 3) : "")
+      : (rule.pattern || "Все домены");
+
+    const sub = document.createElement("span");
+    sub.style.fontSize = "10px";
+    sub.style.color = "var(--text-muted)";
+    sub.textContent = domainList;
+    sub.title = Array.isArray(rule.domains) ? rule.domains.join("\\n") : (rule.pattern || "");
+
+    left.appendChild(titleRow);
+    left.appendChild(sub);
+
+    const meta = document.createElement("div");
+    meta.className = "rule-meta";
+
+    const badge = document.createElement("span");
+    const actUpper = (rule.action || "PROXY").toUpperCase();
+    badge.className = "rule-badge " + actUpper.toLowerCase();
+    badge.textContent = actUpper;
+
+    meta.appendChild(badge);
+    item.appendChild(left);
+    item.appendChild(meta);
+    container.appendChild(item);
+  });
+}
 
 window.addEventListener("message", function(e) {
   if (e.data && e.data.type === "UPDATE_SIM_STATE") {
@@ -354,10 +447,21 @@ function initPopup() {
   async function loadState() {
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
       try {
-        const stored = await chrome.storage.local.get(["pecProxyState", "pecThemeMode", "pecLastConfig"]);
+        const stored = await chrome.storage.local.get([
+          "pecProxyState",
+          "pecThemeMode",
+          "pecLastConfig",
+          "pecProfileRules",
+          "pecProfileDefaultPolicy",
+        ]);
         if (stored) {
           if (stored.pecProxyState && typeof stored.pecProxyState === "object") {
-            window.applyPopupState(stored.pecProxyState);
+            const mergedState = {
+              ...stored.pecProxyState,
+              profileRules: stored.pecProfileRules || stored.pecProxyState.profileRules || [],
+              profileDefaultPolicy: stored.pecProfileDefaultPolicy || stored.pecProxyState.profileDefaultPolicy || "direct",
+            };
+            window.applyPopupState(mergedState);
           }
           if (stored.pecThemeMode) {
             applyTheme(stored.pecThemeMode);
@@ -933,6 +1037,9 @@ function initPopup() {
       if (area === "local") {
         if (changes.pecProxyState && changes.pecProxyState.newValue) {
           window.applyPopupState(changes.pecProxyState.newValue);
+        }
+        if (changes.pecProfileRules && changes.pecProfileRules.newValue) {
+          renderCorporateRules(changes.pecProfileRules.newValue, currentProxyState.profileName, currentProxyState.profileDefaultPolicy);
         }
         if (changes.pecUserRules && changes.pecUserRules.newValue) {
           userRules = changes.pecUserRules.newValue;

@@ -115,9 +115,11 @@ function restoreStartupState() {
             }
             if (res && Array.isArray(res.pecProfileRules)) {
               cachedProfileRules = res.pecProfileRules;
+              currentProxyState.profileRules = res.pecProfileRules;
             }
             if (res && typeof res.pecProfileDefaultPolicy === "string") {
               cachedProfileDefaultPolicy = res.pecProfileDefaultPolicy;
+              currentProxyState.profileDefaultPolicy = res.pecProfileDefaultPolicy;
             }
             if (res && Array.isArray(res.pecUserRules)) {
               cachedUserRules = res.pecUserRules;
@@ -1031,6 +1033,7 @@ async function syncWithServer(forceRefresh = false, applyConfig = true, selected
 
   if (forceRefresh) {
     memoryCredsCache = null;
+    cachedBasePacText = null;
   }
 
   syncPromise = (async () => {
@@ -1121,6 +1124,13 @@ async function syncWithServer(forceRefresh = false, applyConfig = true, selected
             } catch (e) {}
             const isPac = Boolean(payload.config.pacUrl && payload.config.routingMode !== "fixed") || payload.config.protocol === "pac";
             const proxyReachable = payload.proxyReachable !== false;
+            if (Array.isArray(payload.profileRules)) {
+              cachedProfileRules = payload.profileRules;
+            }
+            if (payload.profileDefaultPolicy) {
+              cachedProfileDefaultPolicy = payload.profileDefaultPolicy;
+            }
+
             currentProxyState = {
               ...currentProxyState,
               online: true,
@@ -1130,6 +1140,7 @@ async function syncWithServer(forceRefresh = false, applyConfig = true, selected
               port: payload.config.port || 10809,
               profileName: payload.profileName || "Default Profile",
               profileDefaultPolicy: payload.profileDefaultPolicy || "direct",
+              profileRules: cachedProfileRules,
               proxyReachable: proxyReachable,
               pacUrl: payload.config.pacUrl || "",
               uiLayout: payload.uiLayout || (payload.config && payload.config.uiLayout) || "console",
@@ -1140,12 +1151,6 @@ async function syncWithServer(forceRefresh = false, applyConfig = true, selected
             persistProxyState();
             logEvent("info", "Sync successful: profile=" + currentProxyState.profileName + ", mode=" + currentProxyState.protocol + ", host=" + (currentProxyState.host || "pac"));
 
-            if (Array.isArray(payload.profileRules)) {
-              cachedProfileRules = payload.profileRules;
-            }
-            if (payload.profileDefaultPolicy) {
-              cachedProfileDefaultPolicy = payload.profileDefaultPolicy;
-            }
             try {
               if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
                 chrome.storage.local.set({

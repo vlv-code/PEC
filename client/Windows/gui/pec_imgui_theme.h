@@ -246,9 +246,17 @@ inline void ApplyProfileTheme(const PBProfile* prof, ImGuiStyle* dst = nullptr)
     colors[ImGuiCol_CheckMark]             = PecTheme::ActiveAccent;
     colors[ImGuiCol_SliderGrab]            = PecTheme::PrimaryAccent;
     colors[ImGuiCol_SliderGrabActive]      = PecTheme::ActiveAccent;
-    colors[ImGuiCol_Button]                = PecTheme::PrimaryAccent;
-    colors[ImGuiCol_ButtonHovered]         = PecTheme::HoverAccent;
-    colors[ImGuiCol_ButtonActive]          = PecTheme::ActiveAccent;
+
+    // Buttons: Use elegant elevated card/frame background with subtle borders and clear contrast
+    if (PecTheme::IsLightMode) {
+        colors[ImGuiCol_Button]            = PecTheme::FrameBg;
+        colors[ImGuiCol_ButtonHovered]     = PecTheme::FrameBgHover;
+        colors[ImGuiCol_ButtonActive]      = PecTheme::FrameBgActive;
+    } else {
+        colors[ImGuiCol_Button]            = PecTheme::FrameBg;
+        colors[ImGuiCol_ButtonHovered]     = PecTheme::FrameBgHover;
+        colors[ImGuiCol_ButtonActive]      = PecTheme::FrameBgActive;
+    }
 
     colors[ImGuiCol_Header]                = ImVec4(PecTheme::CardBg.x, PecTheme::CardBg.y, PecTheme::CardBg.z, 0.8f);
     colors[ImGuiCol_HeaderHovered]         = ImVec4(PecTheme::PrimaryAccent.x, PecTheme::PrimaryAccent.y, PecTheme::PrimaryAccent.z, 0.35f);
@@ -258,12 +266,13 @@ inline void ApplyProfileTheme(const PBProfile* prof, ImGuiStyle* dst = nullptr)
     colors[ImGuiCol_SeparatorHovered]      = PecTheme::HoverAccent;
     colors[ImGuiCol_SeparatorActive]       = PecTheme::ActiveAccent;
 
-    colors[ImGuiCol_Tab]                   = PecTheme::CardBg;
-    colors[ImGuiCol_TabHovered]            = PecTheme::HoverAccent;
-    colors[ImGuiCol_TabSelected]           = PecTheme::PrimaryAccent;
-    colors[ImGuiCol_TabSelectedOverline]   = PecTheme::HoverAccent;
+    // Tabs: Active tab is seamless elevated card with prominent accent line; inactive tabs blend with canvas
+    colors[ImGuiCol_Tab]                   = PecTheme::CanvasBg;
+    colors[ImGuiCol_TabHovered]            = PecTheme::CardBgHover;
+    colors[ImGuiCol_TabSelected]           = PecTheme::CardBg;
+    colors[ImGuiCol_TabSelectedOverline]   = PecTheme::PrimaryAccent;
     colors[ImGuiCol_TabDimmed]             = PecTheme::CanvasBg;
-    colors[ImGuiCol_TabDimmedSelected]     = ImVec4(PecTheme::PrimaryAccent.x, PecTheme::PrimaryAccent.y, PecTheme::PrimaryAccent.z, 0.7f);
+    colors[ImGuiCol_TabDimmedSelected]     = PecTheme::CardBg;
     colors[ImGuiCol_TabDimmedSelectedOverline] = PecTheme::ActiveAccent;
 
     colors[ImGuiCol_TableHeaderBg]         = PecTheme::FrameBg;

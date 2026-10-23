@@ -265,7 +265,10 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       ? assignedProfile.rules
           .filter((r) => r.enabled)
           .map((r) => ({
+            name: r.name || "Rule",
             action: r.action,
+            targetType: r.targetType || "domain",
+            pattern: r.pattern || "",
             domains: expandRuleDomains(r),
           }))
       : [];

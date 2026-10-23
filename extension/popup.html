@@ -830,15 +830,18 @@
 
     <div class="card" id="cardCorporateRules">
       <div class="card-header">
-        <span class="card-title">Корпоративные правила</span>
-        <span class="tag corp-tag">От сервера</span>
+        <span class="card-title">Корпоративные правила <span id="corpRulesCountBadge" class="badge" style="font-size: 10px; margin-left: 4px;">0</span></span>
+        <span class="tag corp-tag" id="corpProfileNameBadge">От сервера</span>
       </div>
       <div class="row" style="margin-top: 6px;">
         <span class="label">По умолчанию</span>
         <span class="tag" id="tabRulesDefaultPolicy">DIRECT</span>
       </div>
+      <div id="corpRulesContainer" style="margin-top: 10px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+        <div class="empty-rules" id="corpRulesEmpty">Правила маршрутизации не заданы (все запросы по умолчанию)</div>
+      </div>
       <div class="rules-notice" style="margin-top: 8px;">
-        Правила маршрутизации и обхода определяются активным PAC-профилем с сервера PEC. Ваши локальные исключения ниже имеют приоритет.
+        Правила маршрутизации синхронизируются с сервера PEC. Ваши локальные исключения ниже имеют приоритет.
       </div>
     </div>
 

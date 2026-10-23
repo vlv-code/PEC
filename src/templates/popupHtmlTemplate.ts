@@ -899,12 +899,15 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
 
     <div class="card" id="cardCorporateRules">
       <div class="card-header">
-        <span class="card-title">${t.corpRules || "Корпоративные правила"}</span>
-        <span class="tag corp-tag">${t.fromServer || "От сервера"}</span>
+        <span class="card-title">${t.corpRules || "Корпоративные правила"} <span id="corpRulesCountBadge" class="badge" style="font-size: 10px; margin-left: 4px;">0</span></span>
+        <span class="tag corp-tag" id="corpProfileNameBadge">${t.fromServer || "От сервера"}</span>
       </div>
       <div class="row" style="margin-top: 6px;">
         <span class="label">${t.defaultFallback}</span>
         <span class="tag" id="tabRulesDefaultPolicy">DIRECT</span>
+      </div>
+      <div id="corpRulesContainer" style="margin-top: 10px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+        <div class="empty-rules" id="corpRulesEmpty">${t.isRu ? "Правила маршрутизации не заданы (все запросы по умолчанию)" : "No routing rules defined (all requests follow default policy)"}</div>
       </div>
       <div class="rules-notice" style="margin-top: 8px;">
         ${t.rulesNotice}
