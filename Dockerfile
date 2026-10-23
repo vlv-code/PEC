@@ -30,8 +30,8 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Install runtime utilities, WiX MSI tools (wixl) and Authenticode signing utility (osslsigncode)
-RUN apk add --no-cache tzdata dumb-init curl bash msitools osslsigncode
+# Install runtime utilities and WiX MSI tools (wixl)
+RUN apk add --no-cache tzdata dumb-init curl bash msitools
 
 ENV NODE_ENV=production
 ENV PORT=3000
