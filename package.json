@@ -1,0 +1,33 @@
+{
+  "name": "pec-proxy-extension-corp",
+  "version": "1.0.0",
+  "description": "PEC - Proxy Extension Corp: Enterprise proxy synchronization server, live extension builder studio, GPO policies & 3x-ui rotator",
+  "license": "AGPL-3.0-or-later",
+  "author": "PEC Team (https://github.com/vlv-code/PEC)",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "npm run build:server",
+    "build:server": "esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs",
+    "build:extension": "tsx scripts/pack-extension.ts",
+    "pack:extension": "npm run build:extension",
+    "print:extension-id": "tsx scripts/print-extension-id.ts",
+    "sync:templates": "tsx scripts/sync-templates.ts",
+    "start": "node dist/server.cjs",
+    "lint": "tsc --noEmit",
+    "test": "tsx --test --test-concurrency=1",
+    "test:coverage": "tsx --test --test-concurrency=1 --experimental-test-coverage"
+  },
+  "dependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "adm-zip": "^0.6.1",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

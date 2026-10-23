@@ -1,0 +1,76 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Node.js dependencies and logs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build artifacts
+dist/*
+!dist/templates/
+dist_test/
+build/
+
+# Environment variables and sensitive data
+.env
+.env.local
+.env.*.local
+current_creds.json
+dashboard_auth.json
+instances_meta.json
+*.tmp
+
+
+# Runtime state files (generated at runtime - never commit; may contain secrets)
+rotation_config.json
+rotation_history.json
+proxy_config.json
+routing_profiles.json
+extension_build_config.json
+data/
+
+# Certificates and private keys (protect production secrets)
+*.pem
+*.key
+*.crt
+*.pfx
+extension/key.pem
+
+# Generated extension packages
+*.crx
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Superpowers and local scratch artifacts
+.superpowers/
+docs/superpowers/
+specs/
+scratch/
+metadata.json
+
+# Coverage and corrupt store dumps
+coverage/
+*.corrupt-*
+
+# Media and screenshots
+client/img/
