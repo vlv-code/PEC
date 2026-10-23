@@ -1,0 +1,4 @@
+#define PB_FILE_DESC "PEC-App engine service"
+#define PB_ORIG_NAME "PECAppSvc.exe"
+#define PB_FTYPE     VFT_APP
+#include "../../gui/res/pbver.inc"

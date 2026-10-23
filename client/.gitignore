@@ -1,0 +1,132 @@
+## Windows
+
+*.exe
+*.dll
+*.sys
+*.zip
+*.py
+build/**
+*.pyc
+Windows/gui/bin/**
+Windows/gui/obj/**
+Windows/cli/bin/**
+Windows/cli/obj/**
+.vscode/**
+Windows/output/ProxyBridge_CLI.pdb
+
+## macOS / Xcode / Swift
+
+# Build environment
+MacOS/ProxyBridge/.env
+MacOS/ProxyBridge/output/
+MacOS/ProxyBridge/build/
+MacOS/ProxyBridge/provision/**
+
+# Signing configuration files (sensitive)
+MacOS/ProxyBridge/Signing-App.xcconfig
+MacOS/ProxyBridge/Signing-Extension.xcconfig
+MacOS/ProxyBridge/Signing-Config.xcconfig
+
+# Xcode
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# CocoaPods
+Pods/
+*.xcworkspace
+!default.xcworkspace
+
+# Carthage
+Carthage/Build/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift
+*.swp
+*~.nib
+*.swiftdoc
+*.swiftmodule
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+MacOS/ProxyBridge/build/
+MacOS/ProxyBridge/output/
+
+# Linux/**
+MacOS/ProxyBridge/Signing-Config.xcconfig
+MacOS/ProxyBridge/Signing-Config-app.xcconfig
+MacOS/ProxyBridge/Signing-Config-ext.xcconfig
+Linux/output/**
+Linux/build/**
+MacOS/ProxyBridge/config/Signing-Config-ext.xcconfig
+MacOS/ProxyBridge/config/Signing-Config-app.xcconfig
+Linux/cli/main.o
+Linux/cli/proxybridge-cli
+Linux/src/libproxybridge.so
+Linux/src/ProxyBridge.o
+Linux/src/*.o
+Linux/src/proxybridge.skel.h
+Linux/src/bpf/*.o
+Linux/cli/ProxyBridge
+Linux/gui/*.o
+Linux/gui/ProxyBridgeGUI
+Linux/ProxyBridgeGUI
+Linux/src/tests/rules_test
+Linux/src/dns_test
+Linux/src/rules_test
+Linux/src/tests/dns_test
+Linux/**/*.o
+Linux/**/*.skel.h
+Linux/**/vmlinux.h
+Linux/gui/tests/config_test
+Linux/src/tests/relay_test
+Linux/src/tests/relay_test_*
+Linux/tests/hookbench
+Linux/tests/thrbench
+Linux/tests/api_live_test
+Linux/**/__pycache__/
+!Linux/tests/*.py
+Android/**
+iOS/**
+# Windows build intermediates (MSVC import lib / export file / objects)
+Windows/*.exp
+Windows/*.lib
+Windows/*.obj
+Windows/**/*.obj
+Windows/gui/*.res
+Windows/**/*.res

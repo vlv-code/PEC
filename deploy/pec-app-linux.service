@@ -1,0 +1,32 @@
+[Unit]
+Description=PEC-App Linux Transparent Proxy Daemon (Headless)
+Documentation=https://github.com/vlv-code/PEC
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/etc/proxybridge
+ExecStart=/usr/local/bin/ProxyBridge --profile /etc/proxybridge/pec_profile.pbprofile
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pec-app-linux
+
+# eBPF datapath and cgroup redirection require root privileges
+User=root
+Group=root
+
+# Process management
+KillMode=mixed
+TimeoutStopSec=10
+LimitNOFILE=65536
+
+# Security baseline
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
