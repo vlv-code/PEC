@@ -14,8 +14,7 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # Build artifacts
-dist/*
-!dist/templates/
+dist/
 dist_test/
 build/
 

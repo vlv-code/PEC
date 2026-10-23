@@ -1,0 +1,45 @@
+# Makefile.msvc - Microsoft NMake Makefile for PEC Native Client (Windows)
+# Build all native client binaries using MSVC:
+#   - ProxyBridgeCore.dll (and PECAppCore.dll alias)
+#   - PEC-App.exe (and ProxyBridge.exe alias)
+#   - PEC-CLI.exe (and pbcli.exe alias)
+#   - PECAppSvc.exe (and ProxyBridgeSvc.exe alias)
+#   - PEC-App-Setup.exe
+
+!IFNDEF WINDIVERT_DIR
+WINDIVERT_DIR = C:\WinDivert-2.2.2-A
+!ENDIF
+
+CC = cl.exe
+RC = rc.exe
+
+CFLAGS_COMMON = /nologo /GL /Gy /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 /GS /guard:cf /sdl /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_WINSOCK_DEPRECATED_NO_WARNINGS /DUNICODE /D_UNICODE
+LDFLAGS_COMMON = /link /LTCG /OPT:REF /OPT:ICF /RELEASE /DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /guard:cf /CETCOMPAT
+
+ALL: ProxyBridgeCore.dll PEC-App.exe PEC-CLI.exe PECAppSvc.exe PEC-App-Setup.exe
+
+ProxyBridgeCore.dll:
+	pushd src && $(RC) /nologo /fo core.res core.rc && $(CC) /nologo /O2 /Ot /GL /Gy /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 /D_CRT_SECURE_NO_WARNINGS /D_WINSOCK_DEPRECATED_NO_WARNINGS /DPROXYBRIDGE_EXPORTS /DNDEBUG /arch:SSE2 /fp:fast /GS /guard:cf /I"$(WINDIVERT_DIR)\include" ProxyBridge.c pb_util.c pb_process.c pb_rules.c pb_proxy.c pb_dns.c pb_socks5.c pb_http.c pb_conntrack.c pb_relay.c pb_sockmap.c core.res /LD /Fe..\ProxyBridgeCore.dll /link /LTCG /OPT:REF /OPT:ICF /RELEASE /DYNAMICBASE /NXCOMPAT /LIBPATH:"$(WINDIVERT_DIR)\x64" WinDivert.lib ws2_32.lib iphlpapi.lib advapi32.lib && popd
+	copy /Y ProxyBridgeCore.dll PECAppCore.dll >nul
+
+PEC-App.exe:
+	pushd gui && pushd res && $(RC) /nologo /fo ..\app.res app.rc && popd && $(CC) /nologo /utf-8 /O1 /Os /MT $(CFLAGS_COMMON) main.c profile\profile.c app.res /Fe..\PEC-App.exe $(LDFLAGS_COMMON) /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comctl32.lib shell32.lib comdlg32.lib dwmapi.lib uxtheme.lib winhttp.lib advapi32.lib ws2_32.lib && popd
+	copy /Y PEC-App.exe ProxyBridge.exe >nul
+
+PEC-CLI.exe:
+	pushd cli && $(RC) /nologo /fo cli.res cli.rc && $(CC) /nologo /O2 /Ot /GL /Gy /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 /D_WINSOCK_DEPRECATED_NO_WARNINGS /D_WIN32_WINNT=0x0601 /DNDEBUG /arch:SSE2 /fp:fast /GS /guard:cf /Qpar main.c cli.res /Fe..\PEC-CLI.exe /link /LTCG /OPT:REF /OPT:ICF /RELEASE /DYNAMICBASE /NXCOMPAT /SUBSYSTEM:CONSOLE winhttp.lib shell32.lib advapi32.lib ws2_32.lib && popd
+	copy /Y PEC-CLI.exe pbcli.exe >nul
+
+PECAppSvc.exe:
+	pushd src\service && $(RC) /nologo /fo svc.res svc.rc && $(CC) /nologo /O2 /MT $(CFLAGS_COMMON) pb_service.c svc.res /Fe..\..\PECAppSvc.exe $(LDFLAGS_COMMON) /SUBSYSTEM:CONSOLE advapi32.lib netapi32.lib wtsapi32.lib user32.lib shell32.lib && popd
+	copy /Y PECAppSvc.exe ProxyBridgeSvc.exe >nul
+
+PEC-App-Setup.exe:
+	pushd installer && $(RC) /nologo /fo setup.res setup.rc && $(CC) /nologo /O2 /MT $(CFLAGS_COMMON) setup.c setup.res /Fe..\PEC-App-Setup.exe $(LDFLAGS_COMMON) /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comctl32.lib shell32.lib advapi32.lib ole32.lib uuid.lib && popd
+
+clean:
+	-del /Q *.obj *.res *.exp *.lib PEC-App.exe PEC-CLI.exe PECAppSvc.exe PEC-App-Setup.exe ProxyBridgeCore.dll PECAppCore.dll ProxyBridge.exe pbcli.exe ProxyBridgeSvc.exe 2>nul
+	-del /Q gui\*.obj gui\*.res 2>nul
+	-del /Q cli\*.obj cli\*.res 2>nul
+	-del /Q src\*.obj src\*.res src\service\*.obj src\service\*.res 2>nul
+	-del /Q installer\*.obj installer\*.res 2>nul

@@ -92,6 +92,9 @@ test("Integration: assembleAppPackage builds clean DirectX 11 PEC-App-windows-x6
   const profileData = JSON.parse(profileEntry.getData().toString("utf-8"));
   assert.strictEqual(profileData.Version, "1.0");
   assert.strictEqual(profileData.PecSync.serverUrl, baseUrl);
+  for (const pc of profileData.ProxyConfigs) {
+    assert.strictEqual(pc.Password, "", "Packaged .pbprofile inside zip must have empty passwords");
+  }
 });
 
 test("Integration: PEC-App.exe in package is a valid PE64 binary linking DirectX 11", () => {

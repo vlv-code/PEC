@@ -128,6 +128,8 @@ test("Releases API: DELETE /api/releases/:type/:version and download endpoint", 
   fs.mkdirSync(releaseDir, { recursive: true });
   const appZip = path.join(releaseDir, "pec-client-windows-x64.zip");
   fs.writeFileSync(appZip, "app-zip-payload");
+  const msiFile = path.join(releaseDir, "PEC-App-2.0.0.msi");
+  fs.writeFileSync(msiFile, "msi-payload");
 
   recordRelease({
     type: "app",
@@ -139,8 +141,24 @@ test("Releases API: DELETE /api/releases/:type/:version and download endpoint", 
     isActive: false,
   });
 
+  // Setup mock extension release
+  const extReleaseDir = path.join(TEST_TMP_DIR, "releases/extensions/2.0.0");
+  fs.mkdirSync(extReleaseDir, { recursive: true });
+  const extCrx = path.join(extReleaseDir, "pec-extension.crx");
+  fs.writeFileSync(extCrx, "ext-crx-payload");
+
+  recordRelease({
+    type: "extension",
+    version: "2.0.0",
+    builtAt: new Date().toISOString(),
+    sha256: "sha-ext",
+    fileName: "pec-extension.crx",
+    filePath: extCrx,
+    isActive: false,
+  });
+
   await withServer(async (base) => {
-    // Download release package with admin token
+    // 1. Download desktop app package with admin token -> 200
     const resDownloadAdmin = await fetch(`${base}/api/releases/download/app/2.0.0`, {
       headers: { "X-Admin-Token": TEST_ADMIN_TOKEN },
     });
@@ -148,31 +166,75 @@ test("Releases API: DELETE /api/releases/:type/:version and download endpoint", 
     const contentAdmin = await resDownloadAdmin.text();
     assert.strictEqual(contentAdmin, "app-zip-payload");
 
-    // Download release package with x-fleet-token
+    // 2. Download desktop app package with x-fleet-token -> 401 Unauthorized (N-1 security enforcement)
     const resDownloadFleet = await fetch(`${base}/api/releases/download/app/2.0.0`, {
       headers: { "x-fleet-token": TEST_TOKEN },
     });
-    assert.strictEqual(resDownloadFleet.status, 200);
-    const contentFleet = await resDownloadFleet.text();
-    assert.strictEqual(contentFleet, "app-zip-payload");
+    assert.strictEqual(resDownloadFleet.status, 401);
 
-    // Download release package with x-ext-token
+    // 3. Download desktop app package with x-ext-token -> 401 Unauthorized
     const resDownloadExt = await fetch(`${base}/api/releases/download/app/2.0.0`, {
       headers: { "x-ext-token": TEST_TOKEN },
     });
-    assert.strictEqual(resDownloadExt.status, 200);
-    const contentExt = await resDownloadExt.text();
-    assert.strictEqual(contentExt, "app-zip-payload");
+    assert.strictEqual(resDownloadExt.status, 401);
 
-    // Download release package with multi-valued x-fleet-token headers
+    // 4. Download desktop app package with multi-valued x-fleet-token headers -> 401 Unauthorized
     const resDownloadMultiHeader = await fetch(`${base}/api/releases/download/app/2.0.0`, {
       headers: [["x-fleet-token", TEST_TOKEN], ["x-fleet-token", "second-val"]],
     });
-    assert.strictEqual(resDownloadMultiHeader.status, 200);
+    assert.strictEqual(resDownloadMultiHeader.status, 401);
 
-    // Download without token returns 401
+    // 5. Download desktop app without token -> 401
     const resDownloadNoAuth = await fetch(`${base}/api/releases/download/app/2.0.0`);
     assert.strictEqual(resDownloadNoAuth.status, 401);
+
+    // 6. Download extension release package with x-fleet-token -> 200
+    const resExtFleet = await fetch(`${base}/api/releases/download/extension/2.0.0`, {
+      headers: { "x-fleet-token": TEST_TOKEN },
+    });
+    assert.strictEqual(resExtFleet.status, 200);
+    const contentExtFleet = await resExtFleet.text();
+    assert.strictEqual(contentExtFleet, "ext-crx-payload");
+
+    // 7. Download extension release package with x-ext-token -> 200
+    const resExtToken = await fetch(`${base}/api/releases/download/extension/2.0.0`, {
+      headers: { "x-ext-token": TEST_TOKEN },
+    });
+    assert.strictEqual(resExtToken.status, 200);
+
+    // 8. Download extension release package with admin token -> 200
+    const resExtAdmin = await fetch(`${base}/api/releases/download/extension/2.0.0`, {
+      headers: { "X-Admin-Token": TEST_ADMIN_TOKEN },
+    });
+    assert.strictEqual(resExtAdmin.status, 200);
+
+    // 9. Download extension release package without token -> 401
+    const resExtNoAuth = await fetch(`${base}/api/releases/download/extension/2.0.0`);
+    assert.strictEqual(resExtNoAuth.status, 401);
+
+    // 10. Download MSI package with admin token -> 200
+    const resMsiAdmin = await fetch(`${base}/api/releases/download/msi/2.0.0`, {
+      headers: { "X-Admin-Token": TEST_ADMIN_TOKEN },
+    });
+    assert.strictEqual(resMsiAdmin.status, 200);
+    const contentMsi = await resMsiAdmin.text();
+    assert.strictEqual(contentMsi, "msi-payload");
+
+    // 11. Download MSI package with x-fleet-token -> 401 Unauthorized (N-1 security enforcement)
+    const resMsiFleet = await fetch(`${base}/api/releases/download/msi/2.0.0`, {
+      headers: { "x-fleet-token": TEST_TOKEN },
+    });
+    assert.strictEqual(resMsiFleet.status, 401);
+
+    // 12. Download MSI package with x-ext-token -> 401 Unauthorized
+    const resMsiExt = await fetch(`${base}/api/releases/download/msi/2.0.0`, {
+      headers: { "x-ext-token": TEST_TOKEN },
+    });
+    assert.strictEqual(resMsiExt.status, 401);
+
+    // 13. Download MSI package without token -> 401
+    const resMsiNoAuth = await fetch(`${base}/api/releases/download/msi/2.0.0`);
+    assert.strictEqual(resMsiNoAuth.status, 401);
 
     // Fleet token on admin-only route returns 401
     const resFleetOnAdmin = await fetch(`${base}/api/releases`, {
@@ -194,6 +256,23 @@ test("Releases API: DELETE /api/releases/:type/:version and download endpoint", 
 
 test("Releases API: supports cookie authentication via cookieAuth callback", async () => {
   resetReleasesStore();
+
+  const releaseDir = path.join(TEST_TMP_DIR, "releases/apps/2.0.0");
+  fs.mkdirSync(releaseDir, { recursive: true });
+  const appZip = path.join(releaseDir, "pec-client-windows-x64.zip");
+  fs.writeFileSync(appZip, "app-zip-payload");
+  const msiFile = path.join(releaseDir, "PEC-App-2.0.0.msi");
+  fs.writeFileSync(msiFile, "msi-payload");
+
+  recordRelease({
+    type: "app",
+    version: "2.0.0",
+    builtAt: new Date().toISOString(),
+    sha256: "sha-app",
+    fileName: "pec-client-windows-x64.zip",
+    filePath: appZip,
+    isActive: false,
+  });
 
   const customApp = express();
   customApp.use(express.json());
@@ -221,6 +300,20 @@ test("Releases API: supports cookie authentication via cookieAuth callback", asy
     assert.strictEqual(resCookieAuth.status, 200);
     const body = await resCookieAuth.json();
     assert.strictEqual(body.ok, true);
+
+    // Download desktop app package with cookieAuth: 200
+    const resAppCookieAuth = await fetch(`${base}/api/releases/download/app/2.0.0`, {
+      headers: { "x-custom-session": "valid-session" },
+    });
+    assert.strictEqual(resAppCookieAuth.status, 200);
+    assert.strictEqual(await resAppCookieAuth.text(), "app-zip-payload");
+
+    // Download MSI package with cookieAuth: 200
+    const resMsiCookieAuth = await fetch(`${base}/api/releases/download/msi/2.0.0`, {
+      headers: { "x-custom-session": "valid-session" },
+    });
+    assert.strictEqual(resMsiCookieAuth.status, 200);
+    assert.strictEqual(await resMsiCookieAuth.text(), "msi-payload");
   } finally {
     if (typeof (server as any).closeAllConnections === "function") {
       (server as any).closeAllConnections();

@@ -12,7 +12,9 @@
 #ifndef _UNICODE
 #define _UNICODE
 #endif
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 #define _WIN32_WINNT 0x0601
 
 #include <initguid.h>
@@ -75,6 +77,8 @@ static void SetStatus(const wchar_t* text, int progress)
 
 static BOOL ExecWait(const wchar_t* cmd, const wchar_t* workDir, DWORD* outExit)
 {
+    if (!cmd || !*cmd) return FALSE;
+
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
     ZeroMemory(&si, sizeof(si));
@@ -84,10 +88,40 @@ static BOOL ExecWait(const wchar_t* cmd, const wchar_t* workDir, DWORD* outExit)
     ZeroMemory(&pi, sizeof(pi));
 
     wchar_t cmdBuf[2048];
-    wcsncpy(cmdBuf, cmd, 2047);
+    wcsncpy_s(cmdBuf, 2048, cmd, _TRUNCATE);
     cmdBuf[2047] = L'\0';
 
-    BOOL ok = CreateProcessW(NULL, cmdBuf, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, workDir, &si, &pi);
+    wchar_t appBuf[MAX_PATH];
+    const wchar_t* lpApp = NULL;
+
+    const wchar_t* p = cmd;
+    while (*p == L' ' || *p == L'\t') p++;
+
+    // Harden CreateProcessW against relative path hijacking:
+    // If cmd starts with a quoted executable path "...", extract it into appBuf and pass as lpApplicationName.
+    if (*p == L'"') {
+        const wchar_t* endQuote = wcschr(p + 1, L'"');
+        if (endQuote) {
+            size_t len = (size_t)(endQuote - (p + 1));
+            if (len > 0 && len < MAX_PATH) {
+                wcsncpy_s(appBuf, MAX_PATH, p + 1, len);
+                appBuf[len] = L'\0';
+                // Only pass lpApplicationName directly if it contains directory separators,
+                // or safely resolve it via SearchPathW to prevent unintentional current-directory execution.
+                if (wcschr(appBuf, L'\\') != NULL || wcschr(appBuf, L'/') != NULL || wcschr(appBuf, L':') != NULL) {
+                    lpApp = appBuf;
+                } else {
+                    wchar_t resolved[MAX_PATH];
+                    if (SearchPathW(NULL, appBuf, L".exe", MAX_PATH, resolved, NULL) > 0) {
+                        wcsncpy_s(appBuf, MAX_PATH, resolved, _TRUNCATE);
+                        lpApp = appBuf;
+                    }
+                }
+            }
+        }
+    }
+
+    BOOL ok = CreateProcessW(lpApp, cmdBuf, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, workDir, &si, &pi);
     if (!ok) return FALSE;
 
     WaitForSingleObject(pi.hProcess, 30000);

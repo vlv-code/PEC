@@ -63,3 +63,127 @@ jobs:
             }
             console.log("Binary PII hygiene check passed: 0 leaks found");
           '
+
+  compile-native-client:
+    name: Compile Native Windows Client
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Download WinDivert SDK
+        shell: powershell
+        run: |
+          $winDivertDir = "C:\WinDivert-2.2.2-A"
+          if (-not (Test-Path "$winDivertDir\include\windivert.h")) {
+            $zipPath = "$env:TEMP\WinDivert-2.2.2-A.zip"
+            $urls = @(
+              "https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip",
+              "https://reqrypt.org/download/WinDivert-2.2.2-A.zip"
+            )
+            $downloaded = $false
+            foreach ($url in $urls) {
+              try {
+                Write-Host "Downloading WinDivert SDK from $url..."
+                Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -TimeoutSec 60
+                if (Test-Path $zipPath) {
+                  $downloaded = $true
+                  break
+                }
+              } catch {
+                Write-Warning "Download from $url failed: $_"
+              }
+            }
+            if (-not $downloaded) {
+              throw "Failed to download WinDivert SDK from all sources"
+            }
+            try {
+              tar.exe -xf $zipPath --exclude "*.sys" -C "C:\"
+            } catch {
+              Expand-Archive -Path $zipPath -DestinationPath "C:\" -Force
+            }
+            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+          }
+          if (-not (Test-Path "$winDivertDir\include\windivert.h") -or -not (Test-Path "$winDivertDir\x64\WinDivert.lib")) {
+            Write-Host "Fallback: fetching raw windivert.h and generating import library from repo WinDivert.dll..."
+            New-Item -ItemType Directory -Path "$winDivertDir\include" -Force | Out-Null
+            New-Item -ItemType Directory -Path "$winDivertDir\x64" -Force | Out-Null
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/basil00/WinDivert/v2.2.2/include/windivert.h" -OutFile "$winDivertDir\include\windivert.h" -UseBasicParsing
+            if (Test-Path "templates\app\windows\WinDivert.dll") {
+              $defPath = "$env:TEMP\windivert.def"
+              @'
+LIBRARY WinDivert.dll
+EXPORTS
+WinDivertClose
+WinDivertGetParam
+WinDivertHelperCalcChecksums
+WinDivertHelperCompileFilter
+WinDivertHelperDecrementTTL
+WinDivertHelperEvalFilter
+WinDivertHelperFormatFilter
+WinDivertHelperFormatIPv4Address
+WinDivertHelperFormatIPv6Address
+WinDivertHelperHashPacket
+WinDivertHelperHtonIPv6Address
+WinDivertHelperHtonIpv6Address
+WinDivertHelperHtonl
+WinDivertHelperHtonll
+WinDivertHelperHtons
+WinDivertHelperNtohIPv6Address
+WinDivertHelperNtohIpv6Address
+WinDivertHelperNtohl
+WinDivertHelperNtohll
+WinDivertHelperNtohs
+WinDivertHelperParseIPv4Address
+WinDivertHelperParseIPv6Address
+WinDivertHelperParsePacket
+WinDivertOpen
+WinDivertRecv
+WinDivertRecvEx
+WinDivertSend
+WinDivertSendEx
+WinDivertSetParam
+WinDivertShutdown
+'@ | Set-Content -Path $defPath
+              lib.exe /nologo /def:$defPath /out:"$winDivertDir\x64\WinDivert.lib" /machine:x64
+            }
+          }
+          if (-not (Test-Path "$winDivertDir\include\windivert.h")) {
+            throw "Failed to locate WinDivert SDK at $winDivertDir"
+          }
+          Write-Host "WinDivert SDK ready at $winDivertDir"
+
+      - name: Compile Native Client Binaries (nmake)
+        shell: cmd
+        working-directory: client/Windows
+        run: |
+          nmake -f Makefile.msvc
+
+      - name: Verify Native Binaries
+        shell: powershell
+        working-directory: client/Windows
+        run: |
+          $binaries = @(
+            "ProxyBridgeCore.dll",
+            "PECAppCore.dll",
+            "PEC-App.exe",
+            "ProxyBridge.exe",
+            "PEC-CLI.exe",
+            "pbcli.exe",
+            "PECAppSvc.exe",
+            "ProxyBridgeSvc.exe",
+            "PEC-App-Setup.exe"
+          )
+          foreach ($b in $binaries) {
+            if (-not (Test-Path $b)) {
+              Write-Error "Missing expected binary: $b"
+              exit 1
+            }
+            $len = (Get-Item $b).Length
+            Write-Host "Verified $b ($([math]::Round($len/1KB, 1)) KB)"
+          }
+

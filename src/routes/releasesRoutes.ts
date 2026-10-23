@@ -42,10 +42,14 @@ export function createReleasesRouter(
     if (adminToken && headerAdmin && timingSafeEqualString(headerAdmin, adminToken)) {
       return next();
     }
-    const fleetToken = getFleetToken ? getFleetToken() : (process.env.EXT_SHARED_TOKEN || process.env.FLEET_TOKEN || "");
-    const headerFleet = getHeaderString(req.headers["x-fleet-token"] || req.headers["x-ext-token"]);
-    if (fleetToken && headerFleet && timingSafeEqualString(headerFleet, fleetToken)) {
-      return next();
+    const rawType = String(req.params.type || "").toLowerCase();
+    // Allow X-Fleet-Token only for extension downloads. Desktop app and MSI packages require admin credentials.
+    if (rawType === "extension") {
+      const fleetToken = getFleetToken ? getFleetToken() : (process.env.EXT_SHARED_TOKEN || process.env.FLEET_TOKEN || "");
+      const headerFleet = getHeaderString(req.headers["x-fleet-token"] || req.headers["x-ext-token"]);
+      if (fleetToken && headerFleet && timingSafeEqualString(headerFleet, fleetToken)) {
+        return next();
+      }
     }
     return res.status(401).json({ ok: false, error: "Unauthorized" });
   };

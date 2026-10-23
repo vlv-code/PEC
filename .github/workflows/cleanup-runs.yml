@@ -2,10 +2,15 @@ name: Cleanup Workflow Runs
 
 on:
   workflow_dispatch:
+    inputs:
+      days_old:
+        description: 'Delete workflow runs older than N days'
+        required: false
+        default: '30'
+        type: string
 
 permissions:
   actions: write
-  contents: write
 
 jobs:
   cleanup:
@@ -14,9 +19,20 @@ jobs:
       - name: Delete old workflow runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          DAYS_OLD: ${{ github.event.inputs.days_old || '30' }}
         run: |
-          echo "Listing all old workflow runs..."
-          RUNS=$(gh api -X GET "repos/${{ github.repository }}/actions/runs?per_page=100" --jq ".workflow_runs[] | select(.id != ${{ github.run_id }}) | .id")
+          DAYS="${DAYS_OLD:-30}"
+          if ! [[ "$DAYS" =~ ^[0-9]+$ ]]; then
+            echo "Invalid days_old '$DAYS', defaulting to 30"
+            DAYS=30
+          fi
+          echo "Listing workflow runs older than $DAYS days..."
+          RUNS=$(gh api --paginate "repos/${{ github.repository }}/actions/runs?per_page=100" --jq ".workflow_runs[]? | select(.id != $CURRENT_RUN_ID and ((.created_at | fromdateiso8601) < (now - ($DAYS * 86400)))) | .id" 2>/dev/null || true)
+          if [ -z "$RUNS" ]; then
+            echo "No workflow runs older than $DAYS days found."
+            exit 0
+          fi
           COUNT=0
           for id in $RUNS; do
             echo "Deleting run $id..."

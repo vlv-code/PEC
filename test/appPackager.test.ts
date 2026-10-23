@@ -15,6 +15,7 @@ import {
   renderAppVerifyPs1,
   packageApp,
   getAppUpdatesDir,
+  getTemplatesAppDir,
   buildAppBinaries,
   assembleAppPackage,
   compileBinariesWithMinGW,
@@ -83,6 +84,30 @@ test("buildAppProfile generates valid .pbprofile conforming to ProxyBridge schem
   assert.strictEqual(profile.Theme.preset, cfg.presetStyle);
   assert.strictEqual(profile.Theme.mode, cfg.defaultThemeMode);
   assert.strictEqual(profile.Theme.primary, cfg.themeColor);
+
+  // Security check: passwords must be empty in static .pbprofile (N-1)
+  for (const pc of profile.ProxyConfigs) {
+    assert.strictEqual(pc.Password, "", "Packaged .pbprofile must have empty password for proxy nodes");
+  }
+});
+
+test("getTemplatesAppDir returns templates/app without duplicating into dist/templates (N-8)", () => {
+  const originalEnv = process.env.PEC_TEMPLATES_DIR;
+  try {
+    delete process.env.PEC_TEMPLATES_DIR;
+    const defaultDir = getTemplatesAppDir();
+    assert.strictEqual(defaultDir, path.resolve("./templates/app"));
+
+    process.env.PEC_TEMPLATES_DIR = path.resolve("./custom_templates");
+    const customDir = getTemplatesAppDir();
+    assert.strictEqual(customDir, path.resolve("./custom_templates"));
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env.PEC_TEMPLATES_DIR = originalEnv;
+    } else {
+      delete process.env.PEC_TEMPLATES_DIR;
+    }
+  }
 });
 
 test("renderAppDeployPs1 and renderAppVerifyPs1 render without unresolved placeholders", () => {

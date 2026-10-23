@@ -15,39 +15,10 @@ import type { AppBuildConfig, AppBuildInfo, AppProcessRule, ProxyNode } from "./
 import { signBinary, getCertificateStatus } from "./codeSigner.js";
 
 export function getTemplatesAppDir(): string {
-  if (process.env.PEC_TEMPLATES_DIR && fs.existsSync(process.env.PEC_TEMPLATES_DIR)) {
+  if (process.env.PEC_TEMPLATES_DIR) {
     return path.resolve(process.env.PEC_TEMPLATES_DIR);
   }
-  const rootTemplates = path.resolve("./templates/app");
-  const distTemplates = path.resolve("./dist/templates/app");
-
-  if (fs.existsSync(rootTemplates)) {
-    if (!fs.existsSync(distTemplates)) {
-      try {
-        fs.mkdirSync(distTemplates, { recursive: true });
-        fs.cpSync(rootTemplates, distTemplates, { recursive: true });
-      } catch {}
-    } else {
-      const rootWin = path.join(rootTemplates, "windows");
-      const distWin = path.join(distTemplates, "windows");
-      if (fs.existsSync(rootWin)) {
-        if (!fs.existsSync(distWin)) fs.mkdirSync(distWin, { recursive: true });
-        try {
-          for (const f of fs.readdirSync(rootWin)) {
-            const srcFile = path.join(rootWin, f);
-            const dstFile = path.join(distWin, f);
-            if (!fs.existsSync(dstFile)) {
-              fs.copyFileSync(srcFile, dstFile);
-            }
-          }
-        } catch {}
-      }
-    }
-  }
-
-  if (fs.existsSync(distTemplates)) return distTemplates;
-  if (fs.existsSync(rootTemplates)) return rootTemplates;
-  return distTemplates;
+  return path.resolve("./templates/app");
 }
 
 export function getAppUpdatesDir(): string {
@@ -276,7 +247,7 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
     Host: node.host,
     Port: String(node.port),
     Username: node.username || "",
-    Password: node.password || "",
+    Password: "",
     SendDomainToProxy: true,
   }));
 
@@ -669,7 +640,6 @@ export function renderWxsManifest(cfg: AppBuildConfig, baseUrl: string, sourceDi
   const candidates = [
     path.join(getTemplatesAppDir(), "windows", "pec-app.wxs.template"),
     path.resolve("./templates/app/windows/pec-app.wxs.template"),
-    path.resolve("./dist/templates/app/windows/pec-app.wxs.template"),
   ];
 
   let templateContent = "";
@@ -911,13 +881,12 @@ export function assembleAppPackage(
 
   const resolveTemplateBinary = (name: string): string | null => {
     const candidates = [
+      path.join(winTemplatesDir, name),
+      path.resolve("./templates/app/windows", name),
       path.resolve("./client/Windows/gui", name),
       path.resolve("./client/Windows/installer", name),
       path.resolve("./client/Windows/src/service", name),
       path.resolve("./client/Windows", name),
-      path.join(winTemplatesDir, name),
-      path.resolve("./dist/templates/app/windows", name),
-      path.resolve("./templates/app/windows", name),
     ];
     for (const c of candidates) {
       if (fs.existsSync(c)) {
@@ -1114,7 +1083,6 @@ export function packageApp(baseUrl: string): AppBuildInfo {
     const candidates = [
       path.join(winTemplatesDir, name),
       path.resolve("./templates/app/windows", name),
-      path.resolve("./dist/templates/app/windows", name),
       path.resolve("./client/Windows/gui", name),
       path.resolve("./client/Windows/installer", name),
       path.resolve("./client/Windows/src/service", name),
@@ -1442,12 +1410,8 @@ export function compileBinariesWithMinGW(outDir?: string): BuildAppBinariesResul
     if (fs.existsSync(sourcePath)) {
       fs.copyFileSync(sourcePath, path.join(winTemplatesDir, name));
       const rootWin = path.resolve("./templates/app/windows");
-      if (fs.existsSync(rootWin)) {
+      if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
         try { fs.copyFileSync(sourcePath, path.join(rootWin, name)); } catch {}
-      }
-      const distWin = path.resolve("./dist/templates/app/windows");
-      if (fs.existsSync(distWin) && distWin !== winTemplatesDir) {
-        try { fs.copyFileSync(sourcePath, path.join(distWin, name)); } catch {}
       }
     }
   };
@@ -1620,12 +1584,8 @@ export function buildAppBinaries(): BuildAppBinariesResult {
     if (fs.existsSync(sourcePath)) {
       fs.copyFileSync(sourcePath, path.join(winTemplatesDir, name));
       const rootWin = path.resolve("./templates/app/windows");
-      if (fs.existsSync(rootWin)) {
+      if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
         try { fs.copyFileSync(sourcePath, path.join(rootWin, name)); } catch {}
-      }
-      const distWin = path.resolve("./dist/templates/app/windows");
-      if (fs.existsSync(distWin) && distWin !== winTemplatesDir) {
-        try { fs.copyFileSync(sourcePath, path.join(distWin, name)); } catch {}
       }
     }
   };
@@ -1714,7 +1674,6 @@ export function buildAppBinaries(): BuildAppBinariesResult {
   const fallbackGui = [
     path.join(guiDir, "PEC-App.exe"),
     path.resolve("./templates/app/windows/PEC-App.exe"),
-    path.resolve("./dist/templates/app/windows/PEC-App.exe"),
     path.resolve("./templates/app/windows/ProxyBridge.exe"),
   ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
@@ -1729,7 +1688,6 @@ export function buildAppBinaries(): BuildAppBinariesResult {
   const fallbackCli = [
     path.join(clientWinDir, "PEC-CLI.exe"),
     path.resolve("./templates/app/windows/PEC-CLI.exe"),
-    path.resolve("./dist/templates/app/windows/PEC-CLI.exe"),
     path.resolve("./templates/app/windows/pbcli.exe"),
   ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
@@ -1745,9 +1703,7 @@ export function buildAppBinaries(): BuildAppBinariesResult {
     path.join(clientWinDir, "PECAppSvc.exe"),
     path.join(clientWinDir, "src", "service", "PECAppSvc.exe"),
     path.resolve("./templates/app/windows/PECAppSvc.exe"),
-    path.resolve("./dist/templates/app/windows/PECAppSvc.exe"),
     path.resolve("./templates/app/windows/ProxyBridgeSvc.exe"),
-    path.resolve("./dist/templates/app/windows/ProxyBridgeSvc.exe"),
   ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
   if ((!fs.existsSync(destSvc) || fs.statSync(destSvc).size < 1000) && fallbackSvc) {
@@ -1760,9 +1716,7 @@ export function buildAppBinaries(): BuildAppBinariesResult {
   const destCore = path.join(winTemplatesDir, "PECAppCore.dll");
   const fallbackCore = [
     path.resolve("./templates/app/windows/PECAppCore.dll"),
-    path.resolve("./dist/templates/app/windows/PECAppCore.dll"),
     path.resolve("./templates/app/windows/ProxyBridgeCore.dll"),
-    path.resolve("./dist/templates/app/windows/ProxyBridgeCore.dll"),
   ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
   if ((!fs.existsSync(destCore) || fs.statSync(destCore).size < 1000) && fallbackCore) {
@@ -1776,7 +1730,6 @@ export function buildAppBinaries(): BuildAppBinariesResult {
   const fallbackSetup = [
     path.join(clientWinDir, "installer", "PEC-App-Setup.exe"),
     path.resolve("./templates/app/windows/PEC-App-Setup.exe"),
-    path.resolve("./dist/templates/app/windows/PEC-App-Setup.exe"),
   ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
   if ((!fs.existsSync(destSetup) || fs.statSync(destSetup).size < 1000) && fallbackSetup) {
@@ -1792,12 +1745,10 @@ export function buildAppBinaries(): BuildAppBinariesResult {
     if (!fs.existsSync(target) || fs.statSync(target).size < 1000) {
       const candidates = [
         path.resolve("./templates/app/windows", filename),
-        path.resolve("./dist/templates/app/windows", filename),
       ];
       if (sourceFallback) {
         candidates.push(
-          path.resolve("./templates/app/windows", sourceFallback),
-          path.resolve("./dist/templates/app/windows", sourceFallback)
+          path.resolve("./templates/app/windows", sourceFallback)
         );
       }
       const src = candidates.find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);

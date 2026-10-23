@@ -196,7 +196,7 @@ const PUBLIC_API_PATHS = new Set([
   "/auth/session",
 ]);
 app.use("/api", (req: Request, res: Response, next: NextFunction) => {
-  if (PUBLIC_API_PATHS.has(req.path)) {
+  if (PUBLIC_API_PATHS.has(req.path) || req.path.startsWith("/releases/download/")) {
     return next();
   }
   return adminAuth(req, res, next);
