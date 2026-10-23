@@ -1,0 +1,326 @@
+import "./helpers/setup.js";
+import test from "node:test";
+import assert from "node:assert";
+import fs from "node:fs";
+import {
+  getAllProxies,
+  getProxyById,
+  getActiveProxy,
+  createProxy,
+  updateProxy,
+  deleteProxy,
+  setActiveProxy,
+  initDefaultProxyIfNeeded,
+  probeProxyTcp,
+} from "../src/proxies.js";
+import { getProxyConfig, updateProxyConfig } from "../src/instances.js";
+import { getProxiesStorePath, getCredsStorePath, getProxyConfigPath } from "../src/storage.js";
+import { atomicWriteCreds } from "../src/rotate.js";
+
+test("Proxy Repository: CRUD lifecycle and atomic persistence", () => {
+  // Initially, clean store
+  const storePath = getProxiesStorePath();
+  if (fs.existsSync(storePath)) {
+    fs.unlinkSync(storePath);
+  }
+
+  // 1. Create first proxy (should auto-activate as it's the first proxy)
+  const node1 = createProxy({
+    tag: "inbound-socks-01",
+    name: "Primary SOCKS5",
+    type: "manual",
+    protocol: "socks5",
+    host: "192.168.1.100",
+    port: 10808,
+    username: "user1",
+    password: "secretpassword123",
+    isActive: false, // Should be forced to true because it's the first proxy
+  });
+
+  assert.ok(node1.id, "ProxyNode id should be defined");
+  assert.strictEqual(node1.tag, "inbound-socks-01");
+  assert.strictEqual(node1.isActive, true, "First proxy must automatically become active");
+  assert.ok(node1.createdAt, "createdAt should be set");
+  assert.ok(node1.updatedAt, "updatedAt should be set");
+
+  // Verify proxy_config.json and creds were updated
+  const config = getProxyConfig();
+  assert.strictEqual(config.protocol, "socks5");
+  assert.strictEqual(config.host, "192.168.1.100");
+  assert.strictEqual(config.port, 10808);
+
+  const credsRaw = fs.readFileSync(getCredsStorePath(), "utf-8");
+  const creds = JSON.parse(credsRaw);
+  assert.strictEqual(creds.user, "user1");
+  assert.strictEqual(creds.pass, "secretpassword123");
+
+  // 2. Create second proxy (not active)
+  const node2 = createProxy({
+    tag: "inbound-http-02",
+    name: "Secondary HTTP",
+    type: "manual",
+    protocol: "http",
+    host: "10.0.0.50",
+    port: 8080,
+    username: "user2",
+    password: "httppassword456",
+    isActive: false,
+  });
+
+  assert.strictEqual(node2.isActive, false);
+  const activeAfter2 = getActiveProxy();
+  assert.strictEqual(activeAfter2?.id, node1.id);
+
+  // 3. Retrieve all proxies
+  const all = getAllProxies();
+  assert.strictEqual(all.length, 2);
+
+  // 4. Password masking
+  const maskedList = getAllProxies(true);
+  const maskedNode1 = maskedList.find((p) => p.id === node1.id);
+  const maskedNode2 = maskedList.find((p) => p.id === node2.id);
+  assert.strictEqual(maskedNode1?.password, "********");
+  assert.strictEqual(maskedNode2?.password, "********");
+
+  // Unmasked remains intact in store
+  const freshNode1 = getProxyById(node1.id);
+  assert.strictEqual(freshNode1?.password, "secretpassword123");
+
+  // 5. Set active proxy to node2
+  const activated = setActiveProxy(node2.id);
+  assert.strictEqual(activated.isActive, true);
+  assert.strictEqual(getActiveProxy()?.id, node2.id);
+  assert.strictEqual(getProxyById(node1.id)?.isActive, false);
+
+  // Verify config and creds synchronized to node2
+  const updatedConfig = getProxyConfig();
+  assert.strictEqual(updatedConfig.protocol, "http");
+  assert.strictEqual(updatedConfig.host, "10.0.0.50");
+  assert.strictEqual(updatedConfig.port, 8080);
+
+  const updatedCreds = JSON.parse(fs.readFileSync(getCredsStorePath(), "utf-8"));
+  assert.strictEqual(updatedCreds.user, "user2");
+  assert.strictEqual(updatedCreds.pass, "httppassword456");
+
+  // 6. Update proxy
+  const updatedNode2 = updateProxy(node2.id, {
+    name: "Secondary HTTP Updated",
+    port: 8081,
+  });
+  assert.strictEqual(updatedNode2.name, "Secondary HTTP Updated");
+  assert.strictEqual(updatedNode2.port, 8081);
+  assert.strictEqual(getProxyConfig().port, 8081);
+
+  // 7. Delete proxy
+  // Deleting active node2 should make node1 active
+  const deleted = deleteProxy(node2.id);
+  assert.strictEqual(deleted, true);
+  assert.strictEqual(getAllProxies().length, 1);
+  assert.strictEqual(getActiveProxy()?.id, node1.id);
+  assert.strictEqual(getProxyConfig().host, "192.168.1.100");
+
+  // Deleting last remaining proxy
+  const deletedLast = deleteProxy(node1.id);
+  assert.strictEqual(deletedLast, true);
+  assert.strictEqual(getAllProxies().length, 0);
+  assert.strictEqual(getActiveProxy(), undefined);
+
+  // Deleting non-existent returns false
+  assert.strictEqual(deleteProxy("non-existent-id"), false);
+});
+
+test("Proxy Repository: Validation of host and port", () => {
+  // Invalid host
+  assert.throws(() => {
+    createProxy({
+      tag: "bad-host",
+      name: "Bad Host",
+      type: "manual",
+      protocol: "socks5",
+      host: "host with spaces",
+      port: 10808,
+      isActive: false,
+    });
+  }, /Invalid host format/);
+
+  assert.throws(() => {
+    createProxy({
+      tag: "bad-host-injection",
+      name: "Bad Host",
+      type: "manual",
+      protocol: "socks5",
+      host: "evil.com;rm -rf /",
+      port: 10808,
+      isActive: false,
+    });
+  }, /Invalid host format/);
+
+  // Invalid port
+  assert.throws(() => {
+    createProxy({
+      tag: "bad-port",
+      name: "Bad Port",
+      type: "manual",
+      protocol: "socks5",
+      host: "127.0.0.1",
+      port: 70000,
+      isActive: false,
+    });
+  }, /Invalid port number/);
+
+  assert.throws(() => {
+    createProxy({
+      tag: "bad-port-zero",
+      name: "Bad Port",
+      type: "manual",
+      protocol: "socks5",
+      host: "127.0.0.1",
+      port: 0,
+      isActive: false,
+    });
+  }, /Invalid port number/);
+});
+
+test("Proxy Repository: initDefaultProxyIfNeeded migrates existing setup", () => {
+  const storePath = getProxiesStorePath();
+  if (fs.existsSync(storePath)) {
+    fs.unlinkSync(storePath);
+  }
+  updateProxyConfig({ host: "10.0.0.1", port: 10809 });
+
+  initDefaultProxyIfNeeded();
+
+  const proxies = getAllProxies();
+  assert.strictEqual(proxies.length, 1);
+  const def = proxies[0];
+  assert.strictEqual(def.isActive, false); // placeholder host (10.0.0.1) is not activated by default
+  assert.ok(def.name);
+  assert.ok(def.tag);
+  assert.strictEqual(def.host, "10.0.0.1");
+  assert.strictEqual(def.port, 10809);
+
+  // Running it again does not duplicate
+  initDefaultProxyIfNeeded();
+  assert.strictEqual(getAllProxies().length, 1);
+});
+
+test("Proxy Repository: edge cases and error handling", () => {
+  const storePath = getProxiesStorePath();
+  if (fs.existsSync(storePath)) {
+    fs.unlinkSync(storePath);
+  }
+
+  // 1. getProxyById non-existent returns undefined
+  assert.strictEqual(getProxyById("missing"), undefined);
+
+  // 2. create proxy A (becomes active)
+  const a = createProxy({
+    tag: "proxy-a",
+    name: "Proxy A",
+    type: "manual",
+    protocol: "socks5",
+    host: "1.1.1.1",
+    port: 1080,
+    isActive: true,
+  });
+  assert.strictEqual(a.isActive, true);
+
+  // 3. create proxy B with explicit isActive: true -> A should be deactivated
+  const b = createProxy({
+    tag: "proxy-b",
+    name: "Proxy B",
+    type: "manual",
+    protocol: "http",
+    host: "2.2.2.2",
+    port: 8080,
+    isActive: true,
+  });
+  assert.strictEqual(b.isActive, true);
+  assert.strictEqual(getProxyById(a.id)?.isActive, false);
+  assert.strictEqual(getActiveProxy()?.id, b.id);
+
+  // 4. delete inactive proxy A -> B remains active
+  const deletedA = deleteProxy(a.id);
+  assert.strictEqual(deletedA, true);
+  assert.strictEqual(getActiveProxy()?.id, b.id);
+
+  // 5. updateProxy validation and errors
+  assert.throws(() => {
+    updateProxy("non-existent-id", { name: "New Name" });
+  }, /Proxy not found/);
+
+  assert.throws(() => {
+    updateProxy(b.id, { host: "invalid host!@" });
+  }, /Invalid host format/);
+
+  assert.throws(() => {
+    updateProxy(b.id, { port: 999999 });
+  }, /Invalid port number/);
+
+  assert.throws(() => {
+    setActiveProxy("missing-id");
+  }, /Proxy not found/);
+
+  // 6. password masking when password is empty or undefined
+  const c = createProxy({
+    tag: "proxy-c",
+    name: "Proxy C",
+    type: "manual",
+    protocol: "socks5",
+    host: "3.3.3.3",
+    port: 1080,
+    // no username or password
+  });
+  const masked = getAllProxies(true);
+  const maskedC = masked.find((p) => p.id === c.id);
+  assert.strictEqual(maskedC?.password, "");
+
+  // 7. updateProxy guarantees id and createdAt immutability
+  const originalCreatedAt = b.createdAt;
+  const updatedB = updateProxy(b.id, {
+    id: "hacked-id",
+    createdAt: "1970-01-01T00:00:00.000Z",
+    name: "Proxy B New Name",
+  } as any);
+  assert.strictEqual(updatedB.id, b.id, "Proxy id must be immutable");
+  assert.strictEqual(updatedB.createdAt, originalCreatedAt, "createdAt must be immutable");
+
+  // 8. Activating auth-less proxy clears credentials in current_creds.json
+  // First ensure creds exist from proxy with credentials
+  updateProxy(b.id, { username: "user-b", password: "pass-b", isActive: true });
+  const credsBefore = JSON.parse(fs.readFileSync(getCredsStorePath(), "utf-8"));
+  assert.strictEqual(credsBefore.user, "user-b");
+  assert.strictEqual(credsBefore.pass, "pass-b");
+
+  // Activate proxy c (which has no credentials)
+  setActiveProxy(c.id);
+  const credsAfter = JSON.parse(fs.readFileSync(getCredsStorePath(), "utf-8"));
+  assert.strictEqual(credsAfter.user, "");
+  assert.strictEqual(credsAfter.pass, "");
+
+  // Restore non-empty credentials so subsequent test suites are not polluted
+  atomicWriteCreds(getCredsStorePath(), { user: "corp-user", pass: "test-pass" });
+});
+
+test("probeProxyTcp: verifies TCP connectivity with listening and non-listening sockets", async () => {
+  const net = await import("node:net");
+  // 1. Non-listening port returns false
+  const unreachable = await probeProxyTcp("127.0.0.1", 64999, 300);
+  assert.strictEqual(unreachable, false, "unreachable port must return false");
+
+  // 2. Placeholder 10.0.0.1 returns false immediately
+  const placeholder = await probeProxyTcp("10.0.0.1", 10809, 300);
+  assert.strictEqual(placeholder, false, "placeholder IP 10.0.0.1 must return false");
+
+  // 3. Listening server returns true
+  const server = net.createServer((sock) => sock.end());
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const port = (server.address() as any).port;
+  try {
+    const reachable = await probeProxyTcp("127.0.0.1", port, 1000);
+    assert.strictEqual(reachable, true, "listening port must return true");
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+

@@ -38,7 +38,7 @@
 #define SVC_NAME       L"PECAppSvc"
 #define SVC_DISPLAY    L"PEC-App Service"
 #define SVC_DESC       L"Privileged traffic-redirection engine for PEC-App."
-#define SVC_SDDL       L"D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)"
+#define SVC_SDDL       L"D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)"
 #define UNINST_KEY     L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PEC-App"
 
 // Control IDs

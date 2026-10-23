@@ -34,6 +34,15 @@ PROXYBRIDGE_API BOOL ProxyBridge_RegisterSession(DWORD session_id)
     return FALSE;
 }
 
+static void free_rule_node(PROCESS_RULE *rule)
+{
+    if (!rule) return;
+    if (rule->target_hosts != NULL) free(rule->target_hosts);
+    if (rule->target_ports != NULL) free(rule->target_ports);
+    if (rule->target_domains != NULL) free(rule->target_domains);
+    free(rule);
+}
+
 PROXYBRIDGE_API void ProxyBridge_UnregisterSession(DWORD session_id)
 {
     AcquireSRWLockExclusive(&g_session_lock);
@@ -46,6 +55,34 @@ PROXYBRIDGE_API void ProxyBridge_UnregisterSession(DWORD session_id)
         }
     }
     ReleaseSRWLockExclusive(&g_session_lock);
+
+    // Purge session-specific rules for this disconnected RDS session
+    if (session_id != 0)
+    {
+        AcquireSRWLockExclusive(&g_rules_lock);
+        PROCESS_RULE *rule = rules_list;
+        PROCESS_RULE *prev = NULL;
+        while (rule != NULL)
+        {
+            if (rule->session_id == session_id)
+            {
+                PROCESS_RULE *to_free = rule;
+                rule = rule->next;
+                if (prev == NULL)
+                    rules_list = rule;
+                else
+                    prev->next = rule;
+                free_rule_node(to_free);
+            }
+            else
+            {
+                prev = rule;
+                rule = rule->next;
+            }
+        }
+        update_has_active_rules();
+        ReleaseSRWLockExclusive(&g_rules_lock);
+    }
 }
 
 BOOL is_session_registered(DWORD session_id)
@@ -114,17 +151,21 @@ RuleAction check_process_rule_v6(const UINT8 src_ip6[16], UINT16 src_port, const
     if (out_pid) *out_pid = pid;
     if (pid == 0) return RULE_ACTION_DIRECT;
     if (pid == g_current_process_id) return RULE_ACTION_DIRECT;
+    DWORD session_id = 0;
     if (g_session_filter_enabled)
     {
-        DWORD session_id = 0;
         if (!ProcessIdToSessionId(pid, &session_id) || !is_session_registered(session_id))
             return RULE_ACTION_DIRECT;
+    }
+    else
+    {
+        ProcessIdToSessionId(pid, &session_id);
     }
     if (!get_process_name_from_pid(pid, process_name, sizeof(process_name)))
         return RULE_ACTION_DIRECT;
 
     UINT32 proxy_config_id = 0;
-    RuleAction action = match_rule_v6(process_name, dest_ip6, dest_port, is_udp, &proxy_config_id);
+    RuleAction action = match_rule_v6(process_name, dest_ip6, dest_port, is_udp, session_id, &proxy_config_id);
 
     if (action == RULE_ACTION_PROXY)
     {
@@ -632,7 +673,7 @@ BOOL is_broadcast_or_multicast(UINT32 ip)
 // Matches rules by process name, IP, port, and protocol
 // Inner matcher - caller MUST hold g_rules_lock (shared) for the whole traversal so
 // rules_list and the strings it points to cannot be freed/edited mid-match.
-RuleAction match_rule_inner(const char *process_name, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, UINT32 *out_proxy_config_id)
+RuleAction match_rule_inner(const char *process_name, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, DWORD session_id, UINT32 *out_proxy_config_id)
 {
     PROCESS_RULE *rule = rules_list;
     PROCESS_RULE *wildcard_rule = NULL;  // Save fully wildcard rule for last
@@ -647,6 +688,12 @@ RuleAction match_rule_inner(const char *process_name, UINT32 dest_ip, UINT16 des
     while (rule != NULL)
     {
         if (!rule->enabled)
+        {
+            rule = rule->next;
+            continue;
+        }
+
+        if (rule->session_id != 0 && session_id != 0 && rule->session_id != session_id)
         {
             rule = rule->next;
             continue;
@@ -736,7 +783,7 @@ RuleAction match_rule_inner(const char *process_name, UINT32 dest_ip, UINT16 des
 
 // Public matcher - takes the shared rules lock so a concurrent AddRule/EditRule/
 // DeleteRule/MoveRule from the GUI thread cannot free a node/string mid-match.
-RuleAction match_rule(const char *process_name, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, UINT32 *out_proxy_config_id)
+RuleAction match_rule(const char *process_name, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, DWORD session_id, UINT32 *out_proxy_config_id)
 {
     if (!g_proxy_enabled)                      // paused: no rule applies
     {
@@ -745,7 +792,7 @@ RuleAction match_rule(const char *process_name, UINT32 dest_ip, UINT16 dest_port
         return RULE_ACTION_DIRECT;
     }
     AcquireSRWLockShared(&g_rules_lock);
-    RuleAction action = match_rule_inner(process_name, dest_ip, dest_port, is_udp, out_proxy_config_id);
+    RuleAction action = match_rule_inner(process_name, dest_ip, dest_port, is_udp, session_id, out_proxy_config_id);
     ReleaseSRWLockShared(&g_rules_lock);
     return action;
 }
@@ -754,7 +801,7 @@ RuleAction match_rule(const char *process_name, UINT32 dest_ip, UINT16 dest_port
 // Supports exact addresses ("::1"), CIDR ("2001:db8::/32"), and wildcards ("*").
 // IPv4-format patterns in target_hosts are silently skipped for IPv6 traffic.
 // Caller MUST hold g_rules_lock (shared) - see match_rule_v6 wrapper below.
-RuleAction match_rule_v6_inner(const char *process_name, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, UINT32 *out_proxy_config_id)
+RuleAction match_rule_v6_inner(const char *process_name, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, DWORD session_id, UINT32 *out_proxy_config_id)
 {
     PROCESS_RULE *rule = rules_list;
     PROCESS_RULE *wildcard_rule = NULL;
@@ -769,6 +816,12 @@ RuleAction match_rule_v6_inner(const char *process_name, const UINT8 dest_ip6[16
     while (rule != NULL)
     {
         if (!rule->enabled)
+        {
+            rule = rule->next;
+            continue;
+        }
+
+        if (rule->session_id != 0 && session_id != 0 && rule->session_id != session_id)
         {
             rule = rule->next;
             continue;
@@ -833,7 +886,7 @@ RuleAction match_rule_v6_inner(const char *process_name, const UINT8 dest_ip6[16
     return RULE_ACTION_DIRECT;
 }
 
-RuleAction match_rule_v6(const char *process_name, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, UINT32 *out_proxy_config_id)
+RuleAction match_rule_v6(const char *process_name, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, DWORD session_id, UINT32 *out_proxy_config_id)
 {
     if (!g_proxy_enabled)                      // paused: no rule applies
     {
@@ -842,7 +895,7 @@ RuleAction match_rule_v6(const char *process_name, const UINT8 dest_ip6[16], UIN
         return RULE_ACTION_DIRECT;
     }
     AcquireSRWLockShared(&g_rules_lock);
-    RuleAction action = match_rule_v6_inner(process_name, dest_ip6, dest_port, is_udp, out_proxy_config_id);
+    RuleAction action = match_rule_v6_inner(process_name, dest_ip6, dest_port, is_udp, session_id, out_proxy_config_id);
     ReleaseSRWLockShared(&g_rules_lock);
     return action;
 }
@@ -870,11 +923,15 @@ RuleAction check_process_rule(UINT32 src_ip, UINT16 src_port, UINT32 dest_ip, UI
     if (pid == g_current_process_id)
         return RULE_ACTION_DIRECT;
 
+    DWORD session_id = 0;
     if (g_session_filter_enabled)
     {
-        DWORD session_id = 0;
         if (!ProcessIdToSessionId(pid, &session_id) || !is_session_registered(session_id))
             return RULE_ACTION_DIRECT;
+    }
+    else
+    {
+        ProcessIdToSessionId(pid, &session_id);
     }
 
     if (!get_process_name_from_pid(pid, process_name, sizeof(process_name)))
@@ -882,7 +939,7 @@ RuleAction check_process_rule(UINT32 src_ip, UINT16 src_port, UINT32 dest_ip, UI
 
     // Use unified rule matching function
     UINT32 proxy_config_id = 0;
-    RuleAction action = match_rule(process_name, dest_ip, dest_port, is_udp, &proxy_config_id);
+    RuleAction action = match_rule(process_name, dest_ip, dest_port, is_udp, session_id, &proxy_config_id);
 
     // Additional checks for proxy configuration
     if (action == RULE_ACTION_PROXY)
@@ -902,7 +959,7 @@ RuleAction check_process_rule(UINT32 src_ip, UINT16 src_port, UINT32 dest_ip, UI
     return action;
 }
 
-PROXYBRIDGE_API UINT32 ProxyBridge_AddRule(const char* process_name, const char* target_hosts, const char* target_ports, const char* target_domains, RuleProtocol protocol, RuleAction action, UINT32 proxy_config_id, BOOL localhost_via_proxy)
+PROXYBRIDGE_API UINT32 ProxyBridge_AddRuleEx(DWORD session_id, const char* process_name, const char* target_hosts, const char* target_ports, const char* target_domains, RuleProtocol protocol, RuleAction action, UINT32 proxy_config_id, BOOL localhost_via_proxy)
 {
     if (process_name == NULL || process_name[0] == '\0')
         return 0;
@@ -912,6 +969,7 @@ PROXYBRIDGE_API UINT32 ProxyBridge_AddRule(const char* process_name, const char*
         return 0;
 
     rule->rule_id = g_next_rule_id++;
+    rule->session_id = session_id;
     strncpy_s(rule->process_name, MAX_PROCESS_NAME, process_name, _TRUNCATE);
     rule->protocol = protocol;
     rule->proxy_config_id = proxy_config_id;
@@ -1018,9 +1076,14 @@ PROXYBRIDGE_API UINT32 ProxyBridge_AddRule(const char* process_name, const char*
     ReleaseSRWLockExclusive(&g_rules_lock);
 
     update_has_active_rules();
-    log_message("Added rule ID: %u for process '%s' (Protocol: %d, Action: %d, ProxyConfigId: %u, Domains: %s)", new_id, process_name, protocol, action, proxy_config_id, target_domains ? target_domains : "*");
+    log_message("Added rule ID: %u for process '%s' (Protocol: %d, Action: %d, ProxyConfigId: %u, Domains: %s, Session: %lu)", new_id, process_name, protocol, action, proxy_config_id, target_domains ? target_domains : "*", (unsigned long)session_id);
 
     return new_id;
+}
+
+PROXYBRIDGE_API UINT32 ProxyBridge_AddRule(const char* process_name, const char* target_hosts, const char* target_ports, const char* target_domains, RuleProtocol protocol, RuleAction action, UINT32 proxy_config_id, BOOL localhost_via_proxy)
+{
+    return ProxyBridge_AddRuleEx(0, process_name, target_hosts, target_ports, target_domains, protocol, action, proxy_config_id, localhost_via_proxy);
 }
 
 PROXYBRIDGE_API BOOL ProxyBridge_EnableRule(UINT32 rule_id)

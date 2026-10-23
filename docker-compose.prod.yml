@@ -1,0 +1,78 @@
+# Production deployment with Nginx Reverse Proxy & SSL termination
+services:
+  pec-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pec-proxy-extension-corp:latest
+    container_name: pec-proxy-backend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - EXT_SHARED_TOKEN=${EXT_SHARED_TOKEN:?Set EXT_SHARED_TOKEN in .env (see .env.example)}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env (a long random value, distinct from EXT_SHARED_TOKEN)}
+      # All persistent state lives in /app/data (mounted volume below) so
+      # profiles, rotation config and instance metadata survive redeploys.
+      - DATA_DIR=/app/data
+      - PROXIES_STORE_PATH=/app/data/proxies.json
+      - CREDS_STORE=/app/data/current_creds.json
+      - DASHBOARD_AUTH_PATH=/app/data/dashboard_auth.json
+      - PROXY_CONFIG_PATH=/app/data/proxy_config.json
+      - ROUTING_PROFILES_PATH=/app/data/routing_profiles.json
+      - ROUTING_PRESETS_PATH=/app/data/routing_presets.json
+      - INSTANCES_META_PATH=/app/data/instances_meta.json
+      - ROTATION_CONFIG_PATH=/app/data/rotation_config.json
+      - ROTATION_HISTORY_PATH=/app/data/rotation_history.json
+      - BUILDER_CONFIG=/app/data/extension_build_config.json
+      # nginx terminates TLS in front of this container -> trust exactly one
+      # proxy hop so client IPs resolve correctly for rate limiting/audit.
+      - TRUST_PROXY=1
+      # Public URL used in updates.xml / GPO artifacts.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL in .env (bare origin like https://pec.example.corp) - required for artifact integrity}
+      # 3x-ui panel integration (credential rotation) - without these the
+      # container cannot reach the panel and .env values are ignored.
+      - XUI_PANEL_URL=${XUI_PANEL_URL:-}
+      - XUI_ADMIN_USER=${XUI_ADMIN_USER:-}
+      - XUI_ADMIN_PASS=${XUI_ADMIN_PASS:-}
+      - XUI_INBOUND_REMARK=${XUI_INBOUND_REMARK:-squid-in}
+      - ROTATION_INTERVAL_MIN=${ROTATION_INTERVAL_MIN:-1440}
+      - PAC_SIGNING_SECRET=${PAC_SIGNING_SECRET:-}
+      - PAC_REQUIRE_SIGNATURE=${PAC_REQUIRE_SIGNATURE:-false}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - PEC_RELEASES_DIR=/app/dist/releases
+    volumes:
+      - pec_data:/app/data
+      # The CRX signing key lives here - a stable key means a stable
+      # extension ID (GPO forcelists break when the ID changes).
+      - pec_extension:/app/extension
+      - pec_updates:/app/dist/updates
+      - pec_releases:/app/dist/releases
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: pec-nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+      - pec_updates:/var/www/updates:ro
+    depends_on:
+      - pec-server
+
+volumes:
+  pec_data:
+  pec_extension:
+  pec_updates:
+  pec_releases:

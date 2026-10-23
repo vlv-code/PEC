@@ -12,6 +12,7 @@ import { getActiveProxy, getProxyById, getAllProxies } from "./proxies.js";
 import { getProxyConfig } from "./instances.js";
 import { getProfileById, expandRuleDomains } from "./routing.js";
 import type { AppBuildConfig, AppBuildInfo, AppProcessRule, ProxyNode } from "./types.js";
+import { signBinary, getCertificateStatus } from "./codeSigner.js";
 
 export function getTemplatesAppDir(): string {
   if (process.env.PEC_TEMPLATES_DIR && fs.existsSync(process.env.PEC_TEMPLATES_DIR)) {
@@ -462,7 +463,7 @@ if ($IsService) {
         }
         & sc.exe create $SvcName binPath= $BinPath start= auto DisplayName= "PEC-App Service" | Out-Null
         & sc.exe description $SvcName "Privileged transparent proxy service for $AppName." | Out-Null
-        & sc.exe sdset $SvcName "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)" 2>$null | Out-Null
+        & sc.exe sdset $SvcName "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)" 2>$null | Out-Null
         & sc.exe start $SvcName 2>$null | Out-Null
         Write-Host "[PEC-Deploy] Service $SvcName registered and started (start=auto)." -ForegroundColor Green
     } catch {
@@ -648,6 +649,214 @@ export interface AppPackageResult {
   entries: string[];
 }
 
+export function normalizeMsiVersion(rawVersion: string): string {
+  const clean = (rawVersion || "1.0.0").replace(/^v/i, "").split("-")[0];
+  const parts = clean.split(".").map((p) => {
+    const n = parseInt(p, 10);
+    return isNaN(n) ? 0 : n;
+  });
+  while (parts.length < 3) parts.push(0);
+  return parts.slice(0, 4).join(".");
+}
+
+export function renderWxsManifest(cfg: AppBuildConfig, baseUrl: string, sourceDir: string): string {
+  const appName = cfg.name || "PEC-App";
+  const publisher = cfg.shortName || "PEC Corp";
+  const msiVer = normalizeMsiVersion(cfg.version || "1.0.0");
+  const fleetToken = cfg.defaultToken || "";
+  const normalizedSourceDir = sourceDir.replace(/\\/g, "/");
+
+  const candidates = [
+    path.join(getTemplatesAppDir(), "windows", "pec-app.wxs.template"),
+    path.resolve("./templates/app/windows/pec-app.wxs.template"),
+    path.resolve("./dist/templates/app/windows/pec-app.wxs.template"),
+  ];
+
+  let templateContent = "";
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      try {
+        templateContent = fs.readFileSync(c, "utf-8");
+        break;
+      } catch {}
+    }
+  }
+
+  if (!templateContent) {
+    templateContent = `<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="{{APP_NAME}}" Language="1033" Version="{{VERSION}}" Manufacturer="{{PUBLISHER}}" UpgradeCode="A4B7D265-42E1-4D99-A785-30BF2A3C2F19">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64" Comments="PEC-App Windows Enterprise Client" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of {{APP_NAME}} is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Property Id="SERVER_URL" Value="{{SERVER_URL}}" />
+    <Property Id="FLEET_TOKEN" Value="{{FLEET_TOKEN}}" />
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="PEC-App">
+          <Component Id="C_PECAppExe" Guid="*" Win64="yes">
+            <File Id="F_PECAppExe" Source="{{SOURCE_DIR}}/PEC-App.exe" KeyPath="yes">
+              <Shortcut Id="S_PECAppMenu" Directory="ProgramMenuDir" Name="PEC-App" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon.ico" IconIndex="0" Advertise="yes" />
+            </File>
+          </Component>
+          <Component Id="C_PECAppSvc" Guid="*" Win64="yes">
+            <File Id="F_PECAppSvc" Source="{{SOURCE_DIR}}/PECAppSvc.exe" KeyPath="yes" />
+            <ServiceInstall Id="SvcInstall" Type="ownProcess" Name="PECAppSvc" DisplayName="PEC-App Service" Description="Privileged traffic-redirection engine for PEC-App." Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
+            <ServiceControl Id="SvcControl" Name="PECAppSvc" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+          </Component>
+          <Component Id="C_PECCliExe" Guid="*" Win64="yes">
+            <File Id="F_PECCliExe" Source="{{SOURCE_DIR}}/PEC-CLI.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="C_PECAppCoreDll" Guid="*" Win64="yes">
+            <File Id="F_PECAppCoreDll" Source="{{SOURCE_DIR}}/PECAppCore.dll" KeyPath="yes" />
+          </Component>
+          <Component Id="C_WinDivertDll" Guid="*" Win64="yes">
+            <File Id="F_WinDivertDll" Source="{{SOURCE_DIR}}/WinDivert.dll" KeyPath="yes" />
+          </Component>
+          <Component Id="C_WinDivert64Sys" Guid="*" Win64="yes">
+            <File Id="F_WinDivert64Sys" Source="{{SOURCE_DIR}}/WinDivert64.sys" KeyPath="yes" />
+          </Component>
+          <Component Id="C_Profile" Guid="*" Win64="yes">
+            <File Id="F_Profile" Source="{{SOURCE_DIR}}/pec_profile.pbprofile" KeyPath="yes" />
+          </Component>
+          <Component Id="C_RegistryConfig" Guid="*" Win64="yes">
+            <RegistryKey Root="HKLM" Key="Software\\PEC-App">
+              <RegistryValue Type="string" Name="InstallPath" Value="[INSTALLFOLDER]" KeyPath="yes" />
+              <RegistryValue Type="string" Name="ServerUrl" Value="[SERVER_URL]" />
+              <RegistryValue Type="string" Name="FleetToken" Value="[FLEET_TOKEN]" />
+              <RegistryValue Type="string" Name="Version" Value="{{VERSION}}" />
+            </RegistryKey>
+          </Component>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ProgramMenuDir" Name="PEC-App">
+          <Component Id="C_ProgramMenuDir" Guid="B7C8E9F0-1234-5678-9ABC-DEF012345678">
+            <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
+            <RegistryValue Root="HKCU" Key="Software\\PEC-App" Name="MenuInstalled" Type="integer" Value="1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+    <Icon Id="AppIcon.ico" Source="{{SOURCE_DIR}}/PEC-App.exe" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Feature Id="ProductFeature" Title="PEC-App" Level="1">
+      <ComponentRef Id="C_PECAppExe" />
+      <ComponentRef Id="C_PECAppSvc" />
+      <ComponentRef Id="C_PECCliExe" />
+      <ComponentRef Id="C_PECAppCoreDll" />
+      <ComponentRef Id="C_WinDivertDll" />
+      <ComponentRef Id="C_WinDivert64Sys" />
+      <ComponentRef Id="C_Profile" />
+      <ComponentRef Id="C_RegistryConfig" />
+      <ComponentRef Id="C_ProgramMenuDir" />
+    </Feature>
+  </Product>
+</Wix>`;
+  }
+
+  const xmlEscape = (s: string) =>
+    String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+
+  return templateContent
+    .replace(/\{\{APP_NAME\}\}/g, xmlEscape(appName))
+    .replace(/\{\{VERSION\}\}/g, xmlEscape(msiVer))
+    .replace(/\{\{PUBLISHER\}\}/g, xmlEscape(publisher))
+    .replace(/\{\{SERVER_URL\}\}/g, xmlEscape(baseUrl))
+    .replace(/\{\{FLEET_TOKEN\}\}/g, xmlEscape(fleetToken))
+    .replace(/\{\{SOURCE_DIR\}\}/g, normalizedSourceDir);
+}
+
+export function buildMsiPackage(
+  cfg: AppBuildConfig,
+  baseUrl: string,
+  stagedDir: string,
+  outputMsiPath: string
+): { success: boolean; msiPath?: string; error?: string } {
+  try {
+    const wxsContent = renderWxsManifest(cfg, baseUrl, stagedDir);
+    const wxsPath = path.join(stagedDir, "pec-app.wxs");
+    fs.writeFileSync(wxsPath, wxsContent, "utf-8");
+
+    // 1. Try wixl (standard on Linux Alpine with msitools, or cross-platform)
+    let hasWixl = false;
+    try {
+      child_process.execSync("wixl --version", { windowsHide: true, stdio: "ignore" });
+      hasWixl = true;
+    } catch {}
+
+    if (hasWixl) {
+      const cmd = `wixl -v -o "${outputMsiPath}" "${wxsPath}"`;
+      child_process.execSync(cmd, { windowsHide: true, stdio: "pipe" });
+      if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
+        return { success: true, msiPath: outputMsiPath };
+      }
+    }
+
+    // 2. Try Windows WiX Toolset v3 (candle + light) or WiX v4/v5 (wix build)
+    if (process.platform === "win32") {
+      let candlePath = "candle.exe";
+      let lightPath = "light.exe";
+      let hasWix3 = false;
+
+      const wix3Dirs = [
+        "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin",
+        "C:\\Program Files\\WiX Toolset v3.11\\bin",
+        "C:\\Program Files (x86)\\WiX Toolset v3.14\\bin",
+        "C:\\Program Files\\WiX Toolset v3.14\\bin",
+      ];
+      for (const d of wix3Dirs) {
+        if (fs.existsSync(path.join(d, "candle.exe")) && fs.existsSync(path.join(d, "light.exe"))) {
+          candlePath = `"${path.join(d, "candle.exe")}"`;
+          lightPath = `"${path.join(d, "light.exe")}"`;
+          hasWix3 = true;
+          break;
+        }
+      }
+
+      if (!hasWix3) {
+        try {
+          child_process.execSync("candle.exe /?", { windowsHide: true, stdio: "ignore" });
+          hasWix3 = true;
+        } catch {}
+      }
+
+      if (hasWix3) {
+        const wixobj = path.join(stagedDir, "pec-app.wixobj");
+        child_process.execSync(`${candlePath} -out "${wixobj}" "${wxsPath}"`, { windowsHide: true, stdio: "pipe" });
+        child_process.execSync(`${lightPath} -out "${outputMsiPath}" "${wixobj}"`, { windowsHide: true, stdio: "pipe" });
+        if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
+          return { success: true, msiPath: outputMsiPath };
+        }
+      }
+
+      // Check WiX v4 / v5
+      try {
+        child_process.execSync("wix.exe --version", { windowsHide: true, stdio: "ignore" });
+        child_process.execSync(`wix.exe build -o "${outputMsiPath}" "${wxsPath}"`, { windowsHide: true, stdio: "pipe" });
+        if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
+          return { success: true, msiPath: outputMsiPath };
+        }
+      } catch {}
+    }
+
+    return {
+      success: false,
+      error: "WiX compiler not found (install msitools/wixl on Linux or WiX Toolset on Windows)",
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || String(err),
+    };
+  }
+}
+
 export function assembleAppPackage(
   baseUrl?: string,
   config?: AppBuildConfig,
@@ -741,54 +950,93 @@ export function assembleAppPackage(
     }
   }
 
+  // Create staging directory to sign binaries without altering source templates
+  const stagingDir = path.join(targetDir, `_staging_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+  fs.mkdirSync(stagingDir, { recursive: true });
+
+  const stageAndResolve = (binaryName: string, sourcePath: string | null): string | null => {
+    if (!sourcePath || !fs.existsSync(sourcePath)) return null;
+    const dest = path.join(stagingDir, binaryName);
+    fs.copyFileSync(sourcePath, dest);
+    return dest;
+  };
+
+  const stagedGui = stageAndResolve("PEC-App.exe", resolveTemplateBinary("PEC-App.exe") || resolveTemplateBinary("ProxyBridge.exe"));
+  const stagedCli = stageAndResolve("PEC-CLI.exe", resolveTemplateBinary("PEC-CLI.exe") || resolveTemplateBinary("pbcli.exe"));
+  const stagedDivertDll = stageAndResolve("WinDivert.dll", resolveTemplateBinary("WinDivert.dll"));
+  const stagedDivertSys = stageAndResolve("WinDivert64.sys", resolveTemplateBinary("WinDivert64.sys"));
+  const stagedCore = stageAndResolve("PECAppCore.dll", resolveTemplateBinary("PECAppCore.dll") || resolveTemplateBinary("ProxyBridgeCore.dll"));
+  const stagedSvc = stageAndResolve("PECAppSvc.exe", resolveTemplateBinary("PECAppSvc.exe") || resolveTemplateBinary("ProxyBridgeSvc.exe"));
+  const stagedSetup = stageAndResolve("PEC-App-Setup.exe", resolveTemplateBinary("PEC-App-Setup.exe") || resolveTemplateBinary(`PEC-App-Setup-${cfg.version || "2.1.0"}.exe`));
+
+  // Write profile into staging
+  fs.writeFileSync(path.join(stagingDir, "pec_profile.pbprofile"), profileBuffer);
+
+  // Deep Sign binaries if code signing certificate is active
+  const certStatus = getCertificateStatus();
+  if (certStatus.hasCertificate) {
+    if (stagedGui) signBinary(stagedGui);
+    if (stagedCli) signBinary(stagedCli);
+    if (stagedCore) signBinary(stagedCore);
+    if (stagedSvc) signBinary(stagedSvc);
+    if (stagedSetup) signBinary(stagedSetup);
+  }
+
+  // Build MSI Package
+  const stagedMsi = path.join(stagingDir, "PEC-App.msi");
+  const msiBuildRes = buildMsiPackage(cfg, effectiveBaseUrl, stagingDir, stagedMsi);
+  if (msiBuildRes.success && fs.existsSync(stagedMsi)) {
+    if (certStatus.hasCertificate) {
+      signBinary(stagedMsi);
+    }
+    const finalMsiPath = path.join(targetDir, "PEC-App.msi");
+    const versionedMsiPath = path.join(targetDir, `PEC-App-${cfg.version || "2.1.0"}.msi`);
+    fs.copyFileSync(stagedMsi, finalMsiPath);
+    fs.copyFileSync(stagedMsi, versionedMsiPath);
+    winZip.addLocalFile(stagedMsi, "", "PEC-App.msi");
+  }
+
   // 1. PEC-App.exe (DirectX 11 Standalone GUI)
-  const realGui = resolveTemplateBinary("PEC-App.exe") || resolveTemplateBinary("ProxyBridge.exe");
-  if (realGui) {
+  if (stagedGui) {
     if (winZip.getEntry("PEC-App.exe")) winZip.deleteFile("PEC-App.exe");
-    winZip.addLocalFile(realGui, "", "PEC-App.exe");
+    winZip.addLocalFile(stagedGui, "", "PEC-App.exe");
   }
 
   // 2. PEC-CLI.exe
-  const realCli = resolveTemplateBinary("PEC-CLI.exe") || resolveTemplateBinary("pbcli.exe");
-  if (realCli) {
+  if (stagedCli) {
     if (winZip.getEntry("PEC-CLI.exe")) winZip.deleteFile("PEC-CLI.exe");
-    winZip.addLocalFile(realCli, "", "PEC-CLI.exe");
+    winZip.addLocalFile(stagedCli, "", "PEC-CLI.exe");
   }
 
   // 3. WinDivert.dll
-  const realDivertDll = resolveTemplateBinary("WinDivert.dll");
-  if (realDivertDll) {
+  if (stagedDivertDll) {
     if (winZip.getEntry("WinDivert.dll")) winZip.deleteFile("WinDivert.dll");
-    winZip.addLocalFile(realDivertDll, "", "WinDivert.dll");
+    winZip.addLocalFile(stagedDivertDll, "", "WinDivert.dll");
   }
 
   // 4. WinDivert64.sys
-  const realDivertSys = resolveTemplateBinary("WinDivert64.sys");
-  if (realDivertSys) {
+  if (stagedDivertSys) {
     if (winZip.getEntry("WinDivert64.sys")) winZip.deleteFile("WinDivert64.sys");
-    winZip.addLocalFile(realDivertSys, "", "WinDivert64.sys");
+    winZip.addLocalFile(stagedDivertSys, "", "WinDivert64.sys");
   }
 
   // 5. PECAppCore.dll
-  const realCore = resolveTemplateBinary("PECAppCore.dll") || resolveTemplateBinary("ProxyBridgeCore.dll");
-  if (realCore) {
+  if (stagedCore) {
     if (winZip.getEntry("PECAppCore.dll")) winZip.deleteFile("PECAppCore.dll");
-    winZip.addLocalFile(realCore, "", "PECAppCore.dll");
+    winZip.addLocalFile(stagedCore, "", "PECAppCore.dll");
   }
 
   // 6. PECAppSvc.exe
-  const realSvc = resolveTemplateBinary("PECAppSvc.exe") || resolveTemplateBinary("ProxyBridgeSvc.exe");
-  if (realSvc) {
+  if (stagedSvc) {
     if (winZip.getEntry("PECAppSvc.exe")) winZip.deleteFile("PECAppSvc.exe");
-    winZip.addLocalFile(realSvc, "", "PECAppSvc.exe");
+    winZip.addLocalFile(stagedSvc, "", "PECAppSvc.exe");
   }
 
   // 7. PEC-App-Setup.exe (Standalone Installer)
-  const realSetup = resolveTemplateBinary("PEC-App-Setup.exe") || resolveTemplateBinary(`PEC-App-Setup-${cfg.version || "2.1.0"}.exe`);
-  if (realSetup) {
+  if (stagedSetup) {
     try {
       if (winZip.getEntry("PEC-App-Setup.exe")) winZip.deleteFile("PEC-App-Setup.exe");
-      winZip.addLocalFile(realSetup, "", "PEC-App-Setup.exe");
+      winZip.addLocalFile(stagedSetup, "", "PEC-App-Setup.exe");
     } catch {}
   }
 
@@ -810,6 +1058,11 @@ export function assembleAppPackage(
   if (fs.existsSync(noticesFile)) {
     winZip.addFile("THIRD-PARTY-NOTICES.txt", fs.readFileSync(noticesFile));
   }
+
+  // Cleanup staging directory
+  try {
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  } catch {}
 
   const winZipBuffer = winZip.toBuffer();
   const pecAppZipPath = path.join(targetDir, "PEC-App-windows-x64.zip");
@@ -933,6 +1186,23 @@ export function packageApp(baseUrl: string): AppBuildInfo {
   log(`[Linux] SHA-256: ${linuxSha256}`);
   log(`[Release] Generated pec_profile.pbprofile and deployment scripts.`);
 
+  // Check for compiled MSI artifact
+  const finalMsi = path.join(targetReleasesDir, "PEC-App.msi");
+  let msiBuffer: Buffer | null = null;
+  let msiSha256 = "";
+  if (fs.existsSync(finalMsi)) {
+    try {
+      msiBuffer = fs.readFileSync(finalMsi);
+      msiSha256 = crypto.createHash("sha256").update(msiBuffer).digest("hex");
+      log(`[MSI] Prepared PEC-App.msi (${Math.round(msiBuffer.length / 1024)} KB, SHA: ${msiSha256.substring(0, 10)}...) for GPO/Intune`);
+    } catch {}
+  }
+
+  const certStatus = getCertificateStatus();
+  if (certStatus.hasCertificate) {
+    log(`[CodeSign] Deliverables signed with certificate: ${certStatus.subject} (${certStatus.type})`);
+  }
+
   const buildInfo: AppBuildInfo = {
     version: cfg.version || "2.1.0",
     builtAt: new Date().toISOString(),
@@ -942,11 +1212,20 @@ export function packageApp(baseUrl: string): AppBuildInfo {
     windowsInstallerUrl: setupBuffer ? `/updates/PEC-App-Setup-${cfg.version || "2.1.0"}.exe` : undefined,
     windowsInstallerSize: setupBuffer ? setupBuffer.length : undefined,
     windowsInstallerSha256: setupBuffer ? setupSha256 : undefined,
+    windowsMsiUrl: msiBuffer ? `/api/app-builder/download/msi` : undefined,
+    windowsMsiSize: msiBuffer ? msiBuffer.length : undefined,
+    windowsMsiSha256: msiBuffer ? msiSha256 : undefined,
     linuxPackageUrl: "/updates/pec-client-linux-x64.tar.gz",
     linuxPackageSize: linuxTarGzBuffer.length,
     linuxPackageSha256: linuxSha256,
     profilePath: profileDiskPath,
     buildLog: pkgLog,
+    codeSigningStatus: {
+      isSigned: certStatus.hasCertificate,
+      subject: certStatus.subject,
+      issuer: certStatus.issuer,
+      type: certStatus.type,
+    },
   };
 
   try {
@@ -965,6 +1244,10 @@ export function packageApp(baseUrl: string): AppBuildInfo {
     if (setupBuffer) {
       fs.writeFileSync(path.join(releasesDir, `PEC-App-Setup-${buildInfo.version}.exe`), setupBuffer);
       fs.writeFileSync(path.join(releasesDir, "PEC-App-Setup.exe"), setupBuffer);
+    }
+    if (msiBuffer) {
+      fs.writeFileSync(path.join(releasesDir, `PEC-App-${buildInfo.version}.msi`), msiBuffer);
+      fs.writeFileSync(path.join(releasesDir, "PEC-App.msi"), msiBuffer);
     }
     fs.writeFileSync(path.join(releasesDir, "pec-client-linux-x64.tar.gz"), linuxTarGzBuffer);
     fs.writeFileSync(path.join(releasesDir, "pec_profile.pbprofile"), profileBuffer);
@@ -1033,10 +1316,10 @@ export function findMsvcVcvars(): string | null {
 }
 
 export const MINGW_GUI_CMD =
-  "x86_64-w64-mingw32-g++ -O2 -std=c++17 -s -mwindows -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 main_imgui.cpp imgui/imgui*.cpp imgui/backends/imgui_impl_win32.cpp imgui/backends/imgui_impl_dx11.cpp profile/profile.c profile/json.c res.res -o PEC-App.exe -ld3d11 -ldxgi -ld3dcompiler -ldwmapi -lshlwapi -lshell32 -ladvapi32 -lole32 -luser32 -lgdi32 -lws2_32 -lwinhttp -lcomctl32";
+  "x86_64-w64-mingw32-g++ -O2 -std=c++17 -s -mwindows -DUNICODE -D_UNICODE -DNDEBUG -D_WIN32_WINNT=0x0601 main_imgui.cpp imgui/imgui*.cpp imgui/backends/imgui_impl_win32.cpp imgui/backends/imgui_impl_dx11.cpp profile/profile.c profile/json.c res.res -o PEC-App.exe -ld3d11 -ldxgi -ld3dcompiler -ldwmapi -lshlwapi -lshell32 -ladvapi32 -lole32 -luser32 -lgdi32 -lws2_32 -lwinhttp -lcomctl32";
 
 export const MSVC_GUI_CMD =
-  "cl.exe /O2 /std:c++17 /EHsc /DUNICODE /D_UNICODE /D_WIN32_WINNT=0x0601 /utf-8 main_imgui.cpp imgui\\imgui*.cpp imgui\\backends\\imgui_impl_win32.cpp imgui\\backends\\imgui_impl_dx11.cpp profile\\profile.c profile\\json.c res\\app.res /Fe:PEC-App.exe /link /SUBSYSTEM:WINDOWS d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib shlwapi.lib shell32.lib advapi32.lib ole32.lib user32.lib gdi32.lib ws2_32.lib winhttp.lib comctl32.lib";
+  "cl.exe /O2 /std:c++17 /EHsc /DUNICODE /D_UNICODE /DNDEBUG /D_WIN32_WINNT=0x0601 /utf-8 main_imgui.cpp imgui\\imgui*.cpp imgui\\backends\\imgui_impl_win32.cpp imgui\\backends\\imgui_impl_dx11.cpp profile\\profile.c profile\\json.c res\\app.res /Fe:PEC-App.exe /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib shlwapi.lib shell32.lib advapi32.lib ole32.lib user32.lib gdi32.lib ws2_32.lib winhttp.lib comctl32.lib";
 
 export function findMingwW64(): { gcc: string; gxx: string; windres: string } | null {
   try {
@@ -1347,7 +1630,7 @@ export function buildAppBinaries(): BuildAppBinariesResult {
     }
   };
 
-  if (vcvars && fs.existsSync(guiDir)) {
+  if (process.env.SKIP_NATIVE_REBUILD !== "true" && vcvars && fs.existsSync(guiDir)) {
     try {
       compilerName = "MSVC 2022 (x64)";
       log(`[Toolchain] Native MSVC compiler detected: ${vcvars}`);
@@ -1415,7 +1698,7 @@ export function buildAppBinaries(): BuildAppBinariesResult {
       log(`[WARN] MSVC build warning: ${err?.message || err}`);
       console.warn("[appPackager] MSVC compilation error, checking pre-built binaries:", err?.message || err, out);
     }
-  } else if (mingw && fs.existsSync(guiDir)) {
+  } else if (process.env.SKIP_NATIVE_REBUILD !== "true" && mingw && fs.existsSync(guiDir)) {
     const mingwRes = compileBinariesWithMinGW(winTemplatesDir);
     compilerName = mingwRes.compiler || "MinGW-w64 GCC (x86_64)";
     if (mingwRes.buildLog) {

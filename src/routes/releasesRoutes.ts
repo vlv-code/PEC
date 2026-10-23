@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
+import { getReleasesDir } from "../storage.js";
 import {
   getAllReleases,
   setActiveRelease,
@@ -62,8 +63,8 @@ export function createReleasesRouter(
   router.post("/api/releases/set-active", adminAuthMiddleware, (req: Request, res: Response) => {
     try {
       const { type, version } = req.body || {};
-      if (type !== "extension" && type !== "app") {
-        return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension' or 'app'" });
+      if (type !== "extension" && type !== "app" && type !== "msi") {
+        return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension', 'app', or 'msi'" });
       }
       if (!version || typeof version !== "string") {
         return res.status(400).json({ ok: false, error: "version is required and must be a string" });
@@ -102,16 +103,29 @@ export function createReleasesRouter(
 
   router.get("/api/releases/download/:type/:version", downloadAuthMiddleware, (req: Request, res: Response) => {
     try {
-      const { type, version } = req.params;
-      if (type !== "extension" && type !== "app") {
-        return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension' or 'app'" });
+      const rawType = String(req.params.type || "").toLowerCase();
+      const version = String(req.params.version || "").trim();
+      if (rawType !== "extension" && rawType !== "app" && rawType !== "msi") {
+        return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension', 'app', or 'msi'" });
       }
       if (!version) {
         return res.status(400).json({ ok: false, error: "version is required" });
       }
 
+      if (rawType === "msi") {
+        const msiCandidates = [
+          path.join(getReleasesDir(), "apps", version, `PEC-App-${version}.msi`),
+          path.join(getReleasesDir(), "apps", version, "PEC-App.msi"),
+        ];
+        const msiPath = msiCandidates.find((p) => fs.existsSync(p));
+        if (!msiPath) {
+          return res.status(404).json({ ok: false, error: "MSI release file not found" });
+        }
+        return res.download(path.resolve(msiPath), `PEC-App-${version}.msi`);
+      }
+      const type = rawType as "extension" | "app";
       const store = getAllReleases();
-      const release = store.releases.find((r) => r.type === type && r.version === version.trim());
+      const release = store.releases.find((r) => r.type === type && r.version === version);
       if (!release) {
         return res.status(404).json({ ok: false, error: "Release not found" });
       }

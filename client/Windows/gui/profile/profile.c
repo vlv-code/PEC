@@ -181,12 +181,41 @@ static void get_exe_dir(wchar_t* out, int cch)
     wchar_t* last = wcsrchr(out, L'\\');
     if (last) *last = 0; else out[0] = 0;
 }
+static void ensure_per_user_copy(const wchar_t* src, wchar_t* out, int cch)
+{
+    wchar_t b[MAX_PATH]; base_dir(b, MAX_PATH);
+    wchar_t d[MAX_PATH]; profiles_dir(d, MAX_PATH);
+    CreateDirectoryW(b, NULL);
+    CreateDirectoryW(d, NULL);
+
+    if (_wcsnicmp(src, b, wcslen(b)) == 0)
+    {
+        _snwprintf_s(out, cch, _TRUNCATE, L"%s", src);
+        return;
+    }
+
+    const wchar_t* fn = wcsrchr(src, L'\\');
+    if (!fn) fn = wcsrchr(src, L'/');
+    fn = fn ? (fn + 1) : src;
+
+    wchar_t userCopy[MAX_PATH];
+    _snwprintf_s(userCopy, MAX_PATH, _TRUNCATE, L"%s\\%s", d, fn);
+    if (GetFileAttributesW(userCopy) == INVALID_FILE_ATTRIBUTES)
+    {
+        CopyFileW(src, userCopy, TRUE);
+    }
+    _snwprintf_s(out, cch, _TRUNCATE, L"%s", userCopy);
+}
+
 static void profile_path(const wchar_t* name, wchar_t* out, int cch)
 {
     if (name && (wcschr(name, L'\\') || wcschr(name, L'/') || (wcslen(name) > 10 && _wcsicmp(name + wcslen(name) - 10, L".pbprofile") == 0)))
     {
-        _snwprintf_s(out, cch, _TRUNCATE, L"%s", name);
-        if (GetFileAttributesW(out) != INVALID_FILE_ATTRIBUTES) return;
+        if (GetFileAttributesW(name) != INVALID_FILE_ATTRIBUTES)
+        {
+            ensure_per_user_copy(name, out, cch);
+            return;
+        }
     }
 
     wchar_t d[MAX_PATH]; profiles_dir(d, MAX_PATH);
@@ -198,13 +227,13 @@ static void profile_path(const wchar_t* name, wchar_t* out, int cch)
     {
         wchar_t cand[MAX_PATH];
         _snwprintf_s(cand, MAX_PATH, _TRUNCATE, L"%s\\%s.pbprofile", exe, name);
-        if (GetFileAttributesW(cand) != INVALID_FILE_ATTRIBUTES) { _snwprintf_s(out, cch, _TRUNCATE, L"%s", cand); return; }
+        if (GetFileAttributesW(cand) != INVALID_FILE_ATTRIBUTES) { ensure_per_user_copy(cand, out, cch); return; }
 
         _snwprintf_s(cand, MAX_PATH, _TRUNCATE, L"%s\\pec_profile.pbprofile", exe);
-        if (GetFileAttributesW(cand) != INVALID_FILE_ATTRIBUTES) { _snwprintf_s(out, cch, _TRUNCATE, L"%s", cand); return; }
+        if (GetFileAttributesW(cand) != INVALID_FILE_ATTRIBUTES) { ensure_per_user_copy(cand, out, cch); return; }
 
         _snwprintf_s(cand, MAX_PATH, _TRUNCATE, L"%s\\Default.pbprofile", exe);
-        if (GetFileAttributesW(cand) != INVALID_FILE_ATTRIBUTES) { _snwprintf_s(out, cch, _TRUNCATE, L"%s", cand); return; }
+        if (GetFileAttributesW(cand) != INVALID_FILE_ATTRIBUTES) { ensure_per_user_copy(cand, out, cch); return; }
     }
 }
 void PB_GetLogsDir(wchar_t* out, int cch)

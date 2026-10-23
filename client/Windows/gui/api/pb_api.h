@@ -27,6 +27,7 @@ typedef int    (*PFN_TestProxyConfig)(UINT32, const char*, unsigned short, char*
 typedef void   (*PBTestLogCallback)(const char* line, void* user);
 typedef int    (*PFN_TestProxyConfigEx)(UINT32, const char*, unsigned short, PBTestLogCallback, void*);
 typedef UINT32 (*PFN_AddRule)(const char*, const char*, const char*, const char*, PBRuleProtocol, PBRuleAction, UINT32, BOOL);
+typedef UINT32 (*PFN_AddRuleEx)(DWORD, const char*, const char*, const char*, const char*, PBRuleProtocol, PBRuleAction, UINT32, BOOL);
 typedef BOOL   (*PFN_EnableRule)(UINT32);
 typedef BOOL   (*PFN_DisableRule)(UINT32);
 typedef BOOL   (*PFN_DeleteRule)(UINT32);
@@ -54,6 +55,7 @@ typedef struct {
     PFN_TestProxyConfig           TestProxyConfig;
     PFN_TestProxyConfigEx         TestProxyConfigEx;
     PFN_AddRule                   AddRule;
+    PFN_AddRuleEx                 AddRuleEx;
     PFN_EnableRule                EnableRule;
     PFN_DisableRule               DisableRule;
     PFN_DeleteRule                DeleteRule;
@@ -139,6 +141,7 @@ static BOOL PB_LoadDirect(PBApi* api)
     PB_BIND(TestProxyConfig,          "TestProxyConfig");
     PB_BIND(TestProxyConfigEx,        "TestProxyConfigEx");
     PB_BIND(AddRule,                  "AddRule");
+    api->AddRuleEx = (PFN_AddRuleEx)(void*)GetProcAddress(api->dll, "ProxyBridge_AddRuleEx");
     PB_BIND(EnableRule,               "EnableRule");
     PB_BIND(DisableRule,              "DisableRule");
     PB_BIND(DeleteRule,               "DeleteRule");

@@ -1,0 +1,272 @@
+import "./helpers/setup.js";
+import test from "node:test";
+import assert from "node:assert";
+import fs from "node:fs";
+import path from "node:path";
+import express from "express";
+import type { AddressInfo } from "node:net";
+import AdmZip from "adm-zip";
+import { TEST_TMP_DIR, TEST_TOKEN, TEST_ADMIN_TOKEN } from "./helpers/setup.js";
+import { packageExtension, saveBuildConfig, isPackageStale, createManifestObject, generateGpoConfig } from "../src/packager.js";
+import { createBuilderRouter } from "../src/routes/builderRoutes.js";
+
+function buildApp() {
+  const app = express();
+  app.use(express.json());
+  app.use(createBuilderRouter(() => TEST_TOKEN, () => TEST_ADMIN_TOKEN));
+  return app;
+}
+
+async function withServer<T>(fn: (base: string) => Promise<T>): Promise<T> {
+  const server = buildApp().listen(0);
+  await new Promise((resolve) => server.once("listening", resolve));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    return await fn(`http://127.0.0.1:${port}`);
+  } finally {
+    if (typeof (server as any).closeAllConnections === "function") {
+      (server as any).closeAllConnections();
+    }
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+test("builder: isPackageStale detects when configuration is newer than zip", async () => {
+  // 1. Initial package
+  saveBuildConfig({ defaultServerUrl: "http://initial.example.corp" });
+  packageExtension("http://initial.example.corp");
+  assert.strictEqual(isPackageStale(), false, "immediately after packageExtension, package must not be stale");
+
+  // 2. Artificially backdate the zip file
+  const zipPath = path.join(TEST_TMP_DIR, "updates", "extension.zip");
+  const past = new Date(Date.now() - 10000);
+  fs.utimesSync(zipPath, past, past);
+
+  // 3. Update build config
+  saveBuildConfig({ defaultServerUrl: "http://updated.example.corp" });
+  assert.strictEqual(isPackageStale(), true, "must report stale after build config is updated");
+
+  // 4. Re-packaging clears staleness
+  packageExtension("http://updated.example.corp");
+  assert.strictEqual(isPackageStale(), false, "must not be stale after re-packaging");
+});
+
+test("builder: GET /api/extension/download-zip re-packages when stale and delivers updated config", async () => {
+  await withServer(async (base) => {
+    // 1. Initial build with server A
+    saveBuildConfig({ defaultServerUrl: "http://server-a.example.corp", syncIntervalMinutes: 10 });
+    packageExtension("http://server-a.example.corp");
+
+    // 2. Change builder config to server B without calling build explicitly
+    const zipPath = path.join(TEST_TMP_DIR, "updates", "extension.zip");
+    const past = new Date(Date.now() - 10000);
+    fs.utimesSync(zipPath, past, past);
+
+    const postRes = await fetch(`${base}/api/builder/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": TEST_ADMIN_TOKEN },
+      body: JSON.stringify({ defaultServerUrl: "http://server-b.example.corp", syncIntervalMinutes: 45 }),
+    });
+    assert.strictEqual(postRes.status, 200);
+
+    // 3. Download zip as a user clicking Download .ZIP
+    const dlRes = await fetch(`${base}/api/extension/download-zip`);
+    assert.strictEqual(dlRes.status, 200);
+    const buf = Buffer.from(await dlRes.arrayBuffer());
+    const zip = new AdmZip(buf);
+    const bg = zip.readAsText("background.js");
+
+    assert.match(bg, /const DEFAULT_SERVER_BASE = "http:\/\/server-b\.example\.corp"/, "zip must contain the updated server URL");
+    assert.match(bg, /const SYNC_INTERVAL_MIN = 45;/, "zip must contain updated sync interval");
+  });
+});
+
+test("builder: packageExtension honors explicit public base URL", () => {
+  saveBuildConfig({ defaultServerUrl: "" });
+  const publicUrl = "https://public-proxy.corp.example";
+  packageExtension(publicUrl);
+
+  const zipPath = path.join(TEST_TMP_DIR, "updates", "extension.zip");
+  const zip = new AdmZip(zipPath);
+  const bg = zip.readAsText("background.js");
+  assert.match(bg, /const DEFAULT_SERVER_BASE = "https:\/\/public-proxy\.corp\.example"/);
+
+  const xmlPath = path.join(TEST_TMP_DIR, "updates", "updates.xml");
+  const xml = fs.readFileSync(xmlPath, "utf-8");
+  assert.match(xml, /codebase=['"]https:\/\/public-proxy\.corp\.example\/updates\/extension\.crx['"]/);
+});
+
+test("builder: packaged zip and unpacked dir exclude documentation and template files (README, .example, .svg)", () => {
+  saveBuildConfig({ defaultServerUrl: "" });
+  packageExtension("http://localhost:3000");
+
+  const zipPath = path.join(TEST_TMP_DIR, "updates", "extension.zip");
+  const zip = new AdmZip(zipPath);
+  const zipEntries = zip.getEntries().map((e) => e.entryName);
+
+  assert.ok(!zipEntries.some((name) => name.toLowerCase() === "readme.md"), "zip must not contain README.md");
+  assert.ok(!zipEntries.some((name) => name.endsWith(".example")), "zip must not contain .example files");
+  assert.ok(!zipEntries.some((name) => name.endsWith(".svg")), "zip must not contain .svg files");
+  assert.ok(!zipEntries.some((name) => name.endsWith(".pem")), "zip must not contain private keys");
+
+  const unpackedDir = path.join(TEST_TMP_DIR, "unpacked");
+  if (fs.existsSync(unpackedDir)) {
+    const unpackedFiles = fs.readdirSync(unpackedDir);
+    assert.ok(!unpackedFiles.some((name) => name.toLowerCase() === "readme.md"), "unpacked dir must not contain README.md");
+    assert.ok(!unpackedFiles.some((name) => name.endsWith(".example")), "unpacked dir must not contain .example files");
+    assert.ok(!unpackedFiles.some((name) => name.endsWith(".svg")), "unpacked dir must not contain .svg files");
+  }
+});
+
+test("builder: pack-extension script requires explicit server URL and rejects empty target", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
+  const scriptPath = path.resolve("scripts/pack-extension.ts");
+
+  // Run without PEC_SERVER_URL or PUBLIC_BASE_URL
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.PEC_SERVER_URL;
+  delete cleanEnv.PUBLIC_BASE_URL;
+
+  const resFail = spawnSync(npxCmd, ["tsx", scriptPath], {
+    env: cleanEnv,
+    encoding: "utf-8",
+    shell: true,
+  });
+
+  assert.strictEqual(resFail.status, 1, "pack-extension must exit 1 when no server URL is provided");
+  assert.ok(
+    (resFail.stderr || "").includes("FATAL") && (resFail.stderr || "").includes("PEC_SERVER_URL"),
+    "stderr must show fatal message about missing server URL"
+  );
+
+  // Run with PEC_SERVER_URL
+  const resOk = spawnSync(npxCmd, ["tsx", scriptPath], {
+    env: { ...cleanEnv, PEC_SERVER_URL: "https://pec-test.example.corp" },
+    encoding: "utf-8",
+    shell: true,
+  });
+
+  assert.strictEqual(resOk.status, 0, "pack-extension must succeed when PEC_SERVER_URL is provided");
+  assert.ok(
+    (resOk.stdout || "").includes("https://pec-test.example.corp"),
+    "stdout must confirm target URL"
+  );
+});
+
+test("builder: packageExtension forces EXT_SHARED_TOKEN environment variable over saved stale config", async () => {
+  const origEnvToken = process.env.EXT_SHARED_TOKEN;
+  try {
+    saveBuildConfig({ defaultToken: "stale-saved-token-12345" });
+    process.env.EXT_SHARED_TOKEN = "fresh-env-token-99999";
+
+    packageExtension("https://env-override.example.corp");
+
+    const zipPath = path.join(TEST_TMP_DIR, "updates", "extension.zip");
+    const zip = new AdmZip(zipPath);
+    const bg = zip.readAsText("background.js");
+
+    assert.ok(
+      bg.includes("fresh-env-token-99999"),
+      "packaged background.js must contain fresh token from EXT_SHARED_TOKEN"
+    );
+    assert.ok(
+      !bg.includes("stale-saved-token-12345"),
+      "packaged background.js must NOT contain stale token from saved config"
+    );
+  } finally {
+    process.env.EXT_SHARED_TOKEN = origEnvToken;
+  }
+});
+
+test("builder: GET /api/extension/download-zip is rate limited to 10 requests per minute", async () => {
+  await withServer(async (base) => {
+    // 10 downloads should succeed
+    for (let i = 0; i < 10; i++) {
+      const res = await fetch(`${base}/api/extension/download-zip`);
+      assert.strictEqual(res.status, 200, `request ${i + 1} must succeed`);
+    }
+    // 11th request must be rate limited (429)
+    const blockedRes = await fetch(`${base}/api/extension/download-zip`);
+    assert.strictEqual(blockedRes.status, 429, "11th download request must be rejected with HTTP 429");
+  });
+});
+
+test("builder: generateExtensionFiles and packageExtension do not modify existing files in extension/ without force or PEC_KEEP_EXTENSION_DIR", () => {
+  const origKeep = process.env.PEC_KEEP_EXTENSION_DIR;
+  delete process.env.PEC_KEEP_EXTENSION_DIR;
+  try {
+    const extDir = process.env.PEC_EXTENSION_DIR || "./extension";
+    const unpackedDir = process.env.PEC_UNPACKED_DIR || path.join(TEST_TMP_DIR, "unpacked");
+    fs.mkdirSync(extDir, { recursive: true });
+    fs.mkdirSync(unpackedDir, { recursive: true });
+    const manifestPath = path.join(extDir, "manifest.json");
+    fs.writeFileSync(manifestPath, JSON.stringify({ name: "Base Extension", version: "1.0.0" }));
+    const mtimeBefore = fs.statSync(manifestPath).mtimeMs;
+
+    saveBuildConfig({ name: "Temporary Test Name Change" });
+    packageExtension("https://test.example.corp");
+
+    const mtimeAfter = fs.statSync(manifestPath).mtimeMs;
+    assert.strictEqual(mtimeAfter, mtimeBefore, "manifest.json in extension/ must not be touched during packaging");
+
+    const unpackedManifest = JSON.parse(
+      fs.readFileSync(path.join(unpackedDir, "manifest.json"), "utf-8")
+    );
+    assert.strictEqual(unpackedManifest.name, "Temporary Test Name Change", "unpacked dir must receive the updated name");
+  } finally {
+    if (origKeep) process.env.PEC_KEEP_EXTENSION_DIR = origKeep;
+  }
+});
+
+test("builder: update_url in manifest and GPO is dynamically derived from constructor config", () => {
+  // 1. Explicit updateUrl in builder config overrides server URL
+  const manifestExplicit = createManifestObject({
+    name: "Custom Ext",
+    shortName: "CE",
+    version: "1.0.0",
+    defaultServerUrl: "https://my-server.corp",
+    updateUrl: "https://cdn.corp.custom/updates/custom-updates.xml",
+  });
+  assert.strictEqual(
+    manifestExplicit.update_url,
+    "https://cdn.corp.custom/updates/custom-updates.xml",
+    "must use explicit updateUrl when specified in constructor"
+  );
+
+  // 2. Fallback to defaultServerUrl/serverUrl
+  const manifestDerived = createManifestObject({
+    name: "Custom Ext",
+    shortName: "CE",
+    version: "1.0.0",
+    defaultServerUrl: "https://my-server.corp/",
+  });
+  assert.strictEqual(
+    manifestDerived.update_url,
+    "https://my-server.corp/updates/updates.xml",
+    "must derive update_url from defaultServerUrl when explicit updateUrl is empty"
+  );
+
+  // 3. Omits update_url if neither is provided
+  const manifestEmpty = createManifestObject({
+    name: "Custom Ext",
+    shortName: "CE",
+    version: "1.0.0",
+  });
+  assert.strictEqual(
+    manifestEmpty.update_url,
+    undefined,
+    "must omit update_url if neither updateUrl nor serverUrl is configured"
+  );
+
+  // 4. GPO generator honors options.updateUrl
+  const gpo = generateGpoConfig("ext12345", "https://server.corp", "token123", {
+    updateUrl: "https://custom-gpo.corp/updates.xml",
+  });
+  assert.strictEqual(gpo.extensionSettingsJson["ext12345"].update_url, "https://custom-gpo.corp/updates.xml");
+  assert.match(gpo.regContentUser, /https:\/\/custom-gpo\.corp\/updates\.xml/);
+});
+
+
+
+

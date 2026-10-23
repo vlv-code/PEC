@@ -189,6 +189,12 @@ export interface ExtensionBuildInfo {
   crxPath?: string;
   xmlPath?: string;
   buildLog?: string[];
+  codeSigningStatus?: {
+    isSigned: boolean;
+    subject?: string;
+    issuer?: string;
+    type?: string;
+  };
 }
 
 export interface ProxyCheckResult {
@@ -270,11 +276,20 @@ export interface AppBuildInfo {
   windowsInstallerUrl?: string;
   windowsInstallerSize?: number;
   windowsInstallerSha256?: string;
+  windowsMsiUrl?: string;
+  windowsMsiSize?: number;
+  windowsMsiSha256?: string;
   linuxPackageUrl: string;
   linuxPackageSize: number;
   linuxPackageSha256: string;
   profilePath: string;
   buildLog?: string[];
+  codeSigningStatus?: {
+    isSigned: boolean;
+    subject?: string;
+    issuer?: string;
+    type?: string;
+  };
 }
 
 export interface DesktopInstance {

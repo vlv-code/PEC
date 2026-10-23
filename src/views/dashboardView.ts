@@ -1007,7 +1007,67 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
           </div>
 
-          <!-- 5. Actions Card -->
+          <!-- 5. Code Signing Card -->
+          <div class="card" id="cardCodeSigning">
+            <h2>
+              <span>Цифровая подпись (Code Signing)</span>
+              <span id="badgeCodeSignStatus" class="badge badge-offline">Не настроена</span>
+            </h2>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+              Подпись Windows-бинарников (.exe, .dll, .msi) сертификатом Authenticode для безопасного развертывания через Active Directory GPO и Microsoft Intune без предупреждений SmartScreen.
+            </p>
+
+            <div id="codeSignConfiguredView" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                <div>
+                  <div style="font-weight: 600; font-size: 13px; color: #10b981;" id="csCertSubject">CN=...</div>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" id="csCertIssuer">Кем выдан: ...</div>
+                  <div style="font-size: 11px; color: var(--text-muted);" id="csCertValidity">Действителен: ...</div>
+                  <div style="font-size: 11px; margin-top: 4px; display: flex; align-items: center; gap: 8px;">
+                    <span class="badge" id="csCertTypeBadge">Коммерческий</span>
+                    <span style="font-size: 10px; color: var(--text-muted);" id="csCertThumbprint"></span>
+                  </div>
+                </div>
+                <button type="button" onclick="deleteCodeSignCertAction()" class="btn-danger" style="font-size: 11px; padding: 4px 10px;">Удалить сертификат</button>
+              </div>
+            </div>
+
+            <div id="codeSignUploadView">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                <div>
+                  <label style="font-size: 11px; font-weight: 600;">Тип сертификата</label>
+                  <select id="csCertType" class="form-select" onchange="onCodeSignTypeChange()" style="font-size: 12px; margin-bottom: 0;">
+                    <option value="commercial">Официальный / Коммерческий (с RFC 3161 Timestamp)</option>
+                    <option value="internal">Внутридоменный CA (Active Directory CS, offline / без штампа времени)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size: 11px; font-weight: 600;">URL сервера штампа времени (RFC 3161)</label>
+                  <input type="text" id="csTimestampUrl" value="http://timestamp.digicert.com" placeholder="http://timestamp.digicert.com" style="font-size: 12px; margin-bottom: 0;" />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                <div>
+                  <label style="font-size: 11px; font-weight: 600;">Файл сертификата (.pfx / .p12)</label>
+                  <input type="file" id="csCertFile" accept=".pfx,.p12" style="font-size: 12px; padding: 4px;" />
+                </div>
+                <div>
+                  <label style="font-size: 11px; font-weight: 600;">Пароль закрытого ключа</label>
+                  <input type="password" id="csCertPassword" placeholder="Оставьте пустым, если без пароля" style="font-size: 12px; margin-bottom: 0;" />
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <button type="button" id="btnUploadCert" onclick="uploadCodeSignCertAction()" class="btn-secondary" style="font-size: 12px; padding: 6px 14px;">
+                  Загрузить и применить сертификат
+                </button>
+                <span id="csUploadStatus" style="font-size: 11px; color: var(--text-muted);"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 6. Actions Card -->
           <div class="card" style="margin-bottom: 0;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -1018,6 +1078,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </div>
               <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                 <button type="button" id="btnAppDownloadInstaller" onclick="downloadAppPackageAction('installer')" class="btn-primary" style="font-size: 11px; font-weight: bold; background: linear-gradient(135deg, #2563eb, #3b82f6); color: #fff;">⚡ Инсталлятор (.EXE)</button>
+                <button type="button" id="btnAppDownloadMsi" onclick="downloadAppPackageAction('msi')" class="btn-primary" style="font-size: 11px; font-weight: bold; background: linear-gradient(135deg, #059669, #10b981); color: #fff;">📦 Скачать MSI (GPO / Intune)</button>
                 <button type="button" id="btnAppDownloadZip" onclick="downloadAppPackageAction('windows')" class="btn-secondary" style="font-size: 11px;">Скачать Windows (.ZIP)</button>
                 <button type="button" id="btnAppDownloadTar" onclick="downloadAppPackageAction('linux')" class="btn-secondary" style="font-size: 11px;">Скачать Linux (.tar.gz)</button>
                 <button type="button" id="btnAppDownloadPs1" onclick="downloadAppScriptAction('deploy')" class="btn-secondary" style="font-size: 11px;">deploy.ps1</button>

@@ -16,6 +16,7 @@ import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter } from "../middleware/security.js";
 import { getAppBuildInfoPath, getReleasesDir } from "../storage.js";
 import type { AppProcessRule } from "../types.js";
+import { getCertificateStatus, saveCertificate, deleteCertificate } from "../codeSigner.js";
 
 const VALID_PROTOCOLS = new Set(["tcp", "udp", "both"]);
 const VALID_ACTIONS = new Set(["proxy", "direct", "block"]);
@@ -174,6 +175,63 @@ export function createAppBuilderRouter(
     }
   });
 
+  router.get("/api/app-builder/certificate", (_req: Request, res: Response) => {
+    try {
+      const status = getCertificateStatus();
+      res.json({ ok: true, certificate: status });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  router.post("/api/app-builder/certificate", (req: Request, res: Response) => {
+    try {
+      const { pfxBase64, password, type, timestampUrl } = req.body || {};
+      if (!pfxBase64 || typeof pfxBase64 !== "string") {
+        return res.status(400).json({ ok: false, error: "pfxBase64 is required (base64 string)" });
+      }
+      const buffer = Buffer.from(pfxBase64, "base64");
+      if (buffer.length === 0) {
+        return res.status(400).json({ ok: false, error: "Empty certificate buffer" });
+      }
+      const cert = saveCertificate(
+        buffer,
+        password || "",
+        type === "internal" ? "internal" : "commercial",
+        timestampUrl
+      );
+      recordAudit({
+        ip: getClientIp(req),
+        endpoint: "/api/app-builder/certificate",
+        status: 200,
+        result: "CONFIG_UPDATED",
+        details: `Saved ${cert.type} certificate: ${cert.subject || "unknown"}`,
+      });
+      res.json({ ok: true, certificate: cert });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  router.delete("/api/app-builder/certificate", (req: Request, res: Response) => {
+    try {
+      deleteCertificate();
+      recordAudit({
+        ip: getClientIp(req),
+        endpoint: "/api/app-builder/certificate",
+        status: 200,
+        result: "CONFIG_UPDATED",
+        details: "Deleted code signing certificate",
+      });
+      res.json({ ok: true, certificate: getCertificateStatus() });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
   router.get("/api/app-builder/download/:platform", downloadLimiter, (req: Request, res: Response) => {
     try {
       const platform = (req.params.platform || "").toLowerCase();
@@ -181,6 +239,30 @@ export function createAppBuilderRouter(
       const cfg = getAppBuildConfig();
       const ver = cfg.version || "2.1.0";
       const releasesDir = path.join(getReleasesDir(), "apps", ver);
+
+      if (platform === "msi" || platform === "windows-msi") {
+        const findMsi = () => [
+          path.join(releasesDir, `PEC-App-${ver}.msi`),
+          path.join(releasesDir, "PEC-App.msi"),
+          path.join(updatesDir, `PEC-App-${ver}.msi`),
+          path.join(updatesDir, "PEC-App.msi"),
+          path.join(getTemplatesAppDir(), "windows", `PEC-App-${ver}.msi`),
+          path.join(getTemplatesAppDir(), "windows", "PEC-App.msi"),
+        ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 10);
+
+        let msiPath = findMsi();
+        if (!msiPath) {
+          packageApp(getBaseUrl(req));
+          msiPath = findMsi();
+        }
+
+        if (msiPath) {
+          return res.download(msiPath, `PEC-App-${ver}.msi`);
+        }
+        return res.status(404).json({
+          error: "MSI package not found. Ensure msitools (wixl) is installed in Docker or WiX Toolset on Windows.",
+        });
+      }
 
       if (platform === "windows") {
         const findZip = () => [
@@ -243,7 +325,7 @@ export function createAppBuilderRouter(
         return res.sendFile(path.resolve(tarPath || path.join(releasesDir, "pec-client-linux-x64.tar.gz")));
       }
 
-      res.status(404).json({ error: "Unknown platform. Valid platforms: windows, linux" });
+      res.status(404).json({ error: "Unknown platform. Valid platforms: windows, linux, msi, installer" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });

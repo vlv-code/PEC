@@ -46,6 +46,7 @@
 
 typedef struct PROCESS_RULE {
     UINT32 rule_id;
+    DWORD session_id;     // 0 = all sessions (fallback/global), >0 = specific RDS session
     char process_name[MAX_PROCESS_NAME];
     char *target_hosts;   // Dynamic: IP filter "*", "192.168.*.*", "10.0.0.1;172.16.0.0"
     char *target_ports;   // Dynamic: Port filter "*", "80", "80;443", "8000-9000"
@@ -299,15 +300,16 @@ BOOL match_domain_list(const char *domain_list, const char *domain);
 BOOL rule_has_domain_filter(const PROCESS_RULE *rule);
 BOOL match_domain_filter(const PROCESS_RULE *rule, const char *domain);
 BOOL is_broadcast_or_multicast(UINT32 ip);
-RuleAction match_rule_inner(const char *process_name, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, UINT32 *out_proxy_config_id);
-RuleAction match_rule(const char *process_name, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, UINT32 *out_proxy_config_id);
-RuleAction match_rule_v6_inner(const char *process_name, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, UINT32 *out_proxy_config_id);
-RuleAction match_rule_v6(const char *process_name, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, UINT32 *out_proxy_config_id);
+RuleAction match_rule_inner(const char *process_name, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, DWORD session_id, UINT32 *out_proxy_config_id);
+RuleAction match_rule(const char *process_name, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, DWORD session_id, UINT32 *out_proxy_config_id);
+RuleAction match_rule_v6_inner(const char *process_name, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, DWORD session_id, UINT32 *out_proxy_config_id);
+RuleAction match_rule_v6(const char *process_name, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, DWORD session_id, UINT32 *out_proxy_config_id);
 RuleAction check_process_rule(UINT32 src_ip, UINT16 src_port, UINT32 dest_ip, UINT16 dest_port, BOOL is_udp, DWORD *out_pid, UINT32 *out_proxy_config_id);
 void update_has_active_rules(void);
 PROXYBRIDGE_API void ProxyBridge_SetSessionFilterEnabled(BOOL enabled);
 PROXYBRIDGE_API BOOL ProxyBridge_RegisterSession(DWORD session_id);
 PROXYBRIDGE_API void ProxyBridge_UnregisterSession(DWORD session_id);
+PROXYBRIDGE_API UINT32 ProxyBridge_AddRuleEx(DWORD session_id, const char* process_name, const char* target_hosts, const char* target_ports, const char* target_domains, RuleProtocol protocol, RuleAction action, UINT32 proxy_config_id, BOOL localhost_via_proxy);
 BOOL is_session_registered(DWORD session_id);
 
 // ---- pb_proxy.c ----

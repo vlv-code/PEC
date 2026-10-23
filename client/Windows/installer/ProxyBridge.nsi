@@ -165,7 +165,7 @@ Section "MainSection" SEC01
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name=all program="$INSTDIR\ProxyBridge_CLI.exe"'
   nsExec::ExecToLog 'sc create PECAppSvc binPath= "\"$INSTDIR\PECAppSvc.exe\"" start= auto DisplayName= "PEC-App Service"'
   nsExec::ExecToLog 'sc description PECAppSvc "Privileged traffic-redirection engine for PEC-App. Lets the PEC-App run without administrator rights."'
-  nsExec::ExecToLog 'sc sdset PECAppSvc "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)"'
+  nsExec::ExecToLog 'sc sdset PECAppSvc "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)"'
   ; Local group that may drive the service; the signed-in user is added to it.
   IfFileExists "$INSTDIR\PECAppSvc.exe" 0 +3
     nsExec::ExecToLog '"$INSTDIR\PECAppSvc.exe" --setup-users'

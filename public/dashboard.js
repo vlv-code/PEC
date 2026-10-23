@@ -3346,9 +3346,12 @@
                 const logBtn = document.getElementById('btnAppViewBuildLog');
                 if (logBtn) logBtn.style.display = 'inline-block';
               }
+              const msiSizeKb = info.windowsMsiSize ? Math.round(info.windowsMsiSize / 1024) : 0;
+              const msiPart = msiSizeKb ? `, MSI (${msiSizeKb} KB)` : '';
+              const signPart = (info.codeSigningStatus && info.codeSigningStatus.isSigned) ? ` &bull; 🔏 ${esc(info.codeSigningStatus.type || 'Signed')}` : '';
               statusEl.innerHTML = currentLang === 'ru'
-                ? `Собран: Windows (${winSizeKb} KB, SHA: ${esc(winSha)}...), Linux (${linSizeKb} KB)${builtAtStr ? ' &bull; ' + builtAtStr : ''}`
-                : `Built: Windows (${winSizeKb} KB, SHA: ${esc(winSha)}...), Linux (${linSizeKb} KB)${builtAtStr ? ' &bull; ' + builtAtStr : ''}`;
+                ? `Собран: Windows (${winSizeKb} KB, SHA: ${esc(winSha)}...)${msiPart}, Linux (${linSizeKb} KB)${builtAtStr ? ' &bull; ' + builtAtStr : ''}${signPart}`
+                : `Built: Windows (${winSizeKb} KB, SHA: ${esc(winSha)}...)${msiPart}, Linux (${linSizeKb} KB)${builtAtStr ? ' &bull; ' + builtAtStr : ''}${signPart}`;
             }
           }
         } catch (_) {}
@@ -3363,6 +3366,7 @@
         currentAppRules = Array.isArray(cfg.processRules) ? JSON.parse(JSON.stringify(cfg.processRules)) : [];
         renderAppProcessRulesTable();
         updateAppLivePreview();
+        await loadCodeSignStatus();
       } catch (e) {
         console.error('Failed to load App Studio config:', e);
       }
@@ -3901,6 +3905,8 @@
           filename = 'pec-client-linux-x64.tar.gz';
         } else if (platform === 'installer' || platform === 'setup' || platform === 'exe') {
           filename = 'PEC-App-Setup-2.1.0.exe';
+        } else if (platform === 'msi') {
+          filename = 'PEC-App.msi';
         }
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3939,6 +3945,135 @@
         setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
       } catch (e) {
         toast((currentLang === 'ru' ? 'Ошибка скачивания: ' : 'Download failed: ') + e.message, 'error');
+      }
+    }
+
+
+    async function loadCodeSignStatus() {
+      try {
+        const res = await adminFetch('/api/app-builder/certificate');
+        if (!res.ok) return;
+        const data = await res.json();
+        const cert = data.certificate;
+        const badge = document.getElementById('badgeCodeSignStatus');
+        const configView = document.getElementById('codeSignConfiguredView');
+        const uploadView = document.getElementById('codeSignUploadView');
+
+        if (cert && cert.hasCertificate) {
+          if (badge) {
+            badge.className = 'badge badge-online';
+            badge.textContent = cert.type === 'internal' ? (currentLang === 'ru' ? 'Внутридоменный CA' : 'Internal CA') : (currentLang === 'ru' ? 'Коммерческий Authenticode' : 'Commercial Authenticode');
+          }
+          if (configView) configView.style.display = 'block';
+          const subjEl = document.getElementById('csCertSubject');
+          const issEl = document.getElementById('csCertIssuer');
+          const valEl = document.getElementById('csCertValidity');
+          const typeBadge = document.getElementById('csCertTypeBadge');
+          const thumbEl = document.getElementById('csCertThumbprint');
+
+          if (subjEl) subjEl.textContent = cert.subject || 'Enterprise Certificate';
+          if (issEl) issEl.textContent = (currentLang === 'ru' ? 'Кем выдан: ' : 'Issuer: ') + (cert.issuer || 'N/A');
+          if (valEl) valEl.textContent = (currentLang === 'ru' ? 'Действителен: ' : 'Valid: ') + (cert.validFrom ? new Date(cert.validFrom).toLocaleDateString() : '') + ' — ' + (cert.validTo ? new Date(cert.validTo).toLocaleDateString() : '');
+          if (typeBadge) {
+            typeBadge.className = cert.type === 'internal' ? 'badge badge-primary' : 'badge badge-online';
+            typeBadge.textContent = cert.type === 'internal' ? 'AD CS (Внутридоменный)' : 'Commercial (Штамп времени)';
+          }
+          if (thumbEl) thumbEl.textContent = 'SHA: ' + (cert.thumbprint || '').slice(0, 16) + '...';
+        } else {
+          if (badge) {
+            badge.className = 'badge badge-offline';
+            badge.textContent = currentLang === 'ru' ? 'Не настроена' : 'Not configured';
+          }
+          if (configView) configView.style.display = 'none';
+        }
+      } catch (err) {
+        console.warn('Failed to load code signing status:', err);
+      }
+    }
+
+    function onCodeSignTypeChange() {
+      const typeEl = document.getElementById('csCertType');
+      const tsEl = document.getElementById('csTimestampUrl');
+      if (!typeEl || !tsEl) return;
+      if (typeEl.value === 'internal') {
+        tsEl.value = '';
+        tsEl.placeholder = currentLang === 'ru' ? 'Не требуется (offline / внутридоменный CA)' : 'Not required (offline / internal CA)';
+        tsEl.disabled = true;
+      } else {
+        tsEl.disabled = false;
+        tsEl.value = 'http://timestamp.digicert.com';
+        tsEl.placeholder = 'http://timestamp.digicert.com';
+      }
+    }
+
+    async function uploadCodeSignCertAction() {
+      const fileInput = document.getElementById('csCertFile');
+      const passInput = document.getElementById('csCertPassword');
+      const typeSelect = document.getElementById('csCertType');
+      const tsInput = document.getElementById('csTimestampUrl');
+      const statusEl = document.getElementById('csUploadStatus');
+
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        toast(currentLang === 'ru' ? 'Выберите файл сертификата (.pfx / .p12)' : 'Select certificate file (.pfx / .p12)', 'error');
+        return;
+      }
+
+      const file = fileInput.files[0];
+      if (statusEl) {
+        statusEl.textContent = currentLang === 'ru' ? 'Загрузка...' : 'Uploading...';
+        statusEl.style.color = 'var(--text-muted)';
+      }
+
+      try {
+        const reader = new FileReader();
+        reader.onload = async function() {
+          try {
+            const base64 = String(reader.result).split(',')[1];
+            const res = await adminFetch('/api/app-builder/certificate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                pfxBase64: base64,
+                password: passInput ? passInput.value : '',
+                type: typeSelect ? typeSelect.value : 'commercial',
+                timestampUrl: tsInput ? tsInput.value : '',
+              }),
+            });
+            const data = await res.json();
+            if (res.ok && data.ok) {
+              toast(currentLang === 'ru' ? 'Сертификат успешно сохранен и активирован' : 'Certificate successfully saved and activated', 'success');
+              if (passInput) passInput.value = '';
+              fileInput.value = '';
+              if (statusEl) statusEl.textContent = '';
+              await loadCodeSignStatus();
+            } else {
+              toast((currentLang === 'ru' ? 'Ошибка загрузки сертификата: ' : 'Certificate error: ') + (data.error || 'Unknown error'), 'error');
+              if (statusEl) statusEl.textContent = data.error || 'Error';
+            }
+          } catch (e) {
+            toast('Error: ' + e.message, 'error');
+            if (statusEl) statusEl.textContent = e.message;
+          }
+        };
+        reader.readAsDataURL(file);
+      } catch (err) {
+        toast('Error: ' + err.message, 'error');
+      }
+    }
+
+    async function deleteCodeSignCertAction() {
+      if (!confirm(currentLang === 'ru' ? 'Удалить сохраненный сертификат цифровой подписи?' : 'Delete code signing certificate?')) return;
+      try {
+        const res = await adminFetch('/api/app-builder/certificate', { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          toast(currentLang === 'ru' ? 'Сертификат удален' : 'Certificate removed', 'info');
+          await loadCodeSignStatus();
+        } else {
+          toast('Error: ' + (data.error || 'Failed to delete certificate'), 'error');
+        }
+      } catch (err) {
+        toast('Error: ' + err.message, 'error');
       }
     }
 
@@ -3989,6 +4124,10 @@
     window.onAppConfigChangeLive = onAppConfigChangeLive;
     window.applyAppRulePreset = applyAppRulePreset;
     window.updateAppProcessRuleField = updateAppProcessRuleField;
+    window.loadCodeSignStatus = loadCodeSignStatus;
+    window.onCodeSignTypeChange = onCodeSignTypeChange;
+    window.uploadCodeSignCertAction = uploadCodeSignCertAction;
+    window.deleteCodeSignCertAction = deleteCodeSignCertAction;
 
     // ----------------- Devices & Instances -----------------
     let lastLoadedInstances = [];

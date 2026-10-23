@@ -1,0 +1,20 @@
+PEC - Proxy Extension Corp uses the following third-party components:
+
+1) WinDivert - user-mode packet capture/divert library
+   Copyright (c) 2011-2024 Basil (https://github.com/reqable/WinDivert)
+   Licensed under the GNU Lesser General Public License v3.0 or later
+   (or a commercial license). Distributed unmodified.
+   Source code: https://github.com/reqable/WinDivert
+   License text: LICENSE-LGPL-3.0.txt in this archive.
+   Version shipped: 2.2.2-A
+
+2) Dear ImGui v1.91.5 - immediate mode GUI library
+   Copyright (c) 2014-2024 Omar Cornut
+   Licensed under the MIT License.
+   Upstream source: https://github.com/ocornut/imgui
+
+3) ProxyBridge - transparent proxy client (Windows/Linux sources)
+   Copyright (c) 2024 InterceptSuite (Sourav Kalal)
+   Licensed under the MIT License. Imported 2026-10-19 (commit 2bcbdf4),
+   substantially modified and rebranded as PEC-App.
+   Upstream source: https://github.com/InterceptSuite/ProxyBridge

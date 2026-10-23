@@ -1864,6 +1864,8 @@ static BOOL IsElevated(void)
     return elevated;
 }
 
+static BOOL g_isAutostart = FALSE;
+
 static BOOL ConnectEngine(void)
 {
     int rc = PB_LoadService(&g_api);
@@ -1874,6 +1876,10 @@ static BOOL ConnectEngine(void)
 
     if (rc == PB_IPC_BUSY)
     {
+        if (g_isAutostart) {
+            LogAdd("PECAppSvc занят при автозапуске, тихий выход.");
+            return FALSE;
+        }
         MessageBoxW(NULL,
             L"Другое окно PEC-App уже подключено к службе PEC-App.\nЗакройте его и повторите попытку.",
             APP_TITLE_W, MB_OK | MB_ICONWARNING);
@@ -1958,10 +1964,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         // If no GUI window exists, proceed to initialize so the app is always accessible
     }
 
-    // Check for --minimized switch in command line
-    if (wcsstr(GetCommandLineW(), L"--minimized") != nullptr ||
+    // Check for --minimized or -autostart switch in command line
+    if (wcsstr(GetCommandLineW(), L"-autostart") != nullptr ||
+        wcsstr(GetCommandLineW(), L"--autostart") != nullptr ||
+        wcsstr(GetCommandLineW(), L"--minimized") != nullptr ||
         wcsstr(GetCommandLineW(), L"-minimized") != nullptr ||
         wcsstr(GetCommandLineW(), L"/minimized") != nullptr) {
+        g_isAutostart = TRUE;
         nShowCmd = SW_HIDE;
     }
 

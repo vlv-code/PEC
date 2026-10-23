@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify (types, tests, bundle)
+        env:
+          SKIP_NATIVE_REBUILD: "true"
+        run: |
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[v" ver "\\]" { inblock=1; next }
+            inblock && /^## \[/ { exit }
+            inblock { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "See [CHANGELOG.md](https://github.com/vlv-code/PEC/blob/main/CHANGELOG.md)." > RELEASE_NOTES.md
+          fi
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists, updating release notes..."
+            gh release edit "$GITHUB_REF_NAME" --title "PEC $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          else
+            echo "Creating new release $GITHUB_REF_NAME..."
+            gh release create "$GITHUB_REF_NAME" \
+              --title "PEC $GITHUB_REF_NAME" \
+              --notes-file RELEASE_NOTES.md
+          fi

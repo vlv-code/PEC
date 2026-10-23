@@ -219,7 +219,7 @@ static void show_help(const char* prog)
     printf("Commands:\n");
     printf("  --update             Check for updates and open releases page\n\n");
     printf("Examples:\n");
-    printf("  ProxyBridge_CLI.exe --profile C:\\Users\\user\\myconfig.pbprofile\n");
+    printf("  ProxyBridge_CLI.exe --profile C:\\ProgramData\\PEC-App\\profile.pbprofile\n");
     printf("  ProxyBridge_CLI.exe --profile myconfig.pbprofile --verbose 2\n");
     printf("  ProxyBridge_CLI.exe --update\n\n");
 }

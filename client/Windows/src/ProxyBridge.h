@@ -55,6 +55,7 @@ PROXYBRIDGE_API int    ProxyBridge_TestProxyConfigEx(UINT32 config_id, const cha
 // target_domains: semicolon/comma separated domain patterns ("*", "google.com", "*.google.com"); NULL/"" = no domain restriction.
 // Domain matching relies on DNS snooping of the app's own resolutions; unencrypted DNS only (DoH/DoT bypasses it).
 PROXYBRIDGE_API UINT32 ProxyBridge_AddRule(const char* process_name, const char* target_hosts, const char* target_ports, const char* target_domains, RuleProtocol protocol, RuleAction action, UINT32 proxy_config_id, BOOL localhost_via_proxy);
+PROXYBRIDGE_API UINT32 ProxyBridge_AddRuleEx(DWORD session_id, const char* process_name, const char* target_hosts, const char* target_ports, const char* target_domains, RuleProtocol protocol, RuleAction action, UINT32 proxy_config_id, BOOL localhost_via_proxy);
 PROXYBRIDGE_API BOOL ProxyBridge_EnableRule(UINT32 rule_id);
 PROXYBRIDGE_API BOOL ProxyBridge_DisableRule(UINT32 rule_id);
 PROXYBRIDGE_API BOOL ProxyBridge_DeleteRule(UINT32 rule_id);

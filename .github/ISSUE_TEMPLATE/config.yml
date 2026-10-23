@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/vlv-code/PEC/blob/main/SECURITY.md
+    about: Do not open public issues for security problems - follow the disclosure policy.
+  - name: Documentation (README)
+    url: https://github.com/vlv-code/PEC#readme
+    about: Deployment, configuration and architecture docs live here first.

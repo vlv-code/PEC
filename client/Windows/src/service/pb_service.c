@@ -41,11 +41,19 @@ static SERVICE_STATUS        g_status;
 static volatile LONG         g_stop = 0;
 static HANDLE                g_worker = NULL;     // thread running the accept/serve loop
 
-static HANDLE   g_ctl = INVALID_HANDLE_VALUE;
-static HANDLE   g_evt = INVALID_HANDLE_VALUE;
+#define PB_MAX_CLIENTS 32
+
+typedef struct {
+    HANDLE ctl;
+    HANDLE evt;
+    DWORD sessionId;
+    ULONG clientPid;
+    volatile LONG active;
+} ClientContext;
+
+static ClientContext g_clients[PB_MAX_CLIENTS];
+static CRITICAL_SECTION g_clients_cs;
 static PBApi    g_api;
-static CRITICAL_SECTION g_evt_lock;               // serialises event writes from engine threads
-static volatile LONG g_evt_live = 0;              // 1 while an event pipe client is attached
 
 static void SetState(DWORD state, DWORD exitCode)
 {
@@ -57,24 +65,19 @@ static void SetState(DWORD state, DWORD exitCode)
     if (g_ssh) SetServiceStatus(g_ssh, &g_status);
 }
 
-// events (called from engine threads)
+// events (called from engine threads, broadcasts to all active connected clients)
 static void SendEvent(const BYTE *buf, DWORD len)
 {
-    if (!g_evt_live) return;
-    if (!TryEnterCriticalSection(&g_evt_lock)) return;
-    if (g_evt_live && g_evt != INVALID_HANDLE_VALUE)
+    if (!TryEnterCriticalSection(&g_clients_cs)) return;
+    for (int i = 0; i < PB_MAX_CLIENTS; i++)
     {
-        DWORD wr = 0;
-        if (!WriteFile(g_evt, buf, len, &wr, NULL))
+        if (g_clients[i].active && g_clients[i].evt != INVALID_HANDLE_VALUE)
         {
-            DWORD err = GetLastError();
-            if (err != ERROR_NO_DATA && err != ERROR_PIPE_BUSY)
-            {
-                InterlockedExchange(&g_evt_live, 0);
-            }
+            DWORD wr = 0;
+            WriteFile(g_clients[i].evt, buf, len, &wr, NULL);
         }
     }
-    LeaveCriticalSection(&g_evt_lock);
+    LeaveCriticalSection(&g_clients_cs);
 }
 
 static void OnLog(const char *msg)
@@ -117,15 +120,15 @@ static DWORD WINAPI TestThread(LPVOID arg)
 }
 
 // request dispatch. Returns FALSE if the request was malformed.
-static BOOL Dispatch(const BYTE *req, DWORD reqLen, PbW *resp)
+static BOOL Dispatch(const BYTE *req, DWORD reqLen, PbW *resp, DWORD sessionId)
 {
     PbR r; PbR_Init(&r, req, reqLen);
     UINT32 op = PbR_U32(&r);
     UINT32 ret = 0;
 
-    // scratch for string args
-    static char proc[PB_STR_MAX + 1], hosts[PB_STR_MAX + 1], ports[4096], domains[PB_STR_MAX + 1];
-    static char ip[512], user[512], pass[512], host[512];
+    // scratch for string args (stack buffers for thread-safe concurrent execution across RDS clients)
+    char proc[PB_STR_MAX + 1], hosts[PB_STR_MAX + 1], ports[4096], domains[PB_STR_MAX + 1];
+    char ip[512], user[512], pass[512], host[512];
     BOOL nUser = FALSE, nPass = FALSE, nHosts = FALSE, nPorts = FALSE, nDomains = FALSE, nProc = FALSE;
 
     switch (op)
@@ -167,8 +170,14 @@ static BOOL Dispatch(const BYTE *req, DWORD reqLen, PbW *resp)
         UINT32 proto = PbR_U32(&r), action = PbR_U32(&r), cfg = PbR_U32(&r), localhost = PbR_U32(&r);
         if (!r.ok || proto > 2 || action > 2) return FALSE;
         if (op == PBOP_ADD_RULE)
-            ret = g_api.AddRule(nProc ? NULL : proc, nHosts ? NULL : hosts, nPorts ? NULL : ports, nDomains ? NULL : domains,
-                                (PBRuleProtocol)proto, (PBRuleAction)action, cfg, localhost != 0);
+        {
+            if (g_api.AddRuleEx && sessionId != 0)
+                ret = g_api.AddRuleEx(sessionId, nProc ? NULL : proc, nHosts ? NULL : hosts, nPorts ? NULL : ports, nDomains ? NULL : domains,
+                                     (PBRuleProtocol)proto, (PBRuleAction)action, cfg, localhost != 0);
+            else
+                ret = g_api.AddRule(nProc ? NULL : proc, nHosts ? NULL : hosts, nPorts ? NULL : ports, nDomains ? NULL : domains,
+                                    (PBRuleProtocol)proto, (PBRuleAction)action, cfg, localhost != 0);
+        }
         else
             ret = g_api.EditRule(id, nProc ? NULL : proc, nHosts ? NULL : hosts, nPorts ? NULL : ports, nDomains ? NULL : domains,
                                  (PBRuleProtocol)proto, (PBRuleAction)action, cfg, localhost != 0);
@@ -191,13 +200,10 @@ static BOOL Dispatch(const BYTE *req, DWORD reqLen, PbW *resp)
     return TRUE;
 }
 
-static void ClosePipes(void)
+static void CloseClientHandles(HANDLE ctl, HANDLE evt)
 {
-    InterlockedExchange(&g_evt_live, 0);
-    EnterCriticalSection(&g_evt_lock);
-    if (g_evt != INVALID_HANDLE_VALUE) { DisconnectNamedPipe(g_evt); CloseHandle(g_evt); g_evt = INVALID_HANDLE_VALUE; }
-    LeaveCriticalSection(&g_evt_lock);
-    if (g_ctl != INVALID_HANDLE_VALUE) { DisconnectNamedPipe(g_ctl); CloseHandle(g_ctl); g_ctl = INVALID_HANDLE_VALUE; }
+    if (evt != INVALID_HANDLE_VALUE) { DisconnectNamedPipe(evt); CloseHandle(evt); }
+    if (ctl != INVALID_HANDLE_VALUE) { DisconnectNamedPipe(ctl); CloseHandle(ctl); }
 }
 
 static BOOL LooksLikeSid(const wchar_t *p)
@@ -241,7 +247,7 @@ static HANDLE MakePipe(const wchar_t *name, BOOL first, DWORD openMode)
     HANDLE h = CreateNamedPipeW(name,
         openMode | (first ? FILE_FLAG_FIRST_PIPE_INSTANCE : 0),
         PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
-        1,                       // single instance: one client at a time
+        PB_MAX_CLIENTS,          // 32 concurrent instances for RDS multi-user
         PB_MSG_MAX, PB_MSG_MAX, 0, &sa);
     LocalFree(sa.lpSecurityDescriptor);
     return h;
@@ -257,16 +263,18 @@ static DWORD WINAPI ConnThread(LPVOID a)
     return 0;
 }
 
-static void ServeClient(void)
+static void ServeClient(ClientContext *ctx)
 {
     BYTE req[PB_MSG_MAX], rsp[PB_MSG_MAX];
 
     ULONG clientPid = 0;
     DWORD clientSessionId = 0;
-    if (GetNamedPipeClientProcessId(g_ctl, &clientPid) && clientPid != 0)
+    if (GetNamedPipeClientProcessId(ctx->ctl, &clientPid) && clientPid != 0)
     {
         ProcessIdToSessionId(clientPid, &clientSessionId);
     }
+    ctx->clientPid = clientPid;
+    ctx->sessionId = clientSessionId;
 
     if (!g_api.dll)
     {
@@ -282,24 +290,35 @@ static void ServeClient(void)
         g_api.RegisterSession(clientSessionId);
 
     DWORD mode = PIPE_NOWAIT;
-    SetNamedPipeHandleState(g_evt, &mode, NULL, NULL);
-    InterlockedExchange(&g_evt_live, 1);
+    SetNamedPipeHandleState(ctx->evt, &mode, NULL, NULL);
 
     for (;;)
     {
         DWORD n = 0;
-        if (!ReadFile(g_ctl, req, sizeof(req), &n, NULL) || g_stop) break;
+        if (!ReadFile(ctx->ctl, req, sizeof(req), &n, NULL) || g_stop) break;
         PbW w; PbW_Init(&w, rsp, sizeof(rsp));
-        if (!Dispatch(req, n, &w) || !w.ok) break;       // malformed -> drop the client
+        if (!Dispatch(req, n, &w, clientSessionId) || !w.ok) break;       // malformed -> drop the client
         DWORD wr = 0;
-        if (!WriteFile(g_ctl, rsp, w.len, &wr, NULL)) break;
+        if (!WriteFile(ctx->ctl, rsp, w.len, &wr, NULL)) break;
     }
 
     // client gone: unregister session from active proxying
     if (clientSessionId != 0 && g_api.UnregisterSession)
         g_api.UnregisterSession(clientSessionId);
+}
 
-    InterlockedExchange(&g_evt_live, 0);
+static DWORD WINAPI ClientWorkerThread(LPVOID arg)
+{
+    ClientContext *ctx = (ClientContext *)arg;
+    ServeClient(ctx);
+
+    EnterCriticalSection(&g_clients_cs);
+    ctx->active = 0;
+    CloseClientHandles(ctx->ctl, ctx->evt);
+    ctx->ctl = INVALID_HANDLE_VALUE;
+    ctx->evt = INVALID_HANDLE_VALUE;
+    LeaveCriticalSection(&g_clients_cs);
+    return 0;
 }
 
 static DWORD WINAPI WorkerMain(LPVOID arg)
@@ -318,19 +337,31 @@ static DWORD WINAPI WorkerMain(LPVOID arg)
             g_api.Start();
     }
 
-    // Every pipe instance is created with FILE_FLAG_FIRST_PIPE_INSTANCE: if another process already
-    // owns the pipe name (squatting), creation fails and we retry instead of serving next to it.
-    const BOOL first = TRUE;
+    BOOL first = TRUE;
     while (!g_stop)
     {
-        g_ctl = MakePipe(PB_PIPE_CTL, first, PIPE_ACCESS_DUPLEX);
-        g_evt = MakePipe(PB_PIPE_EVT, first, PIPE_ACCESS_OUTBOUND);
-        if (g_ctl == INVALID_HANDLE_VALUE || g_evt == INVALID_HANDLE_VALUE) { ClosePipes(); Sleep(1000); continue; }
+        HANDLE hCtl = MakePipe(PB_PIPE_CTL, first, PIPE_ACCESS_DUPLEX);
+        HANDLE hEvt = MakePipe(PB_PIPE_EVT, first, PIPE_ACCESS_OUTBOUND);
+        if (hCtl == INVALID_HANDLE_VALUE || hEvt == INVALID_HANDLE_VALUE)
+        {
+            CloseClientHandles(hCtl, hEvt);
+            Sleep(1000);
+            continue;
+        }
+        first = FALSE;
 
-        if (!ConnectNamedPipe(g_ctl, NULL) && GetLastError() != ERROR_PIPE_CONNECTED) { ClosePipes(); continue; }
-        if (g_stop) { ClosePipes(); break; }
+        if (!ConnectNamedPipe(hCtl, NULL) && GetLastError() != ERROR_PIPE_CONNECTED)
+        {
+            CloseClientHandles(hCtl, hEvt);
+            continue;
+        }
+        if (g_stop)
+        {
+            CloseClientHandles(hCtl, hEvt);
+            break;
+        }
 
-        ConnJob cj = { g_evt, FALSE };
+        ConnJob cj = { hEvt, FALSE };
         HANDLE ct = CreateThread(NULL, 0, ConnThread, &cj, 0, NULL);
         if (ct)
         {
@@ -341,8 +372,46 @@ static DWORD WINAPI WorkerMain(LPVOID arg)
             }
             CloseHandle(ct);
         }
-        if (cj.ok && !g_stop) ServeClient();
-        ClosePipes();
+
+        if (!cj.ok || g_stop)
+        {
+            CloseClientHandles(hCtl, hEvt);
+            continue;
+        }
+
+        // Find available client slot in the pool
+        EnterCriticalSection(&g_clients_cs);
+        int slot = -1;
+        for (int i = 0; i < PB_MAX_CLIENTS; i++)
+        {
+            if (!g_clients[i].active)
+            {
+                slot = i;
+                break;
+            }
+        }
+        if (slot >= 0)
+        {
+            g_clients[slot].ctl = hCtl;
+            g_clients[slot].evt = hEvt;
+            g_clients[slot].active = 1;
+            HANDLE th = CreateThread(NULL, 0, ClientWorkerThread, &g_clients[slot], 0, NULL);
+            if (th)
+            {
+                CloseHandle(th);
+            }
+            else
+            {
+                g_clients[slot].active = 0;
+                CloseClientHandles(hCtl, hEvt);
+            }
+        }
+        else
+        {
+            // Limit reached
+            CloseClientHandles(hCtl, hEvt);
+        }
+        LeaveCriticalSection(&g_clients_cs);
     }
 
     if (g_api.Stop) g_api.Stop();
@@ -360,6 +429,17 @@ static void WINAPI SvcCtrl(DWORD code)
         SetState(SERVICE_STOP_PENDING, 0);
         InterlockedExchange(&g_stop, 1);
         if (g_worker) CancelSynchronousIo(g_worker);          // unblock ReadFile / ConnectNamedPipe
+
+        EnterCriticalSection(&g_clients_cs);
+        for (int i = 0; i < PB_MAX_CLIENTS; i++)
+        {
+            if (g_clients[i].active && g_clients[i].ctl != INVALID_HANDLE_VALUE)
+            {
+                CancelSynchronousIo(g_clients[i].ctl);
+            }
+        }
+        LeaveCriticalSection(&g_clients_cs);
+
         // wake a ConnectNamedPipe that has not started yet
         HANDLE h = CreateFileW(PB_PIPE_CTL, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
         if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
@@ -371,7 +451,7 @@ static void WINAPI SvcMain(DWORD argc, LPWSTR *argv)
     (void)argc; (void)argv;
     g_ssh = RegisterServiceCtrlHandlerW(PB_SERVICE_NAME, SvcCtrl);
     if (!g_ssh) return;
-    InitializeCriticalSection(&g_evt_lock);
+    InitializeCriticalSection(&g_clients_cs);
     SetState(SERVICE_START_PENDING, 0);
 
     g_worker = CreateThread(NULL, 0, WorkerMain, NULL, 0, NULL);
@@ -380,7 +460,7 @@ static void WINAPI SvcMain(DWORD argc, LPWSTR *argv)
 
     WaitForSingleObject(g_worker, INFINITE);
     CloseHandle(g_worker); g_worker = NULL;
-    DeleteCriticalSection(&g_evt_lock);
+    DeleteCriticalSection(&g_clients_cs);
     SetState(SERVICE_STOPPED, 0);
 }
 

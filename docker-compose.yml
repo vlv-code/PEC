@@ -1,0 +1,71 @@
+services:
+  pec-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pec-proxy-extension-corp:latest
+    container_name: pec-proxy-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - EXT_SHARED_TOKEN=${EXT_SHARED_TOKEN:?Set EXT_SHARED_TOKEN in .env (see .env.example)}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env (a long random value, distinct from EXT_SHARED_TOKEN)}
+      # All persistent state lives in /app/data (mounted volume below) so
+      # profiles, rotation config and instance metadata survive redeploys.
+      - DATA_DIR=/app/data
+      - PROXIES_STORE_PATH=/app/data/proxies.json
+      - CREDS_STORE=/app/data/current_creds.json
+      - DASHBOARD_AUTH_PATH=/app/data/dashboard_auth.json
+      - PROXY_CONFIG_PATH=/app/data/proxy_config.json
+      - ROUTING_PROFILES_PATH=/app/data/routing_profiles.json
+      - ROUTING_PRESETS_PATH=/app/data/routing_presets.json
+      - INSTANCES_META_PATH=/app/data/instances_meta.json
+      - ROTATION_CONFIG_PATH=/app/data/rotation_config.json
+      - ROTATION_HISTORY_PATH=/app/data/rotation_history.json
+      - BUILDER_CONFIG=/app/data/extension_build_config.json
+      # Behind the compose-provided nginx (docker-compose.prod.yml) set to 1;
+      # for this direct-exposure setup keep disabled unless another proxy sits
+      # in front. Enables correct client IPs for rate limiting and audit.
+      - TRUST_PROXY=${TRUST_PROXY:-false}
+      # Public URL used in updates.xml / GPO artifacts (prevents Host-header
+      # poisoning). Set it to the URL your fleet uses to reach this server.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      # 3x-ui panel integration (credential rotation) - without these the
+      # container cannot reach the panel and .env values are ignored.
+      - XUI_PANEL_URL=${XUI_PANEL_URL:-}
+      - XUI_ADMIN_USER=${XUI_ADMIN_USER:-}
+      - XUI_ADMIN_PASS=${XUI_ADMIN_PASS:-}
+      - XUI_INBOUND_REMARK=${XUI_INBOUND_REMARK:-squid-in}
+      - ROTATION_INTERVAL_MIN=${ROTATION_INTERVAL_MIN:-1440}
+      - PAC_SIGNING_SECRET=${PAC_SIGNING_SECRET:-}
+      - PAC_REQUIRE_SIGNATURE=${PAC_REQUIRE_SIGNATURE:-false}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - PEC_RELEASES_DIR=/app/dist/releases
+    volumes:
+      # Runtime state: survives rebuilds (creds, profiles, rotation, meta).
+      - pec_data:/app/data
+      # The CRX signing key lives here - a stable key means a stable
+      # extension ID (GPO forcelists break when the ID changes).
+      - pec_extension:/app/extension
+      - pec_updates:/app/dist/updates
+      - pec_releases:/app/dist/releases
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  pec_data:
+    driver: local
+  pec_extension:
+    driver: local
+  pec_updates:
+    driver: local
+  pec_releases:
+    driver: local
