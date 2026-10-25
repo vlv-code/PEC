@@ -17,7 +17,7 @@
 #pragma comment(lib, "advapi32.lib")
 
 
-#define VERSION "2.1.0"
+#define VERSION "2.2.0"
 #define MAX_PROXY_CONFIGS 16
 #define MAX_RULES         256
 

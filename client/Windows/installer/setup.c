@@ -35,7 +35,7 @@
 #pragma comment(lib, "uuid.lib")
 
 #define APP_NAME       L"PEC-App"
-#define APP_VERSION    L"2.1.0"
+#define APP_VERSION    L"2.2.0"
 #define APP_PUBLISHER  L"PEC Team"
 #define SVC_NAME       L"PECAppSvc"
 #define SVC_DISPLAY    L"PEC-App Service"
