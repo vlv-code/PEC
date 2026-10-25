@@ -93,3 +93,45 @@ test("PEC-App GUI has server sync indicator, force sync button, and no redundant
   assert.ok(guiSrc.includes("Синхронизировать с сервером"), "Proxies tab must have manual sync button");
   assert.ok(guiSrc.includes("0x2700, 0x27BF"), "Dingbats glyph range must be loaded for pencil icons");
 });
+
+test("popup.js applyPopupState runs without ReferenceError (isRu is defined)", () => {
+  const js = fs.readFileSync("extension/popup.js", "utf8");
+  const fnCode = js.substring(js.indexOf("function escapeHtml"), js.indexOf("function renderCorporateRules"));
+  assert.ok(fnCode.length > 100, "applyPopupState and escapeHtml function must be extractable");
+
+  const dom = {
+    getElementById: () => ({
+      textContent: "",
+      className: "",
+      style: {},
+      classList: { toggle: () => {}, remove: () => {} },
+      appendChild: () => {},
+    }),
+    body: { setAttribute: () => {} },
+  };
+
+  const win: any = {};
+  const doc = dom;
+  const curState = {};
+  const bypassTimer: any = null;
+  const renderCorporateRules = () => {};
+
+  const runFn = new Function(
+    "window",
+    "document",
+    "currentProxyState",
+    "bypassCountdownTimer",
+    "renderCorporateRules",
+    `${fnCode}; return window.applyPopupState;`
+  );
+  const applyFn = runFn(win, doc, curState, bypassTimer, renderCorporateRules);
+
+  assert.doesNotThrow(() => {
+    applyFn({
+      online: true,
+      enabled: true,
+      availableProxies: [{ id: "p1", name: "Proxy 1", protocol: "http", host: "1.2.3.4", port: 8080 }],
+      profileRules: [{ name: "Rule 1", action: "proxy", pattern: "example.com" }],
+    });
+  }, "applyPopupState must not throw ReferenceError: isRu is not defined");
+});

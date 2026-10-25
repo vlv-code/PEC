@@ -71,6 +71,7 @@ function escapeHtml(str) {
 // Global state applier - reactive to simulator and chrome.runtime
 window.applyPopupState = function(response) {
   if (!response) return;
+  const isRu = "${t.isRu ? "true" : "false"}" === "true";
   currentProxyState = Object.assign({}, currentProxyState, response);
 
   const statusText = document.getElementById("statusText");
@@ -263,7 +264,6 @@ window.applyPopupState = function(response) {
   }
 
   if (selectActiveProxy && Array.isArray(response.availableProxies)) {
-    const isRu = "${t.isRu ? "true" : "false"}" === "true";
     const currentActiveId = response.activeProxyId || "";
     const optionsHtml = response.availableProxies.map(function(p) {
       const pHostPort = p.host && p.host.includes(":") && !p.host.startsWith("[") ? "[" + p.host + "]:" + p.port : (p.host ? p.host + ":" + p.port : "");
