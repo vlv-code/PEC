@@ -618,6 +618,7 @@
         btnImportPresets: '<img src="/icons/upload.png" class="icon-inline" alt="import"> + Import Presets (.dat / .txt)',
         titleImportPresets: 'Import GeoData & Presets',
         subImportPresets: 'Import geosite.dat, geoip.dat or plaintext domain lists',
+        titleEditRule: 'Edit Routing Rule',
         titleCustomRule: 'Add Custom Domain / Subnet Rule',
         lblRuleName: 'Rule Name',
         phRuleName: 'My Custom Rule',
@@ -1001,6 +1002,7 @@
         btnImportPresets: '<img src="/icons/upload.png" class="icon-inline" alt="import"> + Импорт пресетов (.dat / .txt)',
         titleImportPresets: 'Импорт гео-данных и пресетов',
         subImportPresets: 'Импорт geosite.dat, geoip.dat или текстовых списков доменов',
+        titleEditRule: 'Редактировать правило маршрутизации',
         titleCustomRule: 'Добавить пользовательское правило для домена / подсети',
         lblRuleName: 'Название правила',
         phRuleName: 'Мое правило',
@@ -1605,7 +1607,10 @@
           <td><code>${esc(r.pattern)}</code></td>
           <td><span class="badge ${badge}">${esc(actionLabel)}</span></td>
           <td>
-            <button type="button" class="btn-danger btn-remove-rule" data-index="${idx}" style="font-size: 11px; padding: 3px 8px;">${isRu ? 'Удалить' : 'Delete'}</button>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <button type="button" class="btn-secondary btn-edit-rule" data-index="${idx}" style="font-size: 11px; padding: 3px 8px;" title="${isRu ? 'Редактировать правило' : 'Edit rule'}">✏️ ${isRu ? 'Изменить' : 'Edit'}</button>
+              <button type="button" class="btn-danger btn-remove-rule" data-index="${idx}" style="font-size: 11px; padding: 3px 8px;">${isRu ? 'Удалить' : 'Delete'}</button>
+            </div>
           </td>
         </tr>`;
       }).join('');
@@ -1646,6 +1651,70 @@
         renderRules(currentProfile.rules);
         loadPresets();
       }
+    }
+
+    function openEditRuleModal(idx) {
+      if (!currentProfile || !Array.isArray(currentProfile.rules) || !currentProfile.rules[idx]) return;
+      const rule = currentProfile.rules[idx];
+      const idxEl = document.getElementById('editRuleIndex');
+      const nameEl = document.getElementById('editRuleName');
+      const patternEl = document.getElementById('editRulePattern');
+      const actionEl = document.getElementById('editRuleAction');
+      const errEl = document.getElementById('editRuleError');
+
+      if (idxEl) idxEl.value = String(idx);
+      if (nameEl) nameEl.value = rule.name || '';
+      if (patternEl) patternEl.value = rule.pattern || '';
+      if (actionEl) actionEl.value = rule.action || 'proxy';
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+
+      const modal = document.getElementById('modalEditRule');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeEditRuleModal() {
+      const modal = document.getElementById('modalEditRule');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function saveEditedRule() {
+      if (!currentProfile || !Array.isArray(currentProfile.rules)) return;
+      const idxEl = document.getElementById('editRuleIndex');
+      const nameEl = document.getElementById('editRuleName');
+      const patternEl = document.getElementById('editRulePattern');
+      const actionEl = document.getElementById('editRuleAction');
+      const errEl = document.getElementById('editRuleError');
+
+      const idx = parseInt(idxEl ? idxEl.value : '-1', 10);
+      if (isNaN(idx) || idx < 0 || idx >= currentProfile.rules.length) {
+        if (errEl) { errEl.textContent = 'Invalid rule index'; errEl.style.display = 'block'; }
+        return;
+      }
+
+      const name = nameEl ? nameEl.value.trim() : '';
+      const pattern = patternEl ? patternEl.value.trim() : '';
+      const action = actionEl ? actionEl.value : 'proxy';
+
+      if (!pattern) {
+        if (errEl) {
+          errEl.textContent = currentLang === 'ru' ? 'Укажите шаблон правила' : 'Please specify a rule pattern';
+          errEl.style.display = 'block';
+        }
+        return;
+      }
+
+      const rule = currentProfile.rules[idx];
+      rule.name = name || pattern;
+      rule.pattern = pattern;
+      rule.action = action;
+      if (rule.targetType !== 'preset') {
+        rule.targetType = pattern.includes('/') ? 'cidr' : 'wildcard';
+      }
+
+      setUnsavedRouting(true);
+      renderRules(currentProfile.rules);
+      closeEditRuleModal();
+      toast(currentLang === 'ru' ? 'Правило обновлено (сохраните профиль)' : 'Rule updated (save profile to persist)', 'success');
     }
 
     function addPresetRule(presetId, presetName, action) {
@@ -4104,6 +4173,9 @@
     window.openBuildLogModal = openBuildLogModal;
     window.closeBuildLogModal = closeBuildLogModal;
     window.copyBuildLogToClipboard = copyBuildLogToClipboard;
+    window.openEditRuleModal = openEditRuleModal;
+    window.closeEditRuleModal = closeEditRuleModal;
+    window.saveEditedRule = saveEditedRule;
     window.setAppLayout = setAppLayout;
     window.importSelectedRoutingProfileRules = importSelectedRoutingProfileRules;
     window.loadAppStudioConfig = loadAppStudioConfig;
@@ -4718,6 +4790,12 @@
       if (reorderDownBtn) {
         const idx = reorderDownBtn.getAttribute('data-index');
         if (idx !== null) moveRuleDown(parseInt(idx, 10));
+        return;
+      }
+      const editRuleBtn = e.target.closest('.btn-edit-rule');
+      if (editRuleBtn) {
+        const idx = editRuleBtn.getAttribute('data-index');
+        if (idx !== null) openEditRuleModal(parseInt(idx, 10));
         return;
       }
       const removeRuleBtn = e.target.closest('.btn-remove-rule');

@@ -291,7 +291,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <th data-i18n="thRuleName">Rule Name</th>
                 <th data-i18n="thPattern">Pattern / Preset</th>
                 <th data-i18n="thAction">Action</th>
-                <th data-i18n="thActions">Actions</th>
+                <th style="width: 170px;" data-i18n="thActions">Actions</th>
               </tr>
             </thead>
             <tbody id="rulesTableBody">
@@ -1720,6 +1720,40 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         <button type="button" id="btnProxyFormCancel" onclick="closeProxyFormModal()" class="btn-secondary" style="flex: 1;" data-i18n="btnCancel">Cancel</button>
       </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Routing Profile Rule -->
+  <div id="modalEditRule" class="modal-backdrop-theme" style="display: none;">
+    <div class="modal-card-theme" style="max-width: 500px; width: 90%; padding: 24px;">
+      <h2 id="modalEditRuleTitle" style="margin: 0 0 12px 0; font-size: 17px;" data-i18n="titleEditRule">Edit Routing Rule</h2>
+      <input type="hidden" id="editRuleIndex" value="" />
+
+      <div style="margin-bottom: 12px;">
+        <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRuleName">Rule Name</label>
+        <input type="text" id="editRuleName" placeholder="My Custom Rule" data-i18n-ph="phRuleName" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRulePattern">Pattern (comma separated domains or CIDRs)</label>
+        <input type="text" id="editRulePattern" placeholder="*.example.com, target-domain.org, 10.50.0.0/16" data-i18n-ph="phRulePattern" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRuleAction">Action</label>
+        <select id="editRuleAction" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
+          <option value="proxy" data-i18n="optActionProxy">PROXY</option>
+          <option value="direct" data-i18n="optActionDirect">DIRECT</option>
+          <option value="block" data-i18n="optActionBlock">BLOCK (Sinkhole)</option>
+        </select>
+      </div>
+
+      <div id="editRuleError" style="display: none; color: var(--danger); font-size: 12px; margin-bottom: 12px;"></div>
+
+      <div style="display: flex; gap: 8px;">
+        <button type="button" id="btnSaveEditedRule" onclick="saveEditedRule()" style="flex: 1;" data-i18n="btnSave">Save</button>
+        <button type="button" id="btnCancelEditRule" onclick="closeEditRuleModal()" class="btn-secondary" style="flex: 1;" data-i18n="btnCancel">Cancel</button>
+      </div>
     </div>
   </div>
 

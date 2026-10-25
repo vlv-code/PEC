@@ -1424,6 +1424,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (action === "FORCE_SYNC" || action === "SYNC_NOW") {
+    checkForExtensionUpdates(true);
     syncWithServer(true)
       .then(() => {
         persistProxyState();
@@ -1511,10 +1512,74 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged 
   });
 }
 
-// Alarm handler: periodic sync + bypass expiry
+// --- Chrome Extension Auto-Update Engine (Omaha / updates.xml) ---
+let lastUpdateCheckTime = 0;
+function checkForExtensionUpdates(isManual = false) {
+  if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.requestUpdateCheck) {
+    return;
+  }
+  const now = Date.now();
+  if (isManual && now - lastUpdateCheckTime < 60000) {
+    return;
+  }
+  lastUpdateCheckTime = now;
+
+  try {
+    chrome.runtime.requestUpdateCheck((status, details) => {
+      if (chrome.runtime.lastError) {
+        return;
+      }
+      if (status === "update_available") {
+        const ver = details && details.version ? details.version : "new";
+        console.log("[PEC] Update check: new version available (" + ver + ")");
+        logEvent("info", "Update available on server: v" + ver + ". Downloading package...");
+      } else if (status === "throttled") {
+        if (isManual) console.log("[PEC] Update check throttled by Chrome (rate limit)");
+      } else if (status === "no_update") {
+        if (isManual) console.log("[PEC] Update check: extension is up to date");
+      }
+    });
+  } catch (e) {}
+}
+
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onUpdateAvailable) {
+  chrome.runtime.onUpdateAvailable.addListener((details) => {
+    const newVer = details && details.version ? details.version : "new";
+    console.log("[PEC] Chrome downloaded new extension version:", newVer);
+    logEvent("info", "Downloaded update version " + newVer + " from server, applying reload...");
+    setTimeout(() => {
+      try {
+        if (chrome.runtime && chrome.runtime.reload) {
+          chrome.runtime.reload();
+        }
+      } catch (e) {
+        console.warn("[PEC] Update reload error:", e);
+      }
+    }, 200);
+  });
+}
+
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onStartup) {
+  chrome.runtime.onStartup.addListener(() => {
+    checkForExtensionUpdates(false);
+  });
+}
+
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onInstalled) {
+  chrome.runtime.onInstalled.addListener(() => {
+    checkForExtensionUpdates(false);
+  });
+}
+
+// Alarm handler: periodic sync + bypass expiry + periodic update check
+let syncCycles = 0;
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   await restoreStartupState();
   if (alarm.name === ALARM_SYNC) {
+    syncCycles++;
+    if (syncCycles % Math.max(1, Math.round(60 / SYNC_INTERVAL_MIN)) === 0) {
+      checkForExtensionUpdates(false);
+    }
     getInstanceId().then((id) => {
       const ver = (chrome.runtime && chrome.runtime.getManifest && chrome.runtime.getManifest().version) || "1.0.0";
       announceToLocalApp(id, ver).catch(() => {});
@@ -1541,18 +1606,21 @@ async function initStartup() {
   await setupSyncAlarm();
 
   // If the service worker was restarted mid-bypass, re-arm the expiry
-chrome.alarms.get(ALARM_BYPASS_EXPIRE, (alarm) => {
-  if (!alarm && currentProxyState.bypassActive) {
-    expireBypass();
-  }
-});
+  chrome.alarms.get(ALARM_BYPASS_EXPIRE, (alarm) => {
+    if (!alarm && currentProxyState.bypassActive) {
+      expireBypass();
+    }
+  });
 
-// Initialize on service worker start
-applyWebRtcProtection();
+  // Check for extension updates on initial startup
+  checkForExtensionUpdates(false);
+
+  // Initialize on service worker start
+  applyWebRtcProtection();
   syncWithServer(false, true).catch((e) => console.warn("[PEC] Initial boot sync warning:", e));
-getInstanceId().then((id) => {
-  const ver = (chrome.runtime && chrome.runtime.getManifest && chrome.runtime.getManifest().version) || "1.0.0";
-  announceToLocalApp(id, ver).catch(() => {});
+  getInstanceId().then((id) => {
+    const ver = (chrome.runtime && chrome.runtime.getManifest && chrome.runtime.getManifest().version) || "1.0.0";
+    announceToLocalApp(id, ver).catch(() => {});
   }).catch(() => {});
 }
 
