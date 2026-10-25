@@ -685,7 +685,10 @@ function writeGeneratedFile(
   }
 }
 
-export function createManifestObject(cfg: ExtensionBuildConfig): Record<string, unknown> {
+export function createManifestObject(
+  cfg: Partial<ExtensionBuildConfig>,
+  privKey?: crypto.KeyObject
+): Record<string, unknown> {
   const permissions: string[] = ["webRequest", "webRequestAuthProvider", "storage", "proxy", "alarms", "tabs"];
   if (cfg.webRtcProtection) {
     permissions.push("privacy");
@@ -695,12 +698,20 @@ export function createManifestObject(cfg: ExtensionBuildConfig): Record<string, 
   const baseServer = (cfg.serverUrl || cfg.defaultServerUrl || "").trim().replace(/\/+$/, "");
   const updateUrl = explicitUpdateUrl || (baseServer ? `${baseServer}/updates/updates.xml` : "");
 
+  let keyBase64: string | undefined;
+  try {
+    const keyToUse = privKey || ensureKeyExists();
+    const spkiDer = getPublicKeySpkiDer(keyToUse);
+    keyBase64 = spkiDer.toString("base64");
+  } catch {}
+
   const manifest: Record<string, unknown> = {
     manifest_version: 3,
     name: cfg.name || "PEC - Proxy Extension Corp",
     short_name: cfg.shortName || "PEC Corp",
     version: cfg.version || "1.0.0",
     description: cfg.description || "",
+    ...(keyBase64 ? { key: keyBase64 } : {}),
     ...(updateUrl ? { update_url: updateUrl } : {}),
     permissions: Array.from(new Set(permissions)),
     host_permissions: ["<all_urls>", "http://127.0.0.1/*"],
@@ -912,7 +923,7 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   // Render manifest.json directly into UNPACKED_DIR based on build config to pack
   const isManifestOverridden = (buildConfigToPack.overriddenFiles || []).includes("manifest.json");
   if (!isManifestOverridden || !fs.existsSync(path.join(EXTENSION_DIR, "manifest.json"))) {
-    const manifestObj = createManifestObject(buildConfigToPack);
+    const manifestObj = createManifestObject(buildConfigToPack, privKey);
     fs.writeFileSync(path.join(UNPACKED_DIR, "manifest.json"), JSON.stringify(manifestObj, null, 2), "utf-8");
   } else {
     fs.copyFileSync(path.join(EXTENSION_DIR, "manifest.json"), path.join(UNPACKED_DIR, "manifest.json"));

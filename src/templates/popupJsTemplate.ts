@@ -308,7 +308,7 @@ function renderCorporateRules(rules, profileName, defaultPolicy) {
   }
 
   if (!ruleList.length) {
-    container.innerHTML = '<div class="empty-rules" id="corpRulesEmpty">\${t.isRu ? "Правила маршрутизации не заданы (все запросы по умолчанию)" : "No routing rules defined (all requests follow default policy)"}</div>';
+    container.innerHTML = '<div class="empty-rules" id="corpRulesEmpty">Правила маршрутизации не заданы (все запросы по умолчанию)</div>';
     return;
   }
 
