@@ -17,7 +17,12 @@
 #pragma comment(lib, "advapi32.lib")
 
 
+#ifndef VERSION
 #define VERSION "2.2.0"
+#endif
+#ifndef VERSION_W
+#define VERSION_W L"2.2.0"
+#endif
 #define MAX_PROXY_CONFIGS 16
 #define MAX_RULES         256
 
@@ -666,7 +671,7 @@ static void do_update(void)
 {
     printf("Checking for updates...\n\n");
 
-    HINTERNET sess = WinHttpOpen(L"PEC-CLI/2.1.0",
+    HINTERNET sess = WinHttpOpen(L"PEC-CLI/" VERSION_W,
                                   WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                   WINHTTP_NO_PROXY_NAME,
                                   WINHTTP_NO_PROXY_BYPASS, 0);

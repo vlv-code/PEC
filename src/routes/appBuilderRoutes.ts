@@ -11,6 +11,7 @@ import {
   getAppUpdatesDir,
   getTemplatesAppDir,
   buildAppBinaries,
+  cleanAppBinaries,
 } from "../appPackager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter } from "../middleware/security.js";
@@ -134,13 +135,14 @@ export function createAppBuilderRouter(
 
   router.post("/api/app-builder/build-binaries", (req: Request, res: Response) => {
     try {
-      const result = buildAppBinaries();
+      const customVersion = typeof req.body?.version === "string" ? req.body.version.trim() : undefined;
+      const result = buildAppBinaries(customVersion);
       recordAudit({
         ip: getClientIp(req),
         endpoint: "/api/app-builder/build-binaries",
         status: result.ok ? 200 : 500,
         result: result.ok ? "BUILD_SUCCESS" : "STORE_ERROR",
-        details: result.message,
+        details: `${result.message} (version: ${customVersion || "default"})`,
       });
 
       if (!result.ok) {
@@ -153,6 +155,31 @@ export function createAppBuilderRouter(
       recordAudit({
         ip: getClientIp(req),
         endpoint: "/api/app-builder/build-binaries",
+        status: 500,
+        result: "STORE_ERROR",
+        details: msg,
+      });
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  router.post("/api/app-builder/clean-binaries", (req: Request, res: Response) => {
+    try {
+      const result = cleanAppBinaries();
+      recordAudit({
+        ip: getClientIp(req),
+        endpoint: "/api/app-builder/clean-binaries",
+        status: 200,
+        result: "CONFIG_UPDATED",
+        details: result.message,
+      });
+      res.json(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[appBuilderRoutes] clean-binaries exception:", msg);
+      recordAudit({
+        ip: getClientIp(req),
+        endpoint: "/api/app-builder/clean-binaries",
         status: 500,
         result: "STORE_ERROR",
         details: msg,

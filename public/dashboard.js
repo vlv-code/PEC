@@ -3506,6 +3506,51 @@
       }
     }
 
+    async function cleanAppBinariesAction() {
+      const isRu = currentLang === 'ru';
+      if (!confirm(isRu ? 'Удалить скомпилированные бинарники PEC-App для сборки с нуля?' : 'Clean compiled PEC-App binaries to build from scratch?')) {
+        return;
+      }
+      const btn = document.getElementById('btnAppCleanBinaries');
+      const statusEl = document.getElementById('appBuildStatusMsg');
+      if (btn) btn.disabled = true;
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.color = 'var(--text-muted)';
+        statusEl.textContent = isRu ? 'Очистка бинарников...' : 'Cleaning binaries...';
+      }
+      try {
+        const res = await adminFetch('/api/app-builder/clean-binaries', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          if (statusEl) {
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--success)';
+            statusEl.innerHTML = isRu
+              ? `Бинарники очищены (${(data.deletedFiles || []).length} удалено, ${(data.preservedFiles || []).length} защищено) &bull; ${new Date().toLocaleTimeString()}`
+              : `Binaries cleaned (${(data.deletedFiles || []).length} deleted, ${(data.preservedFiles || []).length} preserved) &bull; ${new Date().toLocaleTimeString()}`;
+          }
+          toast(isRu ? 'Бинарники успешно очищены. Теперь можно собрать с нуля.' : 'Binaries cleaned successfully. Ready for clean build.', 'success');
+        } else {
+          if (statusEl) {
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--danger)';
+            statusEl.textContent = (isRu ? 'Ошибка очистки: ' : 'Clean error: ') + (data.error || data.message || res.status);
+          }
+          toast((isRu ? 'Ошибка очистки: ' : 'Clean error: ') + (data.error || data.message || res.status), 'error');
+        }
+      } catch (e) {
+        if (statusEl) {
+          statusEl.style.display = 'block';
+          statusEl.style.color = 'var(--danger)';
+          statusEl.textContent = 'Network error: ' + e.message;
+        }
+        toast('Clean failed: ' + e.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
     async function buildAppBinariesAction() {
       const btn = document.getElementById('btnAppBuildBinaries');
       const statusEl = document.getElementById('appBuildStatusMsg');
@@ -3518,7 +3563,13 @@
       toast(currentLang === 'ru' ? 'Запуск сборки бинарников PEC-App...' : 'Starting binary build...', 'info');
 
       try {
-        const res = await adminFetch('/api/app-builder/build-binaries', { method: 'POST' });
+        const verEl = document.getElementById('appBuildVersion');
+        const targetVer = verEl ? verEl.value.trim() : '';
+        const res = await adminFetch('/api/app-builder/build-binaries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: targetVer }),
+        });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
           const filesCount = Array.isArray(data.builtFiles) ? data.builtFiles.length : 0;
@@ -4180,6 +4231,7 @@
     window.importSelectedRoutingProfileRules = importSelectedRoutingProfileRules;
     window.loadAppStudioConfig = loadAppStudioConfig;
     window.saveAppStudioConfigAction = saveAppStudioConfigAction;
+    window.cleanAppBinariesAction = cleanAppBinariesAction;
     window.buildAppBinariesAction = buildAppBinariesAction;
     window.buildAppPackageAction = buildAppPackageAction;
     window.updateAppLivePreview = updateAppLivePreview;

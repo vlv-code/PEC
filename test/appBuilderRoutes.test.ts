@@ -213,6 +213,45 @@ test("appBuilderRoutes: build, download, profile, and script delivery", async ()
     assert.ok(binariesBody.builtFiles.includes("PEC-CLI.exe"));
     assert.ok(binariesBody.builtFiles.includes("PECAppSvc.exe"));
     assert.ok(binariesBody.builtFiles.includes("PECAppCore.dll"));
+
+    // 8. POST /api/app-builder/clean-binaries cleans compiled binaries but preserves WinDivert
+    const cleanUnauth = await fetch(`${baseUrl}/api/app-builder/clean-binaries`, {
+      method: "POST",
+    });
+    assert.equal(cleanUnauth.status, 401);
+
+    const cleanRes = await fetch(`${baseUrl}/api/app-builder/clean-binaries`, {
+      method: "POST",
+      headers: { "x-admin-token": TEST_ADMIN_TOKEN },
+    });
+    assert.equal(cleanRes.status, 200);
+    const cleanBody = await cleanRes.json();
+    assert.equal(cleanBody.ok, true);
+    assert.ok(Array.isArray(cleanBody.deletedFiles));
+    assert.ok(Array.isArray(cleanBody.preservedFiles));
+    // Verify WinDivert is in preservedFiles and not deletedFiles
+    const hasDivertDeleted = cleanBody.deletedFiles.some((f: string) => f.toLowerCase().includes("windivert"));
+    assert.equal(hasDivertDeleted, false, "WinDivert files must NEVER be deleted");
+
+    // 9. POST /api/app-builder/build-binaries with custom version compiles/syncs with that version
+    const customBuildRes = await fetch(`${baseUrl}/api/app-builder/build-binaries`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: "1.0.3" }),
+    });
+    assert.equal(customBuildRes.status, 200);
+    const customBuildBody = await customBuildRes.json();
+    assert.equal(customBuildBody.ok, true);
+    assert.ok(Array.isArray(customBuildBody.builtFiles));
+
+    // Re-stage default binaries so subsequent tests in the test runner have them intact
+    await fetch(`${baseUrl}/api/app-builder/build-binaries`, {
+      method: "POST",
+      headers: { "x-admin-token": TEST_ADMIN_TOKEN },
+    });
   });
 });
 

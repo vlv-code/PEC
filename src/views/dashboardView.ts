@@ -1072,6 +1072,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button type="button" id="btnAppSaveConfig" onclick="saveAppStudioConfigAction()" class="btn-secondary" style="font-size: 12px;">Сохранить настройки</button>
+                <button type="button" id="btnAppCleanBinaries" onclick="cleanAppBinariesAction()" class="btn-secondary" style="font-size: 12px; color: var(--danger, #ef4444);" title="Удалить скомпилированные бинарники для пересборки с нуля">🗑 Очистить бинарники</button>
                 <button type="button" id="btnAppBuildBinaries" onclick="buildAppBinariesAction()" class="btn-secondary" style="font-size: 12px;">Собрать бинарники (Build Binaries)</button>
                 <button type="button" id="btnAppBuild" onclick="buildAppPackageAction()" class="btn" style="font-size: 12px;">Собрать приложение (Build Package)</button>
                 <button type="button" id="btnAppViewBuildLog" onclick="openBuildLogModal('app')" class="btn-secondary" style="font-size: 11px; display: none;">📋 Лог сборки</button>

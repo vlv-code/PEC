@@ -68,8 +68,14 @@ extern "C" {
 #define WM_APP_TRAY           (WM_APP + 3)
 #define WM_APP_UPDATE         (WM_APP + 8)
 #define WM_APP_RELOAD_PROFILE (WM_APP + 9)
-#define APP_TITLE_A "PEC-App v2.2.0"
-#define APP_TITLE_W L"PEC-App v2.2.0"
+#ifndef APP_VERSION_STR
+#define APP_VERSION_STR "2.2.0"
+#endif
+#ifndef APP_VERSION_W
+#define APP_VERSION_W L"2.2.0"
+#endif
+#define APP_TITLE_A "PEC-App v" APP_VERSION_STR
+#define APP_TITLE_W L"PEC-App v" APP_VERSION_W
 
 static PBApi            g_api = {};
 static PBProfile        g_profile = {};
@@ -944,7 +950,7 @@ static void RenderHeader()
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(PecTheme::TextPrimary, "PEC-App");
     ImGui::SameLine();
-    RenderPill(u8"v2.2.0", PecTheme::CardBg, PecTheme::TextMuted);
+    RenderPill("v" APP_VERSION_STR, PecTheme::CardBg, PecTheme::TextMuted);
 
     ImGui::SameLine(0, 16.0f);
     if (g_pairedExt.paired) {

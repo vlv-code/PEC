@@ -5,12 +5,24 @@
 // Feeds the About dialog (via loc.h APP_VERSION) and the VS_VERSION_INFO resource
 // (exe Properties → Details). Also mirror the numeric form in res\app.manifest's
 // <assemblyIdentity version="..."> when bumping.
+#ifndef PB_VER_MAJOR
 #define PB_VER_MAJOR 2
+#endif
+#ifndef PB_VER_MINOR
 #define PB_VER_MINOR 2
+#endif
+#ifndef PB_VER_PATCH
 #define PB_VER_PATCH 0
+#endif
+#ifndef PB_VER_BUILD
 #define PB_VER_BUILD 0
+#endif
+#ifndef PB_VER_STR
 #define PB_VER_STR   "2.2.0"     // narrow, for the .rc VERSIONINFO strings
+#endif
+#ifndef PB_VER_STRW
 #define PB_VER_STRW  L"2.2.0"    // wide, for the C/About UI
+#endif
 
 #define IDI_APPICON                 101
 

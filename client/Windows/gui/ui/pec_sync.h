@@ -2,6 +2,10 @@
 #ifndef PB_UI_PEC_SYNC_H
 #define PB_UI_PEC_SYNC_H
 
+#ifndef APP_VERSION_STR
+#define APP_VERSION_STR "2.2.0"
+#endif
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <winhttp.h>
@@ -475,7 +479,7 @@ static DWORD WINAPI PecLoopbackThreadProc(LPVOID param)
                 char respBody[256];
                 EnterCriticalSection(&g_syncLock);
                 _snprintf_s(respBody, sizeof(respBody), _TRUNCATE,
-                    "{\"ok\":true,\"app\":\"PEC-App\",\"version\":\"2.2.0\",\"paired\":%s}",
+                    "{\"ok\":true,\"app\":\"PEC-App\",\"version\":\"" APP_VERSION_STR "\",\"paired\":%s}",
                     g_pairedExt.paired ? "true" : "false");
                 LeaveCriticalSection(&g_syncLock);
                 char resp[512];
@@ -634,7 +638,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                 {
                                     _snprintf_s(jsonBody, sizeof(jsonBody), _TRUNCATE,
                                         "{\"appInstanceId\":\"%s\",\"hostname\":\"%s\",\"username\":\"%s\","
-                                        "\"version\":\"2.2.0\",\"os\":\"windows-x64\",\"clientType\":\"desktop-gui\","
+                                        "\"version\":\"" APP_VERSION_STR "\",\"os\":\"windows-x64\",\"clientType\":\"desktop-gui\","
                                         "\"selectedProxyHost\":\"%s\",\"selectedProxyPort\":%d,"
                                         "\"pairedExtension\":{\"instanceId\":\"%s\",\"version\":\"%s\",\"browser\":\"%s\"}}",
                                         instEsc, hEsc, uEsc, selHostEsc, selPort, pInstEsc, pVerEsc, pBrwEsc);
@@ -643,7 +647,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                 {
                                     _snprintf_s(jsonBody, sizeof(jsonBody), _TRUNCATE,
                                         "{\"appInstanceId\":\"%s\",\"hostname\":\"%s\",\"username\":\"%s\","
-                                        "\"version\":\"2.2.0\",\"os\":\"windows-x64\",\"clientType\":\"desktop-gui\","
+                                        "\"version\":\"" APP_VERSION_STR "\",\"os\":\"windows-x64\",\"clientType\":\"desktop-gui\","
                                         "\"pairedExtension\":{\"instanceId\":\"%s\",\"version\":\"%s\",\"browser\":\"%s\"}}",
                                         instEsc, hEsc, uEsc, pInstEsc, pVerEsc, pBrwEsc);
                                 }
@@ -654,7 +658,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                 {
                                     _snprintf_s(jsonBody, sizeof(jsonBody), _TRUNCATE,
                                         "{\"appInstanceId\":\"%s\",\"hostname\":\"%s\",\"username\":\"%s\","
-                                        "\"version\":\"2.2.0\",\"os\":\"windows-x64\",\"clientType\":\"desktop-gui\","
+                                        "\"version\":\"" APP_VERSION_STR "\",\"os\":\"windows-x64\",\"clientType\":\"desktop-gui\","
                                         "\"selectedProxyHost\":\"%s\",\"selectedProxyPort\":%d}",
                                         instEsc, hEsc, uEsc, selHostEsc, selPort);
                                 }
@@ -662,7 +666,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                 {
                                     _snprintf_s(jsonBody, sizeof(jsonBody), _TRUNCATE,
                                         "{\"appInstanceId\":\"%s\",\"hostname\":\"%s\",\"username\":\"%s\","
-                                        "\"version\":\"2.2.0\",\"os\":\"windows-x64\",\"clientType\":\"desktop-gui\"}",
+                                        "\"version\":\"" APP_VERSION_STR "\",\"os\":\"windows-x64\",\"clientType\":\"desktop-gui\"}",
                                         instEsc, hEsc, uEsc);
                                 }
                             }

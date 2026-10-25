@@ -7,9 +7,25 @@
 101 RCDATA "payload.zip"
 #endif
 
+#ifndef APP_VER_MAJOR
+#define APP_VER_MAJOR 2
+#endif
+#ifndef APP_VER_MINOR
+#define APP_VER_MINOR 2
+#endif
+#ifndef APP_VER_PATCH
+#define APP_VER_PATCH 0
+#endif
+#ifndef APP_VER_BUILD
+#define APP_VER_BUILD 0
+#endif
+#ifndef APP_VERSION_STR
+#define APP_VERSION_STR "2.2.0.0"
+#endif
+
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 2,2,0,0
-PRODUCTVERSION 2,2,0,0
+FILEVERSION APP_VER_MAJOR,APP_VER_MINOR,APP_VER_PATCH,APP_VER_BUILD
+PRODUCTVERSION APP_VER_MAJOR,APP_VER_MINOR,APP_VER_PATCH,APP_VER_BUILD
 FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
 FILEFLAGS 0x1L
@@ -26,12 +42,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "PEC Team"
             VALUE "FileDescription", "PEC-App Setup & Installer"
-            VALUE "FileVersion", "2.2.0.0"
+            VALUE "FileVersion", APP_VERSION_STR
             VALUE "InternalName", "PEC-App-Setup"
             VALUE "LegalCopyright", "Copyright (C) 2026 PEC Team"
             VALUE "OriginalFilename", "PEC-App-Setup.exe"
             VALUE "ProductName", "PEC-App"
-            VALUE "ProductVersion", "2.2.0.0"
+            VALUE "ProductVersion", APP_VERSION_STR
         END
     END
     BLOCK "VarFileInfo"

@@ -2008,7 +2008,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show)
     if (!ConnectEngine())
         return 1;
 
-    PB_WriteAppLog("=== PEC-App GUI v2.1.0 started (ActiveProfile: %ws) ===", g_activeProfile);
+    PB_WriteAppLog("=== PEC-App GUI v" PB_VER_STR " started (ActiveProfile: %ws) ===", g_activeProfile);
 
     g_autoClear   = g_profile.autoClearLogs;
     g_logEvery    = g_profile.logEveryConnection != 0;

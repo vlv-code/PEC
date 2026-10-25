@@ -19,6 +19,8 @@ import {
   buildAppBinaries,
   assembleAppPackage,
   compileBinariesWithMinGW,
+  cleanAppBinaries,
+  parseAppVersion,
   MINGW_GUI_CMD,
   MSVC_GUI_CMD,
 } from "../src/appPackager.js";
@@ -353,6 +355,42 @@ test("compileBinariesWithMinGW function executes cleanly or reports toolchain st
   assert.strictEqual(Array.isArray(result.builtFiles), true);
   if (result.ok) {
     assert.ok(result.builtFiles.includes("PEC-App.exe"));
+  }
+});
+
+test("parseAppVersion parses major, minor, patch, quad accurately", () => {
+  const v1 = parseAppVersion("1.0.3");
+  assert.strictEqual(v1.version, "1.0.3");
+  assert.strictEqual(v1.major, 1);
+  assert.strictEqual(v1.minor, 0);
+  assert.strictEqual(v1.patch, 3);
+  assert.strictEqual(v1.build, 0);
+  assert.strictEqual(v1.quad, "1.0.3.0");
+
+  const v2 = parseAppVersion("v2.4.1.9");
+  assert.strictEqual(v2.version, "2.4.1");
+  assert.strictEqual(v2.major, 2);
+  assert.strictEqual(v2.minor, 4);
+  assert.strictEqual(v2.patch, 1);
+  assert.strictEqual(v2.build, 9);
+  assert.strictEqual(v2.quad, "2.4.1.9");
+});
+
+test("cleanAppBinaries cleans output binaries but never deletes kernel drivers or templates", () => {
+  const res = cleanAppBinaries();
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(Array.isArray(res.deletedFiles), true);
+  assert.strictEqual(Array.isArray(res.preservedFiles), true);
+
+  // Assert WinDivert is never touched
+  const badDelete = res.deletedFiles.some((f) => f.toLowerCase().includes("windivert"));
+  assert.strictEqual(badDelete, false, "Kernel drivers (WinDivert) must never be deleted");
+
+  // WinDivert.dll and WinDivert64.sys should still exist on disk
+  const tDir = path.resolve("./templates/app/windows");
+  if (fs.existsSync(tDir)) {
+    assert.strictEqual(fs.existsSync(path.join(tDir, "WinDivert.dll")), true);
+    assert.strictEqual(fs.existsSync(path.join(tDir, "WinDivert64.sys")), true);
   }
 });
 

@@ -28,6 +28,11 @@ process.env.RELEASES_META_PATH = path.join(tmp, "releases_meta.json");
 process.env.PEC_RELEASES_DIR = path.join(tmp, "releases");
 process.env.PEC_EXTENSION_DIR = path.join(tmp, "extension");
 process.env.PEC_UPDATES_DIR = path.join(tmp, "updates");
+const testTemplatesApp = path.join(tmp, "templates", "app");
+if (fs.existsSync(path.resolve("./templates/app"))) {
+  fs.cpSync(path.resolve("./templates/app"), testTemplatesApp, { recursive: true });
+}
+process.env.PEC_TEMPLATES_DIR = testTemplatesApp;
 process.env.EXT_SHARED_TOKEN = "test-admin-token";
 process.env.ADMIN_TOKEN = "test-root-admin-token";
 process.env.PEC_DISABLE_LISTEN = "true";
