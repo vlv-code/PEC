@@ -2031,9 +2031,16 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url, tag, name, category, type })
           });
-          const data = await res.json();
-          if (!res.ok || !data.ok) {
-            throw new Error(data.error || ('HTTP ' + res.status));
+          let data = null;
+          try {
+            data = await res.json();
+          } catch (jsonErr) {
+            const rawText = await res.text().catch(() => '');
+            const cleanText = rawText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            throw new Error('HTTP ' + res.status + ': ' + (cleanText.slice(0, 150) || res.statusText));
+          }
+          if (!res.ok || !data || !data.ok) {
+            throw new Error((data && data.error) || ('HTTP ' + res.status));
           }
           toast((isRu ? 'Пресет успешно импортирован! Записей: ' : 'Preset successfully imported! Entries: ') + (data.preset ? data.preset.entriesCount : ''), 'success');
           closeImportPresetsModal();

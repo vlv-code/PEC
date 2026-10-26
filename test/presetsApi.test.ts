@@ -436,6 +436,30 @@ test.describe("Presets Backend CRUD & Import API", () => {
     assert.strictEqual(datData.ok, true);
     assert.strictEqual(datData.preset.source, "file");
     assert.deepStrictEqual(datData.preset.entries, ["bbc.co.uk", "cnn.com"]);
+
+    // Base64 dat import with multiple comma-separated tags
+    const multiBuf = Buffer.concat([
+      makeMockGeoSiteBuffer("TELEGRAM", ["t.me", "telegram.org"]),
+      makeMockGeoSiteBuffer("YOUTUBE", ["youtube.com", "googlevideo.com"]),
+    ]);
+    const resMulti = await fetch(`${baseUrl}/api/routing/presets/import-file`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: "geosite (2).dat",
+        content: multiBuf.toString("base64"),
+        tag: "telegram, youtube, category-communication, ru",
+        name: "vpn",
+      }),
+    });
+    assert.strictEqual(resMulti.status, 200);
+    const multiData = (await resMulti.json()) as any;
+    assert.strictEqual(multiData.ok, true);
+    assert.strictEqual(multiData.preset.source, "file");
+    assert.ok(multiData.preset.entries.includes("t.me"));
+    assert.ok(multiData.preset.entries.includes("telegram.org"));
+    assert.ok(multiData.preset.entries.includes("youtube.com"));
+    assert.ok(multiData.preset.entries.includes("googlevideo.com"));
   });
 
   test("POST /api/routing/presets/:id/refresh re-fetches remote presets", async () => {

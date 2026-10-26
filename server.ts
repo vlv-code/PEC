@@ -179,8 +179,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Security Middleware: Headers & CORS
 app.use(securityHeadersMiddleware);
 app.use(safeCorsMiddleware);
-app.use(express.json({ limit: "5mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "150mb" }));
+app.use(express.urlencoded({ limit: "150mb", extended: true }));
 
 // Enforce max 16KB payload on sync endpoints (M-1)
 app.use(["/api/sync", "/api/app/sync"], (req: Request, res: Response, next: NextFunction) => {
@@ -328,6 +328,33 @@ app.get("/", (req: Request, res: Response) => {
       "base-uri 'self'; form-action 'self'"
   );
   res.type("html").send(html);
+});
+
+// Global API & Express error-handling middleware - ensures structured JSON error responses
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err) {
+    const status = typeof err.status === "number" ? err.status : typeof err.statusCode === "number" ? err.statusCode : 500;
+    const isPayloadTooLarge = err.type === "entity.too.large" || status === 413;
+    const message = isPayloadTooLarge
+      ? "Payload Too Large: uploaded file exceeds the server limit (max 150MB)"
+      : err.message || "Internal Server Error";
+
+    if (status >= 400 && status < 500) {
+      console.warn(`[HTTP] [WARN] ${req.method} ${req.url} ${status} - ${message}`);
+    } else {
+      console.error(`[HTTP] [ERROR] ${req.method} ${req.url} ${status} -`, err);
+    }
+
+    if (res.headersSent) {
+      return next(err);
+    }
+
+    return res.status(status).json({
+      ok: false,
+      error: message,
+    });
+  }
+  next();
 });
 
 if (process.env.NODE_ENV !== "test" && process.env.PEC_DISABLE_LISTEN !== "true") {

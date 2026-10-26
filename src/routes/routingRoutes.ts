@@ -51,25 +51,59 @@ function parseGeodataBuffer(
 ): { entries: string[]; inferredType: "domain" | "cidr" } {
   const lowerName = filenameOrUrl.toLowerCase();
   const isDat = lowerName.endsWith(".dat") || buffer.includes(0x00);
-  const targetTag = (tag || "RU").toUpperCase();
+  const rawTags = (tag || "RU")
+    .split(/[,;]+/)
+    .map((t) => t.trim().toUpperCase())
+    .filter(Boolean);
+  const targetTags = rawTags.length > 0 ? rawTags : ["RU"];
 
   if (isDat) {
     if (requestedType === "cidr" || lowerName.includes("geoip")) {
       const ipMap = parseGeoIp(buffer);
-      const entry = ipMap.get(targetTag);
-      if (!entry) {
-        throw new Error(`Tag '${targetTag}' not found in GeoIP file`);
+      const matchedCidrs: string[] = [];
+
+      for (const t of targetTags) {
+        const entry = ipMap.get(t);
+        if (entry) {
+          for (const c of entry.cidrs) {
+            matchedCidrs.push(`${c.ip}/${c.prefix}`);
+          }
+        }
       }
-      const entries = entry.cidrs.map((c) => `${c.ip}/${c.prefix}`);
-      return { entries, inferredType: "cidr" };
+
+      if (matchedCidrs.length === 0) {
+        const available = Array.from(ipMap.keys()).slice(0, 20).join(", ");
+        throw new Error(
+          targetTags.length === 1
+            ? `Tag '${targetTags[0]}' not found in GeoIP file. Available tags: ${available || "none"}`
+            : `None of tags [${targetTags.join(", ")}] found in GeoIP file. Available tags: ${available || "none"}`
+        );
+      }
+      const uniqueEntries = Array.from(new Set(matchedCidrs));
+      return { entries: uniqueEntries, inferredType: "cidr" };
     } else {
       const siteMap = parseGeoSite(buffer);
-      const entry = siteMap.get(targetTag);
-      if (!entry) {
-        throw new Error(`Tag '${targetTag}' not found in GeoSite file`);
+      const matchedDomains: string[] = [];
+
+      for (const t of targetTags) {
+        const entry = siteMap.get(t);
+        if (entry) {
+          for (const d of entry.domains) {
+            matchedDomains.push(d.value);
+          }
+        }
       }
-      const entries = entry.domains.map((d) => d.value);
-      return { entries, inferredType: "domain" };
+
+      if (matchedDomains.length === 0) {
+        const available = Array.from(siteMap.keys()).slice(0, 20).join(", ");
+        throw new Error(
+          targetTags.length === 1
+            ? `Tag '${targetTags[0]}' not found in GeoSite file. Available tags: ${available || "none"}`
+            : `None of tags [${targetTags.join(", ")}] found in GeoSite file. Available tags: ${available || "none"}`
+        );
+      }
+      const uniqueEntries = Array.from(new Set(matchedDomains));
+      return { entries: uniqueEntries, inferredType: "domain" };
     }
   } else {
     const text = buffer.toString("utf-8");
