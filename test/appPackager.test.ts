@@ -6,6 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import AdmZip from "adm-zip";
 import zlib from "node:zlib";
+import { execSync } from "node:child_process";
 import {
   DEFAULT_APP_BUILD_CONFIG,
   getAppBuildConfig,
@@ -409,6 +410,110 @@ test("cleanAppBinaries followed by buildAppBinaries recovers binaries from prist
       process.env.SKIP_NATIVE_REBUILD = prevEnv;
     } else {
       delete process.env.SKIP_NATIVE_REBUILD;
+    }
+  }
+});
+
+test("setup.c extracts payload to a secure randomized temp directory with SYSTEM/Admin SDDL (Audit H-6)", () => {
+  const setupPath = path.resolve("./client/Windows/installer/setup.c");
+  assert.strictEqual(fs.existsSync(setupPath), true, "setup.c must exist");
+  const content = fs.readFileSync(setupPath, "utf-8");
+
+  // Must NOT write directly to predictable %TEMP%\pec_payload.zip
+  assert.strictEqual(
+    content.includes('lstrcatW(tempZip, L"pec_payload.zip");'),
+    false,
+    "setup.c must not append payload filename directly to base temp path"
+  );
+
+  // Must use randomized unique directory (e.g. CoCreateGuid or GetTempFileNameW)
+  assert.ok(
+    content.includes("CoCreateGuid") || content.includes("GetTempFileNameW"),
+    "setup.c must generate a randomized unique directory for payload extraction"
+  );
+
+  // Must apply restricted security descriptor granting access only to SYSTEM (SY) and Administrators (BA)
+  assert.ok(
+    content.includes("ConvertStringSecurityDescriptorToSecurityDescriptorW"),
+    "setup.c must configure security descriptor via ConvertStringSecurityDescriptorToSecurityDescriptorW"
+  );
+  assert.ok(
+    content.includes("D:(A;OICI;GA;;;SY)(A;OICI;GA;;;BA)"),
+    "setup.c must apply restricted SDDL granting Full Access only to SYSTEM and Administrators"
+  );
+
+  // Must clean up the temporary directory
+  assert.ok(
+    content.includes("RemoveDirectoryW"),
+    "setup.c must remove temporary extraction directory after cleanup"
+  );
+
+  // Regression check: Single-line comments must not end with a backslash (which causes line-splicing and comments out code)
+  assert.strictEqual(
+    /\/\/[^\r\n]*\\(?:\r?\n)/.test(content),
+    false,
+    "setup.c must not have trailing backslashes on single-line comments that cause line-continuation bugs"
+  );
+
+  // If clang is present on the system, compile setup.c to ensure zero compilation or syntax errors
+  try {
+    execSync("where.exe clang", { stdio: "ignore" });
+    const res = execSync("clang -fsyntax-only -Wall -Werror=comment client/Windows/installer/setup.c", {
+      encoding: "utf-8",
+    });
+    assert.ok(res !== undefined, "clang syntax check on setup.c must succeed");
+  } catch (err: any) {
+    if (err.status !== undefined && err.status !== 0) {
+      throw new Error(`clang syntax check failed on setup.c: ${err.stderr || err.message}`);
+    }
+  }
+});
+
+test("update.h enforces WinVerifyTrust Authenticode signature verification before launching installer (Audit H-1)", () => {
+  const updateHeaderPath = path.resolve("./client/Windows/gui/ui/update.h");
+  assert.strictEqual(fs.existsSync(updateHeaderPath), true, "update.h must exist");
+  const content = fs.readFileSync(updateHeaderPath, "utf-8");
+
+  // Must include WinTrust headers and library pragma
+  assert.ok(content.includes("<wintrust.h>"), "update.h must include <wintrust.h>");
+  assert.ok(content.includes("<softpub.h>"), "update.h must include <softpub.h>");
+  assert.ok(content.includes('"wintrust.lib"'), "update.h must link wintrust.lib");
+
+  // Must call WinVerifyTrust with WINTRUST_ACTION_GENERIC_VERIFY_V2
+  assert.ok(content.includes("WinVerifyTrust"), "update.h must call WinVerifyTrust");
+  assert.ok(
+    content.includes("WINTRUST_ACTION_GENERIC_VERIFY_V2"),
+    "update.h must verify with WINTRUST_ACTION_GENERIC_VERIFY_V2"
+  );
+
+  // Must clean up state with WTD_STATEACTION_CLOSE
+  assert.ok(
+    content.includes("WTD_STATEACTION_CLOSE"),
+    "update.h must clean up trust provider state with WTD_STATEACTION_CLOSE"
+  );
+
+  // Must use headless / no-UI parameter
+  assert.ok(
+    content.includes("WTD_UI_NONE"),
+    "update.h must set WTD_UI_NONE to prevent interactive trust dialogs"
+  );
+
+  // Must verify authenticode before ShellExecuteW
+  const verifyPos = content.indexOf("WinVerifyTrust");
+  const shellExecPos = content.lastIndexOf('ShellExecuteW(dlg, L"open", d->dest');
+  assert.ok(verifyPos !== -1 && shellExecPos !== -1, "Both WinVerifyTrust and ShellExecuteW must exist");
+  assert.ok(verifyPos < shellExecPos, "WinVerifyTrust verification must occur before ShellExecuteW");
+
+  // If clang is present on the system, compile main.c (which includes update.h) to ensure zero compilation errors
+  try {
+    execSync("where.exe clang", { stdio: "ignore" });
+    const res = execSync("clang -fsyntax-only -Wall -Wextra -I client/Windows/gui client/Windows/gui/main.c", {
+      encoding: "utf-8",
+    });
+    assert.ok(res !== undefined, "clang syntax check on main.c (including update.h) must succeed");
+  } catch (err: any) {
+    if (err.status !== undefined && err.status !== 0) {
+      throw new Error(`clang syntax check failed on main.c: ${err.stderr || err.message}`);
     }
   }
 });

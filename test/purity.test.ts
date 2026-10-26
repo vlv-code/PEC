@@ -401,7 +401,7 @@ test("purity: background.js installs the PAC script INLINE (pacScript.data) when
   assert.ok(pac?.data, "when the PAC endpoint is reachable the script must be installed inline via pacScript.data");
   assert.ok(String(pac.data).includes("FindProxyForURL"), "inline PAC must contain the entry point function");
   assert.strictEqual(pac.url, undefined, "url-mode is a fallback only and must not be set when data is available");
-  assert.strictEqual(pac.mandatory, false, "fail-open semantics are preserved (mandatory=false)");
+  assert.strictEqual(pac.mandatory, true, "fail-closed semantics are enforced per Audit H-3 (mandatory=true)");
 });
 
 test("purity: background.js maintains ring-buffer logs and handles GET_LOGS and CLEAR_LOGS", async () => {

@@ -53,6 +53,8 @@ function validateProcessRules(rules: unknown): AppProcessRule[] {
   });
 }
 
+const SEMVER_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$/;
+
 export function createAppBuilderRouter(
   _getFleetToken: () => string,
   getAdminToken?: () => string
@@ -79,6 +81,11 @@ export function createAppBuilderRouter(
       }
 
       const updates: any = { ...req.body };
+      if (updates.version !== undefined) {
+        if (typeof updates.version !== "string" || !SEMVER_REGEX.test(updates.version.trim())) {
+          return res.status(400).json({ ok: false, error: "Invalid version format: must follow semver (e.g. 1.0.4)" });
+        }
+      }
       if (updates.processRules !== undefined) {
         updates.processRules = validateProcessRules(updates.processRules);
       }
@@ -109,6 +116,11 @@ export function createAppBuilderRouter(
     try {
       if (req.body && Object.keys(req.body).length > 0) {
         const updates: any = { ...req.body };
+        if (updates.version !== undefined) {
+          if (typeof updates.version !== "string" || !SEMVER_REGEX.test(updates.version.trim())) {
+            return res.status(400).json({ ok: false, error: "Invalid version format: must follow semver (e.g. 1.0.4)" });
+          }
+        }
         if (updates.processRules !== undefined) {
           updates.processRules = validateProcessRules(updates.processRules);
         }
@@ -135,7 +147,13 @@ export function createAppBuilderRouter(
 
   router.post("/api/app-builder/build-binaries", (req: Request, res: Response) => {
     try {
-      const customVersion = typeof req.body?.version === "string" ? req.body.version.trim() : undefined;
+      const rawVersion = req.body?.version;
+      if (rawVersion !== undefined && rawVersion !== "") {
+        if (typeof rawVersion !== "string" || !SEMVER_REGEX.test(rawVersion.trim())) {
+          return res.status(400).json({ ok: false, error: "Invalid version format: must follow semver (e.g. 1.0.4)" });
+        }
+      }
+      const customVersion = typeof rawVersion === "string" && rawVersion.trim() ? rawVersion.trim() : undefined;
       const result = buildAppBinaries(customVersion);
       recordAudit({
         ip: getClientIp(req),
@@ -264,7 +282,8 @@ export function createAppBuilderRouter(
       const platform = (req.params.platform || "").toLowerCase();
       const updatesDir = getAppUpdatesDir();
       const cfg = getAppBuildConfig();
-      const ver = cfg.version || "2.1.0";
+      const rawVer = typeof cfg.version === "string" ? cfg.version.trim() : "";
+      const ver = SEMVER_REGEX.test(rawVer) ? rawVer : "2.1.0";
       const releasesDir = path.join(getReleasesDir(), "apps", ver);
 
       if (platform === "msi" || platform === "windows-msi") {

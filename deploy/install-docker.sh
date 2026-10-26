@@ -12,6 +12,11 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+    echo -e "${RED}[x] Пожалуйста, запустите скрипт с правами root (sudo)${NC}"
+    exit 1
+fi
+
 echo -e "${BLUE}================================================================${NC}"
 echo -e "${GREEN}   PEC - Proxy Extension Corp: Установка через Docker${NC}"
 echo -e "${BLUE}================================================================${NC}"
@@ -29,13 +34,17 @@ if ! docker compose version &> /dev/null; then
     apt-get update && apt-get install -y docker-compose-plugin || yum install -y docker-compose-plugin
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_DIR="/opt/pec-proxy-server"
-mkdir -p "$INSTALL_DIR"
-cd "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/data" "$INSTALL_DIR/extension" "$INSTALL_DIR/dist/updates" "$INSTALL_DIR/dist/releases"
 
-echo -e "${GREEN}[*] Копирование конфигурации в $INSTALL_DIR...${NC}"
-cp -f /app/docker-compose.yml "$INSTALL_DIR/docker-compose.yml" 2>/dev/null || true
-cp -f /app/Dockerfile "$INSTALL_DIR/Dockerfile" 2>/dev/null || true
+echo -e "${GREEN}[*] Копирование конфигурации и исходных файлов в $INSTALL_DIR...${NC}"
+if [ -d "$SCRIPT_DIR/src" ]; then
+    cp -a "$SCRIPT_DIR/." "$INSTALL_DIR/"
+else
+    cp -a ./. "$INSTALL_DIR/"
+fi
+cd "$INSTALL_DIR"
 
 # Генерация безопасных токенов, если они не заданы
 if [ ! -f "$INSTALL_DIR/.env" ]; then
@@ -53,6 +62,7 @@ XUI_ADMIN_USER=admin
 XUI_ADMIN_PASS=
 XUI_INBOUND_REMARK=squid-in
 EOF
+    chmod 0600 "$INSTALL_DIR/.env"
     echo -e "${GREEN}[+] Сгенерирован защищенный токен расширения:${NC} ${YELLOW}${SECURE_TOKEN}${NC}"
     echo -e "${GREEN}[+] Сгенерирован админ-токен:${NC} ${YELLOW}${ADMIN_SEC_TOKEN}${NC}"
 fi

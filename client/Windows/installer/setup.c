@@ -198,16 +198,68 @@ static BOOL ExtractEmbeddedPayload(const wchar_t* destDir)
     const void* data = LockResource(hGlob);
     if (!data || size < 100) return FALSE;
 
+    // Generate unique directory: %TEMP%\pec_inst_<uuid>
+    wchar_t baseTemp[MAX_PATH];
+    if (GetTempPathW(MAX_PATH, baseTemp) == 0) return FALSE;
+
+    size_t baseLen = wcslen(baseTemp);
+    if (baseLen > 0 && baseTemp[baseLen - 1] != L'\\' && baseTemp[baseLen - 1] != L'/') {
+        if (baseLen + 1 < MAX_PATH) {
+            baseTemp[baseLen] = L'\\';
+            baseTemp[baseLen + 1] = L'\0';
+        }
+    }
+
+    GUID guid;
+    if (FAILED(CoCreateGuid(&guid))) return FALSE;
+
+    wchar_t tempDir[MAX_PATH];
+    if (_snwprintf_s(tempDir, MAX_PATH, _TRUNCATE, L"%lspec_inst_%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X\\",
+        baseTemp, guid.Data1, guid.Data2, guid.Data3,
+        guid.Data4[0], guid.Data4[1], guid.Data4[2], guid.Data4[3],
+        guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7]) < 0) {
+        return FALSE;
+    }
+
+    // Security Descriptor: Only SYSTEM (SY) and Builtin Administrators (BA) have Full Access (GA)
+    SECURITY_ATTRIBUTES sa;
+    ZeroMemory(&sa, sizeof(sa));
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = FALSE;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;OICI;GA;;;SY)(A;OICI;GA;;;BA)",
+            SDDL_REVISION_1,
+            &sa.lpSecurityDescriptor,
+            NULL)) {
+        return FALSE;
+    }
+
+    if (!CreateDirectoryW(tempDir, &sa)) {
+        LocalFree(sa.lpSecurityDescriptor);
+        return FALSE;
+    }
+    LocalFree(sa.lpSecurityDescriptor);
+
     wchar_t tempZip[MAX_PATH];
-    GetTempPathW(MAX_PATH, tempZip);
-    lstrcatW(tempZip, L"pec_payload.zip");
+    if (_snwprintf_s(tempZip, MAX_PATH, _TRUNCATE, L"%lspec_payload.zip", tempDir) < 0) {
+        RemoveDirectoryW(tempDir);
+        return FALSE;
+    }
 
     HANDLE hFile = CreateFileW(tempZip, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return FALSE;
+    if (hFile == INVALID_HANDLE_VALUE) {
+        RemoveDirectoryW(tempDir);
+        return FALSE;
+    }
 
     DWORD written = 0;
-    WriteFile(hFile, data, size, &written, NULL);
+    BOOL writeOk = WriteFile(hFile, data, size, &written, NULL);
     CloseHandle(hFile);
+    if (!writeOk || written != size) {
+        DeleteFileW(tempZip);
+        RemoveDirectoryW(tempDir);
+        return FALSE;
+    }
 
     wchar_t sysDir[MAX_PATH];
     GetSystemDirectoryW(sysDir, MAX_PATH);
@@ -228,6 +280,7 @@ static BOOL ExtractEmbeddedPayload(const wchar_t* destDir)
     }
 
     DeleteFileW(tempZip);
+    RemoveDirectoryW(tempDir);
     return ok;
 }
 

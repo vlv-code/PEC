@@ -179,8 +179,23 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Security Middleware: Headers & CORS
 app.use(securityHeadersMiddleware);
 app.use(safeCorsMiddleware);
-app.use(express.json({ limit: "150mb" }));
-app.use(express.urlencoded({ limit: "150mb", extended: true }));
+
+// Authentication gate for management APIs. Two ways in:
+//   1. X-Admin-Token bearer header (scripts, automation, API testers);
+//   2. a dashboard session cookie (HttpOnly, SameSite=Strict) with the CSRF
+//      marker header - the browser never stores the admin token itself.
+// /api/sync stays public at the routing layer because it carries its own
+// token verification and sliding-window rate limiter (the extension fleet
+// authenticates there); /api/ip-echo is a diagnostic echo endpoint used by
+// extension popups; /api/auth/* power the dashboard onboarding and login.
+const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token", createCookieAuthenticator());
+
+// Route-specific large payload handler strictly behind adminAuth (Audit H-4)
+app.post("/api/routing/presets/import-file", adminAuth, express.json({ limit: "150mb" }));
+
+// Enforce standard 1mb limit globally for all standard endpoints to prevent memory DoS
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ limit: "1mb", extended: true }));
 
 // Enforce max 16KB payload on sync endpoints (M-1)
 app.use(["/api/sync", "/api/app/sync"], (req: Request, res: Response, next: NextFunction) => {
@@ -198,16 +213,6 @@ app.use(["/api/sync", "/api/app/sync"], (req: Request, res: Response, next: Next
   }
   next();
 });
-
-// Authentication gate for management APIs. Two ways in:
-//   1. X-Admin-Token bearer header (scripts, automation, API testers);
-//   2. a dashboard session cookie (HttpOnly, SameSite=Strict) with the CSRF
-//      marker header - the browser never stores the admin token itself.
-// /api/sync stays public at the routing layer because it carries its own
-// token verification and sliding-window rate limiter (the extension fleet
-// authenticates there); /api/ip-echo is a diagnostic echo endpoint used by
-// extension popups; /api/auth/* power the dashboard onboarding and login.
-const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token", createCookieAuthenticator());
 const PUBLIC_API_PATHS = new Set([
   "/ip-echo",
   "/sync",
@@ -335,9 +340,12 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (err) {
     const status = typeof err.status === "number" ? err.status : typeof err.statusCode === "number" ? err.statusCode : 500;
     const isPayloadTooLarge = err.type === "entity.too.large" || status === 413;
-    const message = isPayloadTooLarge
-      ? "Payload Too Large: uploaded file exceeds the server limit (max 150MB)"
-      : err.message || "Internal Server Error";
+    let message = err.message || "Internal Server Error";
+    if (isPayloadTooLarge) {
+      const limitBytes = typeof err.limit === "number" ? err.limit : (req.path.includes("import-file") ? 150 * 1024 * 1024 : 1024 * 1024);
+      const limitStr = limitBytes >= 1024 * 1024 ? `${Math.round(limitBytes / (1024 * 1024))}MB` : `${Math.round(limitBytes / 1024)}KB`;
+      message = `Payload Too Large: request body exceeds the server limit (max ${limitStr})`;
+    }
 
     if (status >= 400 && status < 500) {
       console.warn(`[HTTP] [WARN] ${req.method} ${req.url} ${status} - ${message}`);

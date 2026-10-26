@@ -117,9 +117,9 @@ static __always_inline int decide(struct pb_orig *o)
     if (!tap && implicit_direct(o)) return ACT_DIRECT;
 
     struct mm_struct *mm = bpf_get_current_task_btf()->mm;
-    if (!mm) return ACT_DIRECT;
+    if (!mm || !mm->exe_file || !mm->exe_file->f_inode) return ACT_DIRECT;
     struct pb_exe_key key = {};
-    key.dev = mm->exe_file->f_inode->i_sb->s_dev;
+    key.dev = mm->exe_file->f_inode->i_sb ? mm->exe_file->f_inode->i_sb->s_dev : 0;
     key.ino = mm->exe_file->f_inode->i_ino;
     o->exe_dev = key.dev;
     o->exe_ino = key.ino;

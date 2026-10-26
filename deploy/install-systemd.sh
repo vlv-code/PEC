@@ -34,11 +34,16 @@ if ! id "pecuser" &>/dev/null; then
     useradd -r -s /bin/false pecuser
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_DIR="/opt/pec-proxy-server"
-mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/extension" "$INSTALL_DIR/dist/updates"
+mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/extension" "$INSTALL_DIR/dist/updates" "$INSTALL_DIR/dist/releases"
 
 echo -e "${GREEN}[*] Копирование файлов в $INSTALL_DIR...${NC}"
-cp -ru ./* "$INSTALL_DIR/"
+if [ -d "$SCRIPT_DIR/src" ]; then
+    cp -a "$SCRIPT_DIR/." "$INSTALL_DIR/"
+else
+    cp -a ./. "$INSTALL_DIR/"
+fi
 
 cd "$INSTALL_DIR"
 # Полные зависимости (esbuild/typescript нужны для npm run build)
@@ -50,13 +55,37 @@ npm run build
 # После сборки dev-зависимости больше не нужны
 npm prune --omit=dev
 
-# Генерация безопасных токенов (fleet и admin - разные!)
-SECURE_TOKEN=$(openssl rand -hex 24)
-ADMIN_SEC_TOKEN=$(openssl rand -hex 24)
-
 # Установка прав доступа
 chown -R pecuser:pecuser "$INSTALL_DIR"
 chmod 750 "$INSTALL_DIR"
+
+# Создание защищенного файла переменных окружения (Audit H-2)
+mkdir -p /etc/pec-server
+chmod 750 /etc/pec-server
+chown pecuser:pecuser /etc/pec-server
+
+if [ ! -f /etc/pec-server/pec-server.env ]; then
+    # Генерация безопасных токенов (fleet и admin - разные!)
+    SECURE_TOKEN=$(openssl rand -hex 24)
+    ADMIN_SEC_TOKEN=$(openssl rand -hex 24)
+    cat <<EOF > /etc/pec-server/pec-server.env
+NODE_ENV=production
+PORT=3000
+HOST=0.0.0.0
+EXT_SHARED_TOKEN=$SECURE_TOKEN
+ADMIN_TOKEN=$ADMIN_SEC_TOKEN
+CREDS_STORE=$INSTALL_DIR/data/current_creds.json
+EOF
+    chmod 0600 /etc/pec-server/pec-server.env
+    chown pecuser:pecuser /etc/pec-server/pec-server.env
+    echo -e "${GREEN}[+] Сгенерирован новый файл переменных окружения /etc/pec-server/pec-server.env${NC}"
+else
+    echo -e "${GREEN}[*] Сохраняем существующий файл переменных окружения /etc/pec-server/pec-server.env${NC}"
+    SECURE_TOKEN=$(grep -E '^EXT_SHARED_TOKEN=' /etc/pec-server/pec-server.env | cut -d'=' -f2- || echo "(сохранен)")
+    ADMIN_SEC_TOKEN=$(grep -E '^ADMIN_TOKEN=' /etc/pec-server/pec-server.env | cut -d'=' -f2- || echo "(сохранен)")
+    chmod 0600 /etc/pec-server/pec-server.env
+    chown pecuser:pecuser /etc/pec-server/pec-server.env
+fi
 
 # Установка systemd unit
 cat <<EOF > /etc/systemd/system/pec-server.service
@@ -69,12 +98,7 @@ Type=simple
 User=pecuser
 Group=pecuser
 WorkingDirectory=$INSTALL_DIR
-Environment=NODE_ENV=production
-Environment=PORT=3000
-Environment=HOST=0.0.0.0
-Environment=EXT_SHARED_TOKEN=$SECURE_TOKEN
-Environment=ADMIN_TOKEN=$ADMIN_SEC_TOKEN
-Environment=CREDS_STORE=$INSTALL_DIR/data/current_creds.json
+EnvironmentFile=/etc/pec-server/pec-server.env
 ExecStart=$(which npm) start
 Restart=always
 RestartSec=5

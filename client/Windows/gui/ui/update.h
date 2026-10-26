@@ -7,10 +7,13 @@
 
 #include <winhttp.h>
 #include <wincrypt.h>
+#include <softpub.h>
+#include <wintrust.h>
 #include "../profile/json.h"
 #include "../profile/profile.h"
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "wintrust.lib")
 
 #define UPD_FEED_URL  L"/api/releases"
 
@@ -101,6 +104,33 @@ static BOOL UpdVerifyFileSha256(const wchar_t* filePath, const wchar_t* expected
     }
     CloseHandle(hFile);
     return result;
+}
+
+static BOOL UpdVerifyAuthenticode(const wchar_t* filePath)
+{
+    if (!filePath || !*filePath) return FALSE;
+
+    WINTRUST_FILE_INFO fileInfo;
+    ZeroMemory(&fileInfo, sizeof(fileInfo));
+    fileInfo.cbStruct = sizeof(fileInfo);
+    fileInfo.pcwszFilePath = filePath;
+
+    WINTRUST_DATA trustData;
+    ZeroMemory(&trustData, sizeof(trustData));
+    trustData.cbStruct = sizeof(trustData);
+    trustData.dwUIChoice = WTD_UI_NONE;
+    trustData.fdwRevocationChecks = WTD_REVOKE_NONE;
+    trustData.dwUnionChoice = WTD_CHOICE_FILE;
+    trustData.pFile = &fileInfo;
+    trustData.dwStateAction = WTD_STATEACTION_VERIFY;
+
+    GUID policyGuid = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    LONG status = WinVerifyTrust((HWND)INVALID_HANDLE_VALUE, &policyGuid, &trustData);
+
+    trustData.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust((HWND)INVALID_HANDLE_VALUE, &policyGuid, &trustData);
+
+    return (status == ERROR_SUCCESS);
 }
 
 // Parse the first three dot-separated integers, ignoring a leading 'v' and any suffix ("-Beta").
@@ -342,6 +372,19 @@ INT_PTR CALLBACK UpdateDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
                 free(d);
                 return TRUE;
             }
+
+            BOOL authValid = UpdVerifyAuthenticode(d->dest);
+            if (!authValid)
+            {
+                DeleteFileW(d->dest);
+                PB_WriteAppLog("[UPDATE ERROR] Authenticode signature verification failed! Aborting update execution.");
+                MessageBoxW(dlg, L"Ошибка проверки цифровой подписи обновления (Authenticode). Файл удален.", L"Ошибка обновления", MB_ICONERROR);
+                SetDlgItemTextW(dlg, IDC_UP_STATUS, L"Ошибка проверки цифровой подписи");
+                EnableWindow(GetDlgItem(dlg, IDC_UP_NOW), TRUE);
+                free(d);
+                return TRUE;
+            }
+
             ShellExecuteW(dlg, L"open", d->dest, NULL, NULL, SW_SHOWNORMAL);
             free(d);
             g_reallyExit = TRUE;

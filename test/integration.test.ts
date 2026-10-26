@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import AdmZip from "adm-zip";
 import {
   packageApp,
@@ -172,4 +173,19 @@ test("Integration: packageApp archives versioned PEC-App-windows-x64.zip in rele
   const entries = zip.getEntries().map((e) => e.entryName);
   assert.ok(entries.includes("PEC-App.exe"), "Versioned zip must contain PEC-App.exe");
   assert.strictEqual(entries.some((e) => e.startsWith("ui/")), false, "Versioned zip must not contain ui/ directory");
+});
+
+test("templates/app/windows/WinDivert64.sys matches official upstream WinDivert 2.2.2-A SHA256 (Audit C-1 / H-8)", () => {
+  const driverPath = path.resolve("./templates/app/windows/WinDivert64.sys");
+  assert.strictEqual(fs.existsSync(driverPath), true, "WinDivert64.sys must exist in templates/app/windows");
+  const fileBuf = fs.readFileSync(driverPath);
+  const hash = crypto.createHash("sha256").update(fileBuf).digest("hex");
+  assert.strictEqual(hash, "8da085332782708d8767bcace5327a6ec7283c17cfb85e40b03cd2323a90ddc2");
+
+  const pristinePath = path.resolve("./templates/app/windows/.pristine/WinDivert64.sys");
+  if (fs.existsSync(pristinePath)) {
+    const pristineBuf = fs.readFileSync(pristinePath);
+    const pristineHash = crypto.createHash("sha256").update(pristineBuf).digest("hex");
+    assert.strictEqual(pristineHash, "8da085332782708d8767bcace5327a6ec7283c17cfb85e40b03cd2323a90ddc2", "Pristine WinDivert64.sys must match official upstream hash");
+  }
 });

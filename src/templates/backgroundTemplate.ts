@@ -49,6 +49,7 @@ const FETCH_TIMEOUT_MS = 6000;
 // Ephemeral in-memory state
 let memoryCredsCache = null; // { user, pass, fetchedAt }
 let syncPromise = null;
+let syncExecutionQueue = Promise.resolve();
 const seenRequests = new Map();
 let lastConfig = null;
 let cachedBasePacText = null;
@@ -751,11 +752,28 @@ async function applyPacScript(pacUrl, config, forcePacFetch = false) {
     }
   }
 
+  let isFallback = false;
   // Fallback to cached PAC if network fetch failed
   if (!pacText && cachedBasePacText) {
     pacText = cachedBasePacText;
+    isFallback = true;
     logEvent("info", "Using cached PAC script as fallback");
   }
+
+  // If still no PAC text, retrieve lastKnownGoodPacText from chrome.storage.local
+  if (!pacText) {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+        const stored = await chrome.storage.local.get(["lastKnownGoodPacText"]);
+        if (stored && stored.lastKnownGoodPacText) {
+          pacText = stored.lastKnownGoodPacText;
+          isFallback = true;
+          logEvent("info", "Restored last-known-good PAC script from storage after fetch failure");
+        }
+      }
+    } catch (e) {}
+  }
+
 
   // Inject active user overrides ahead of corporate rules
   if (pacText !== null) {
@@ -860,27 +878,54 @@ async function applyPacScript(pacUrl, config, forcePacFetch = false) {
       value: {
         mode: "pac_script",
         pacScript: useInline
-          ? { data: pacText, mandatory: false }
-          : { url: pacUrl, mandatory: false },
+          ? { data: pacText, mandatory: true }
+          : { url: pacUrl, mandatory: true },
       },
       scope: "regular",
     });
+    // Cache last successful PAC text in local storage
+    if (!isFallback && pacText) {
+      try {
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+          await chrome.storage.local.set({ lastKnownGoodPacText: pacText });
+        }
+      } catch (e) {}
+    }
   } catch (setErr) {
     if (useInline) {
-      console.warn("[PEC] Inline PAC installation failed (" + (setErr && setErr.message ? setErr.message : setErr) + "), falling back to URL mode:", pacUrl);
-      logEvent("warn", "Inline PAC installation failed, falling back to URL mode: " + (setErr && setErr.message ? setErr.message : setErr));
-      await chrome.proxy.settings.set({
-        value: {
-          mode: "pac_script",
-          pacScript: { url: pacUrl, mandatory: false },
-        },
-        scope: "regular",
-      });
-    } else {
+      console.warn("[PEC] Inline PAC installation failed (" + (setErr && setErr.message ? setErr.message : setErr) + "), attempting fallback:", pacUrl);
+      logEvent("warn", "Inline PAC installation failed: " + (setErr && setErr.message ? setErr.message : setErr));
+    }
+    // Try fallback to last-known-good PAC if available
+    let fallbackSuccess = false;
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+        const stored = await chrome.storage.local.get(["lastKnownGoodPacText"]);
+        if (stored && stored.lastKnownGoodPacText && stored.lastKnownGoodPacText !== pacText) {
+          await chrome.proxy.settings.set({
+            value: {
+              mode: "pac_script",
+              pacScript: { data: stored.lastKnownGoodPacText, mandatory: true },
+            },
+            scope: "regular",
+          });
+          updateBadge("●", "#f59e0b"); // Warning amber badge: running on cached PAC
+          await verifyAppliedProxySettings("pac_script");
+          fallbackSuccess = true;
+          return;
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn("[PEC] Fallback to last-known-good PAC failed:", fallbackErr);
+    }
+    if (!fallbackSuccess) {
+      updateBadge("ERR", "#ef4444"); // Red error badge: PAC failure
       throw setErr;
     }
   }
-  if (currentProxyState.proxyReachable === false) {
+  if (isFallback) {
+    updateBadge("●", "#f59e0b"); // Warning amber badge: running on cached PAC
+  } else if (currentProxyState.proxyReachable === false) {
     updateBadge("●", "#ef4444");
   } else {
     updateBadge("●", "#10b981");
@@ -1049,8 +1094,25 @@ async function announceToLocalApp(instId, manifestVersion) {
   }
 }
 
-// Synchronize with server (fetches creds & config)
-async function syncWithServer(forceRefresh = false, applyConfig = true, selectedProxyId = undefined) {
+// Synchronize with server (fetches creds & config) - serialized through mutex execution queue
+function syncWithServer(forceRefresh = false, applyConfig = true, selectedProxyId = undefined) {
+  return new Promise((resolve, reject) => {
+    syncExecutionQueue = syncExecutionQueue
+      .then(async () => {
+        try {
+          const res = await executeSync(forceRefresh, applyConfig, selectedProxyId);
+          resolve(res);
+        } catch (err) {
+          reject(err);
+        }
+      })
+      .catch((err) => {
+        reject(err);
+      });
+  });
+}
+
+async function executeSync(forceRefresh = false, applyConfig = true, selectedProxyId = undefined) {
   const now = Date.now();
   if (!applyConfig && !forceRefresh && memoryCredsCache && now - memoryCredsCache.fetchedAt < TTL_MS) {
     return memoryCredsCache;
@@ -1060,14 +1122,16 @@ async function syncWithServer(forceRefresh = false, applyConfig = true, selected
     return syncPromise;
   }
 
-  if (forceRefresh && syncPromise && selectedProxyId === undefined) {
+  if (!applyConfig && forceRefresh && selectedProxyId === undefined) {
     // 407 storm dedup: N parallel auth retries must not spawn N forced
     // syncs (self-inflicted 429 from the sync rate limiter). Join the
     // in-flight request; only force a new one if it finished stale.
     // Explicit user proxy selections (selectedProxyId set) must NEVER take
     // this shortcut - they have to reach the server or the next heartbeat
     // would silently revert the user's choice.
-    await syncPromise.catch(() => {});
+    if (syncPromise) {
+      await syncPromise.catch(() => {});
+    }
     const fresh = memoryCredsCache && Date.now() - memoryCredsCache.fetchedAt < 2000;
     if (fresh) {
       return memoryCredsCache;

@@ -246,6 +246,7 @@ sudo nginx -t && sudo systemctl reload nginx
 - **PAC Injection Defense**: Dynamic PAC script generator sanitizes proxy hostnames and port numbers, stripping dangerous characters (`"`, `;`, whitespace).
 - **Rate Limiting**: Sliding-window rate limiters protect `/creds` (60/min), `/api/sync` (120/min), and 3x-ui connection tests (15/min).
 - **Fleet Registry Protection**: Maximum instance limit (2000 items) with automatic LRU eviction protects against memory exhaustion attacks.
+- **Multi-Profile & Instance Identity (`instanceToken`) Persistence**: The browser extension intentionally persists `instanceToken` in `chrome.storage.local`. This preserves a stable client instance identity across browser restarts, OS reboots, and Manifest V3 background service worker recycles. Without persistence, each worker wakeup or browser restart would create a new instance record on the server, causing uncontrolled instance sprawl and churn in the server registry (`instances.ts`). This architecture is secure because: (1) `instanceToken` is an opaque, low-privilege telemetry handle used only for heartbeat synchronization (`POST /api/sync`) and conveys no administrative access; (2) `chrome.storage.local` is fully sandboxed per-extension by Chromium; (3) the server enforces an LRU capacity bound (`MAX_INSTANCES = 2000`).
 - **Least Privilege**: Docker containers and systemd services run under an isolated unprivileged user `pecuser`.
 
 ---
@@ -291,6 +292,7 @@ Distributed under the GNU Affero General Public License v3 (AGPL-3.0). See [LICE
 |---|---|---|
 | **WinDivert** (v2.2.2-A) | LGPL-3.0-or-later | [Basil / reqable](https://github.com/reqable/WinDivert) |
 | **Dear ImGui** (v1.91.5) | MIT | [Omar Cornut](https://github.com/ocornut/imgui) |
-| **ProxyBridge** | MIT | [InterceptSuite / Sourav Kalal](https://github.com/InterceptSuite/ProxyBridge) |
+| **ProxyBridge** (PECAppCore) | MIT | [InterceptSuite / Sourav Kalal](https://github.com/InterceptSuite/ProxyBridge) |
 
-Full license texts and legal notices are located in [`assets/licenses/THIRD-PARTY-NOTICES.txt`](assets/licenses/THIRD-PARTY-NOTICES.txt).
+- **PECAppCore Derivation**: The Windows/Linux native client routing and packet interception engine (`client/Windows/src` and `client/Linux/src`) derives from the open-source **ProxyBridge** project (MIT License, Copyright (c) 2024 InterceptSuite / Sourav Kalal). It has been substantially modified, hardened, and integrated for corporate fleet deployment, with automated compilation and packaging via the server's native App Studio. See [`client/Windows/src/NOTICE.md`](client/Windows/src/NOTICE.md).
+- Full license texts and legal notices are located in [`assets/licenses/THIRD-PARTY-NOTICES.txt`](assets/licenses/THIRD-PARTY-NOTICES.txt).

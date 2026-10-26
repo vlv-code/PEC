@@ -255,3 +255,100 @@ test("appBuilderRoutes: build, download, profile, and script delivery", async ()
   });
 });
 
+test("appBuilderRoutes: rejects path traversal and invalid semver versions (Audit M-Server)", async () => {
+  await withTestServer(async (baseUrl) => {
+    // 1. Rejects path traversal in build-binaries
+    const badBuildBinaries = await fetch(`${baseUrl}/api/app-builder/build-binaries`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: "../../etc/passwd" }),
+    });
+    assert.equal(badBuildBinaries.status, 400);
+    const badBuildBinariesBody = await badBuildBinaries.json();
+    assert.match(badBuildBinariesBody.error, /semver/i);
+
+    // 2. Rejects invalid semver format in build-binaries
+    const invalidVer = await fetch(`${baseUrl}/api/app-builder/build-binaries`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: "not-a-version" }),
+    });
+    assert.equal(invalidVer.status, 400);
+
+    // 3. Rejects path traversal in config update
+    const badConfigVer = await fetch(`${baseUrl}/api/app-builder/config`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: "../../../traversal" }),
+    });
+    assert.equal(badConfigVer.status, 400);
+    const badConfigBody = await badConfigVer.json();
+    assert.match(badConfigBody.error, /semver/i);
+
+    // 4. Rejects path traversal in build endpoint
+    const badBuildVer = await fetch(`${baseUrl}/api/app-builder/build`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: "1.0.0; rm -rf /" }),
+    });
+    assert.equal(badBuildVer.status, 400);
+
+    // 5. Rejects null version in config
+    const nullConfigVer = await fetch(`${baseUrl}/api/app-builder/config`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: null }),
+    });
+    assert.equal(nullConfigVer.status, 400);
+
+    // 6. Rejects null version in build-binaries
+    const nullBuildBinariesVer = await fetch(`${baseUrl}/api/app-builder/build-binaries`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: null }),
+    });
+    assert.equal(nullBuildBinariesVer.status, 400);
+
+    // 7. Accepts valid pre-release semver tag
+    const validPreRelease = await fetch(`${baseUrl}/api/app-builder/config`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: "1.0.4-beta.1.alpha" }),
+    });
+    assert.equal(validPreRelease.status, 200);
+    const validBody = await validPreRelease.json();
+    assert.equal(validBody.version, "1.0.4-beta.1.alpha");
+
+    // Restore version back to 2.1.0
+    await fetch(`${baseUrl}/api/app-builder/config`, {
+      method: "POST",
+      headers: {
+        "x-admin-token": TEST_ADMIN_TOKEN,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ version: "2.1.0" }),
+    });
+  });
+});
+

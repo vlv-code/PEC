@@ -49,6 +49,10 @@ export function getAuditLogs(): AuditLogEntry[] {
   return [...auditLogs];
 }
 
+export function clearAuditLogs(): void {
+  auditLogs.length = 0;
+}
+
 export function getClientIp(req: Request): string {
   // Express resolves req.ip according to the "trust proxy" setting:
   // - trust proxy off  -> socket address (spoofed X-Forwarded-For is ignored)
@@ -70,6 +74,8 @@ export function getBaseUrl(req: Request): string {
     return configured.trim().replace(/\/+$/, "");
   }
   const host = req.get("host") || "localhost:3000";
-  const proto = req.get("x-forwarded-proto") || req.protocol || "http";
+  // Rely on Express-resolved req.protocol (which respects trust proxy) rather than raw untrusted header
+  const proto = req.protocol === "https" ? "https" : "http";
   return `${proto}://${host}`;
 }
+

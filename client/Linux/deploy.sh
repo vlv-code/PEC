@@ -34,6 +34,10 @@ check_requirements() {
         missing_tools+=("tar")
     fi
 
+    if ! command -v sha256sum &> /dev/null && ! command -v shasum &> /dev/null; then
+        missing_tools+=("sha256sum or shasum")
+    fi
+
     if ! command -v jq &> /dev/null; then
         echo "WARNING: jq not found. Attempting to parse JSON manually."
     fi
@@ -42,9 +46,9 @@ check_requirements() {
         echo "ERROR: Missing required tools: ${missing_tools[*]}"
         echo ""
         echo "Please install them first:"
-        echo "  Debian/Ubuntu: sudo apt install curl tar jq"
-        echo "  Fedora:        sudo dnf install curl tar jq"
-        echo "  Arch:          sudo pacman -S curl tar jq"
+        echo "  Debian/Ubuntu: sudo apt install curl tar jq coreutils"
+        echo "  Fedora:        sudo dnf install curl tar jq coreutils"
+        echo "  Arch:          sudo pacman -S curl tar jq coreutils"
         exit 1
     fi
 
@@ -94,14 +98,14 @@ download_latest_release() {
 
     echo ""
     echo "Downloading $filename..."
-    if ! curl -L -o "$filename" "$download_url"; then
+    if ! curl -fL -o "$filename" "$download_url"; then
         echo "ERROR: Failed to download release archive"
         exit 1
     fi
 
     echo "Download complete"
 
-    # Verify SHA-256 checksum if available
+    # Verify SHA-256 checksum strictly
     local checksums_url=""
     if command -v jq &> /dev/null; then
         checksums_url=$(echo "$api_response" | jq -r --arg fn "$filename" '.assets[] | select(.name == ($fn + ".sha256") or .name == "checksums.txt" or .name == "SHA256SUMS" or (.name | test("(?i)sha256.*\\.txt$"))) | .browser_download_url' | head -1)
@@ -109,52 +113,60 @@ download_latest_release() {
         checksums_url=$(echo "$api_response" | grep -o '"browser_download_url": *"[^"]*\(checksums\.txt\|SHA256SUMS\|sha256\)[^"]*"' | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
     fi
 
-    if [ -n "$checksums_url" ]; then
-        echo "Downloading checksum file: $(basename "$checksums_url")..."
-        local checksum_file
-        checksum_file=$(basename "$checksums_url")
-        if curl -sL -o "$checksum_file" "$checksums_url"; then
-            echo "Verifying SHA-256 checksum..."
-            local expected_hash=""
-            if grep -F "$filename" "$checksum_file" &> /dev/null; then
-                local match_line
-                match_line=$(grep -F "$filename" "$checksum_file" | head -1)
-                if echo "$match_line" | grep -q "="; then
-                    expected_hash=$(echo "$match_line" | awk -F'=' '{print $NF}' | tr -d ' \r\n\t')
-                else
-                    expected_hash=$(echo "$match_line" | awk '{print $1}' | tr -d ' \r\n\t')
-                fi
-            elif [ "$(wc -w < "$checksum_file" 2>/dev/null | tr -d ' ')" -eq 1 ]; then
-                expected_hash=$(tr -d ' \r\n\t' < "$checksum_file")
-            fi
-
-            if [ -n "$expected_hash" ]; then
-                expected_hash=$(echo "$expected_hash" | tr '[:upper:]' '[:lower:]')
-                local actual_hash=""
-                if command -v sha256sum &> /dev/null; then
-                    actual_hash=$(sha256sum "$filename" | awk '{print $1}')
-                elif command -v shasum &> /dev/null; then
-                    actual_hash=$(shasum -a 256 "$filename" | awk '{print $1}')
-                fi
-
-                if [ -n "$actual_hash" ]; then
-                    actual_hash=$(echo "$actual_hash" | tr '[:upper:]' '[:lower:]')
-                    if [ "$actual_hash" = "$expected_hash" ]; then
-                        echo "SHA-256 verified successfully: $actual_hash"
-                    else
-                        echo "ERROR: SHA-256 checksum mismatch for $filename"
-                        echo "  Expected: $expected_hash"
-                        echo "  Actual:   $actual_hash"
-                        exit 1
-                    fi
-                else
-                    echo "WARNING: Neither sha256sum nor shasum found, skipping checksum verification"
-                fi
-            else
-                echo "WARNING: Could not parse checksum from $checksum_file, skipping verification"
-            fi
-        fi
+    if [ -z "$checksums_url" ] || [ "$checksums_url" = "null" ]; then
+        echo "ERROR: Release checksum file not found on GitHub. Aborting for security."
+        exit 1
     fi
+
+    echo "Downloading checksum file: $(basename "$checksums_url")..."
+    local checksum_file
+    checksum_file=$(basename "$checksums_url")
+    if ! curl -sSfL -o "$checksum_file" "$checksums_url"; then
+        echo "ERROR: Failed to download checksum file: $checksum_file"
+        exit 1
+    fi
+
+    echo "Verifying SHA-256 checksum..."
+    local expected_hash=""
+    if grep -E "(^|[[:space:]*\(])${filename}([[:space:]\)]|$)" "$checksum_file" &> /dev/null; then
+        local match_line
+        match_line=$(grep -E "(^|[[:space:]*\(])${filename}([[:space:]\)]|$)" "$checksum_file" | head -1)
+        if echo "$match_line" | grep -q "="; then
+            expected_hash=$(echo "$match_line" | awk -F'=' '{print $NF}' | tr -d ' \r\n\t')
+        else
+            expected_hash=$(echo "$match_line" | awk '{print $1}' | tr -d ' \r\n\t')
+        fi
+    elif [ "$(wc -w < "$checksum_file" 2>/dev/null | tr -d '[:space:]')" = "1" ]; then
+        expected_hash=$(tr -d ' \r\n\t' < "$checksum_file")
+    fi
+
+    if [ -z "$expected_hash" ]; then
+        echo "ERROR: Could not parse checksum from $checksum_file for $filename. Aborting for security."
+        exit 1
+    fi
+
+    expected_hash=$(echo "$expected_hash" | tr '[:upper:]' '[:lower:]')
+    local actual_hash=""
+    if command -v sha256sum &> /dev/null; then
+        actual_hash=$(sha256sum "$filename" | awk '{print $1}')
+    elif command -v shasum &> /dev/null; then
+        actual_hash=$(shasum -a 256 "$filename" | awk '{print $1}')
+    fi
+
+    if [ -z "$actual_hash" ]; then
+        echo "ERROR: Neither sha256sum nor shasum tool is available on this system. Cannot verify binary integrity."
+        exit 1
+    fi
+
+    actual_hash=$(echo "$actual_hash" | tr '[:upper:]' '[:lower:]')
+    if [ "$actual_hash" != "$expected_hash" ]; then
+        echo "ERROR: SHA-256 checksum mismatch for $filename!"
+        echo "  Expected: $expected_hash"
+        echo "  Actual:   $actual_hash"
+        exit 1
+    fi
+
+    echo "SHA-256 verified successfully: $actual_hash"
 
     # Extract archive safely
     echo ""
