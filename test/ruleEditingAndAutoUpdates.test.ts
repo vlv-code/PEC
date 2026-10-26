@@ -22,7 +22,7 @@ test("background.js and template implement Omaha auto-update check and reload li
 });
 
 test("dashboardView renders modalEditRule with all required form controls", () => {
-  const html = renderDashboardHtml({ csrfToken: "csrf-test" });
+  const html = renderDashboardHtml({});
 
   assert.ok(html.includes('id="modalEditRule"'), "modalEditRule must be present in dashboardView");
   assert.ok(html.includes('id="editRuleIndex"'), "editRuleIndex hidden input must be present");

@@ -31,6 +31,9 @@ const auditLogs: AuditLogEntry[] = [];
 const MAX_AUDIT_LOGS = 100;
 
 export function recordAudit(entry: Omit<AuditLogEntry, "id" | "timestamp">): void {
+  if (entry.endpoint === "/healthz" || entry.result === "HEALTH_CHECK") {
+    return;
+  }
   const logItem: AuditLogEntry = {
     id: crypto.randomBytes(4).toString("hex"),
     timestamp: new Date().toISOString(),

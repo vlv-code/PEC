@@ -10,7 +10,7 @@ import {
   probeAllProxies,
 } from "../proxies.js";
 import { getRotationConfig } from "../scheduler.js";
-import { sync3xuiInboundByTag, get3xuiPanelById } from "../rotate.js";
+import { sync3xuiInboundByTag, get3xuiPanelById, isRotationInFlight } from "../rotate.js";
 import { recordAudit, getClientIp } from "../audit.js";
 import { ProxyNode } from "../types.js";
 
@@ -20,6 +20,8 @@ function maskPassword<T extends { password?: string }>(node: T): T {
     password: node.password ? "********" : "",
   };
 }
+
+const activeSyncProxies = new Set<string>();
 
 export function createProxiesRouter(): Router {
   const router = Router();
@@ -203,8 +205,17 @@ export function createProxiesRouter(): Router {
 
   // POST /api/proxies/:id/sync - sync 3x-ui proxy inbound
   router.post("/api/proxies/:id/sync", async (req: Request, res: Response) => {
+    if (isRotationInFlight()) {
+      return res.status(409).json({ error: "Rotation is currently in flight. Please try again later." });
+    }
+    const proxyId = req.params.id;
+    if (activeSyncProxies.has(proxyId)) {
+      return res.status(409).json({ error: "Sync is already in flight for this proxy node" });
+    }
+    activeSyncProxies.add(proxyId);
+
     try {
-      const proxy = getProxyById(req.params.id);
+      const proxy = getProxyById(proxyId);
       if (!proxy) {
         return res.status(404).json({ error: "Proxy not found" });
       }
@@ -274,6 +285,8 @@ export function createProxiesRouter(): Router {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return res.status(500).json({ ok: false, error: msg });
+    } finally {
+      activeSyncProxies.delete(proxyId);
     }
   });
 

@@ -173,3 +173,49 @@ test("Task 3.4: Dockerfile implements multi-stage build keeping compilers out of
     "Runner stage must prepare /app/dist/updates and /app/dist/releases"
   );
 });
+
+test("Domain 2: client/SECURITY.md points to root SECURITY.md and has no upstream InterceptSuite traces", () => {
+  const clientSecPath = path.join(process.cwd(), "client", "SECURITY.md");
+  assert.strictEqual(fs.existsSync(clientSecPath), true, "client/SECURITY.md must exist");
+  const content = fs.readFileSync(clientSecPath, "utf-8");
+
+  assert.ok(
+    content.includes("SECURITY.md") && content.includes("../SECURITY.md"),
+    "client/SECURITY.md must link to root SECURITY.md"
+  );
+  assert.ok(
+    content.includes("GitHub Private Vulnerability Reporting"),
+    "client/SECURITY.md must mention GitHub Private Vulnerability Reporting"
+  );
+  assert.strictEqual(
+    /interceptsuite/i.test(content),
+    false,
+    "client/SECURITY.md must not contain any reference to interceptsuite"
+  );
+});
+
+test("Domain 2: root .github/dependabot.yml configures npm and github-actions updates", () => {
+  const dependabotPath = path.join(process.cwd(), ".github", "dependabot.yml");
+  assert.strictEqual(fs.existsSync(dependabotPath), true, ".github/dependabot.yml must exist");
+  const content = fs.readFileSync(dependabotPath, "utf-8");
+
+  assert.ok(content.includes('version: 2'), "Must be version 2");
+  assert.ok(content.includes('package-ecosystem: "npm"'), "Must include npm package-ecosystem");
+  assert.ok(content.includes('package-ecosystem: "github-actions"'), "Must include github-actions package-ecosystem");
+  assert.ok(content.includes('interval: "weekly"'), "Must be weekly interval");
+});
+
+test("Domain 2: package.json defines engines.node >= 20.0.0", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf-8"));
+  assert.ok(pkg.engines, "package.json must contain engines field");
+  assert.strictEqual(pkg.engines.node, ">=20.0.0", "engines.node must be >=20.0.0");
+});
+
+test("Domain 2: obsolete client/.github and client/.sonarlint directories are removed", () => {
+  const clientGithubDir = path.join(process.cwd(), "client", ".github");
+  const clientSonarlintDir = path.join(process.cwd(), "client", ".sonarlint");
+
+  assert.strictEqual(fs.existsSync(clientGithubDir), false, "client/.github must not exist");
+  assert.strictEqual(fs.existsSync(clientSonarlintDir), false, "client/.sonarlint must not exist");
+});
+

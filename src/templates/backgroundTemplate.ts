@@ -79,80 +79,120 @@ let cachedProfileDefaultPolicy = "direct";
 let cachedUserRules = [];
 
 let startupPromise = null;
+let isStartupRestored = false;
 function restoreStartupState() {
   if (startupPromise) return startupPromise;
   startupPromise = new Promise((resolve) => {
     let pending = 2;
     const finishOne = () => {
       pending--;
-      if (pending <= 0) resolve();
+      if (pending <= 0) {
+        isStartupRestored = true;
+        resolve();
+      }
+    };
+
+    let localHandled = false;
+    const handleLocalResult = (res) => {
+      if (localHandled) return;
+      localHandled = true;
+      try {
+        if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
+          recentLogs = res.pecLogs.slice(-MAX_LOGS);
+        }
+        if (res && res.pecProxyState && typeof res.pecProxyState === "object") {
+          currentProxyState = { ...currentProxyState, ...res.pecProxyState };
+        }
+        if (res && typeof res.pecActiveProxyId === "string") {
+          currentProxyState.activeProxyId = res.pecActiveProxyId;
+        }
+        if (res && res.pecLastConfig && typeof res.pecLastConfig === "object") {
+          lastConfig = res.pecLastConfig;
+        }
+        if (res && typeof res.pecEnabled === "boolean") {
+          currentProxyState.enabled = res.pecEnabled;
+        }
+        if (res && res.pecBasePac && typeof res.pecBasePac === "string" && !cachedBasePacText) {
+          cachedBasePacText = res.pecBasePac;
+        }
+        if (res && res.pecInstanceToken && typeof res.pecInstanceToken === "string") {
+          memoryInstanceToken = res.pecInstanceToken;
+        }
+        if (res && Array.isArray(res.pecProfileRules)) {
+          cachedProfileRules = res.pecProfileRules;
+          currentProxyState.profileRules = res.pecProfileRules;
+        }
+        if (res && typeof res.pecProfileDefaultPolicy === "string") {
+          cachedProfileDefaultPolicy = res.pecProfileDefaultPolicy;
+          currentProxyState.profileDefaultPolicy = res.pecProfileDefaultPolicy;
+        }
+        if (res && Array.isArray(res.pecUserRules)) {
+          cachedUserRules = res.pecUserRules;
+        }
+        updateActiveTabBadge();
+      } finally {
+        finishOne();
+      }
     };
 
     try {
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-        chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac", "pecInstanceToken", "pecProfileRules", "pecProfileDefaultPolicy", "pecUserRules", "pecActiveProxyId"], (res) => {
-          try {
-            if (res && Array.isArray(res.pecLogs) && recentLogs.length === 0) {
-              recentLogs = res.pecLogs.slice(-MAX_LOGS);
-            }
-            if (res && res.pecProxyState && typeof res.pecProxyState === "object") {
-              currentProxyState = { ...currentProxyState, ...res.pecProxyState };
-            }
-            if (res && typeof res.pecActiveProxyId === "string") {
-              currentProxyState.activeProxyId = res.pecActiveProxyId;
-            }
-            if (res && res.pecLastConfig && typeof res.pecLastConfig === "object") {
-              lastConfig = res.pecLastConfig;
-            }
-            if (res && typeof res.pecEnabled === "boolean") {
-              currentProxyState.enabled = res.pecEnabled;
-            }
-            if (res && res.pecBasePac && typeof res.pecBasePac === "string" && !cachedBasePacText) {
-              cachedBasePacText = res.pecBasePac;
-            }
-            if (res && res.pecInstanceToken && typeof res.pecInstanceToken === "string") {
-              memoryInstanceToken = res.pecInstanceToken;
-            }
-            if (res && Array.isArray(res.pecProfileRules)) {
-              cachedProfileRules = res.pecProfileRules;
-              currentProxyState.profileRules = res.pecProfileRules;
-            }
-            if (res && typeof res.pecProfileDefaultPolicy === "string") {
-              cachedProfileDefaultPolicy = res.pecProfileDefaultPolicy;
-              currentProxyState.profileDefaultPolicy = res.pecProfileDefaultPolicy;
-            }
-            if (res && Array.isArray(res.pecUserRules)) {
-              cachedUserRules = res.pecUserRules;
-            }
-            updateActiveTabBadge();
-          } finally {
-            finishOne();
-          }
+        const ret = chrome.storage.local.get(["pecLogs", "pecProxyState", "pecLastConfig", "pecEnabled", "pecBasePac", "pecInstanceToken", "pecProfileRules", "pecProfileDefaultPolicy", "pecUserRules", "pecActiveProxyId"], (res) => {
+          handleLocalResult(res);
         });
+        if (ret && typeof ret.then === "function") {
+          ret.then((res) => handleLocalResult(res)).catch(() => {
+            if (!localHandled) {
+              localHandled = true;
+              finishOne();
+            }
+          });
+        }
       } else {
         finishOne();
       }
     } catch {
-      finishOne();
+      if (!localHandled) {
+        localHandled = true;
+        finishOne();
+      }
     }
+
+    let sessionHandled = false;
+    const handleSessionResult = (res) => {
+      if (sessionHandled) return;
+      sessionHandled = true;
+      try {
+        if (res && res.pecCredsCache && res.pecCredsCache.user && res.pecCredsCache.pass) {
+          memoryCredsCache = res.pecCredsCache;
+        }
+      } finally {
+        finishOne();
+      }
+    };
 
     try {
       const sessionStore = (typeof chrome !== "undefined" && chrome.storage && chrome.storage.session) ? chrome.storage.session : null;
       if (sessionStore && sessionStore.get) {
-        sessionStore.get(["pecCredsCache"], (res) => {
-          try {
-            if (res && res.pecCredsCache && res.pecCredsCache.user && res.pecCredsCache.pass) {
-              memoryCredsCache = res.pecCredsCache;
-            }
-          } finally {
-            finishOne();
-          }
+        const ret = sessionStore.get(["pecCredsCache"], (res) => {
+          handleSessionResult(res);
         });
+        if (ret && typeof ret.then === "function") {
+          ret.then((res) => handleSessionResult(res)).catch(() => {
+            if (!sessionHandled) {
+              sessionHandled = true;
+              finishOne();
+            }
+          });
+        }
       } else {
         finishOne();
       }
     } catch {
-      finishOne();
+      if (!sessionHandled) {
+        sessionHandled = true;
+        finishOne();
+      }
     }
   });
   return startupPromise;
@@ -219,7 +259,10 @@ function isValidUrl(url) {
   if (typeof url !== "string") return false;
   try {
     const p = new URL(url);
-    return p.protocol === "https:" || p.protocol === "http:" || p.hostname === "localhost" || p.hostname === "127.0.0.1";
+    if (p.hostname === "localhost" || p.hostname === "127.0.0.1") {
+      return p.protocol === "http:" || p.protocol === "https:";
+    }
+    return p.protocol === "https:";
   } catch {
     return false;
   }
@@ -1239,9 +1282,17 @@ chrome.webRequest.onAuthRequired.addListener(
     const safeUrl = details.url ? details.url.split("?")[0].slice(0, 80) : "requestId=" + details.requestId;
     logEvent("info", "Proxy auth challenge (407) for " + safeUrl);
 
-    if (seenRequests.size > 1000) seenRequests.clear();
-    const attempts = (seenRequests.get(details.requestId) || 0) + 1;
-    seenRequests.set(details.requestId, attempts);
+    const now = Date.now();
+    if (seenRequests.size > 100) {
+      for (const [reqId, entry] of seenRequests.entries()) {
+        if (!entry || typeof entry.timestamp !== "number" || now - entry.timestamp > 60000) {
+          seenRequests.delete(reqId);
+        }
+      }
+    }
+    const currentEntry = seenRequests.get(details.requestId);
+    const attempts = (currentEntry && typeof currentEntry.count === "number" ? currentEntry.count : 0) + 1;
+    seenRequests.set(details.requestId, { count: attempts, timestamp: now });
 
     if (attempts > MAX_AUTH_ATTEMPTS) {
       console.warn("[PEC] Max auth attempts exceeded for requestId=" + details.requestId);
@@ -1256,7 +1307,6 @@ chrome.webRequest.onAuthRequired.addListener(
       asyncCallback({ authCredentials: { username: user, password: pass } });
     };
 
-    const now = Date.now();
     const isCredValid = (creds) =>
       Boolean(creds && creds.user && creds.pass && (typeof creds.fetchedAt !== "number" || now - creds.fetchedAt < TTL_MS));
 
@@ -1315,155 +1365,176 @@ chrome.webRequest.onAuthRequired.addListener(
   ["asyncBlocking"]
 );
 
-// Clear request tracker
-chrome.webRequest.onCompleted.addListener(
-  (details) => seenRequests.delete(details.requestId),
-  { urls: ["<all_urls>"] }
-);
-
-chrome.webRequest.onErrorOccurred.addListener(
-  (details) => seenRequests.delete(details.requestId),
-  { urls: ["<all_urls>"] }
-);
-
 // Listen for popup messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return false;
   const action = msg.action || msg.type;
-  if (action === "GET_STATUS") {
-    sendResponse({ ...currentProxyState });
-    return true;
-  }
-  if (action === "SET_ACTIVE_PROXY") {
-    if (currentProxyState.allowUserProxySwitch === false) {
-      sendResponse({ ok: false, error: "Proxy switching is disabled by enterprise policy", ...currentProxyState });
+
+  const dispatch = () => {
+    if (action === "GET_STATUS") {
+      sendResponse({ ...currentProxyState });
       return true;
     }
-    const proxyId = msg.proxyId || "";
-    currentProxyState.activeProxyId = proxyId;
-    (async () => {
-      try {
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-          await chrome.storage.local.set({ pecActiveProxyId: proxyId });
+    if (action === "SET_ACTIVE_PROXY") {
+      if (currentProxyState.allowUserProxySwitch === false) {
+        sendResponse({ ok: false, error: "Proxy switching is disabled by enterprise policy", ...currentProxyState });
+        return true;
+      }
+      const proxyId = msg.proxyId || "";
+      currentProxyState.activeProxyId = proxyId;
+      (async () => {
+        try {
+          if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+            await chrome.storage.local.set({ pecActiveProxyId: proxyId });
+          }
+          logEvent("info", "User selected proxy node: " + (proxyId || "default"));
+          cachedBasePacText = null;
+          await syncWithServer(true, true, proxyId);
+          if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+            await chrome.storage.local.set({ pecActiveProxyId: currentProxyState.activeProxyId });
+          }
+          persistProxyState();
+          updateActiveTabBadge();
+          sendResponse({ ok: true, ...currentProxyState });
+        } catch (err) {
+          logEvent("error", "Failed to switch active proxy: " + (err && err.message ? err.message : err));
+          sendResponse({ ok: false, error: String(err), ...currentProxyState });
         }
-        logEvent("info", "User selected proxy node: " + (proxyId || "default"));
-        cachedBasePacText = null;
-        await syncWithServer(true, true, proxyId);
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-          await chrome.storage.local.set({ pecActiveProxyId: currentProxyState.activeProxyId });
+      })();
+      return true;
+    }
+    if (action === "GET_USER_RULES") {
+      (async () => {
+        try {
+          const stored = await chrome.storage.local.get(["pecUserRules"]);
+          const rules = (stored && Array.isArray(stored.pecUserRules)) ? stored.pecUserRules : [];
+          sendResponse({ userRules: rules });
+        } catch (e) {
+          sendResponse({ userRules: [] });
         }
-        persistProxyState();
-        updateActiveTabBadge();
-        sendResponse({ ok: true, ...currentProxyState });
-      } catch (err) {
-        logEvent("error", "Failed to switch active proxy: " + (err && err.message ? err.message : err));
-        sendResponse({ ok: false, error: String(err), ...currentProxyState });
-      }
-    })();
-    return true;
-  }
-  if (action === "GET_USER_RULES") {
-    (async () => {
-      try {
-        const stored = await chrome.storage.local.get(["pecUserRules"]);
-        const rules = (stored && Array.isArray(stored.pecUserRules)) ? stored.pecUserRules : [];
-        sendResponse({ userRules: rules });
-      } catch (e) {
-        sendResponse({ userRules: [] });
-      }
-    })();
-    return true;
-  }
-  if (action === "SAVE_USER_RULES") {
-    const rules = Array.isArray(msg.rules) ? msg.rules : [];
-    (async () => {
-      try {
-        cachedUserRules = rules;
-        await chrome.storage.local.set({ pecUserRules: rules });
-        logEvent("info", "Saved " + rules.length + " user routing overrides");
-        await applyProxySettings();
-        updateActiveTabBadge();
-        sendResponse({ ok: true, count: rules.length });
-      } catch (err) {
-        logEvent("error", "Failed to save user rules: " + (err && err.message ? err.message : err));
-        sendResponse({ ok: false, error: String(err) });
-      }
-    })();
-    return true;
-  }
-  if (action === "SET_ENABLED") {
-    const enabled = msg.enabled !== undefined ? Boolean(msg.enabled) : !currentProxyState.enabled;
-    currentProxyState.enabled = enabled;
-    persistProxyState();
-    (async () => {
-      try {
-        await chrome.storage.local.set({ pecEnabled: enabled });
-        logEvent("info", "Proxy power toggled: " + (enabled ? "ENABLED" : "DISABLED"));
-        await applyProxySettings();
-        updateActiveTabBadge();
-        sendResponse({ ok: true, enabled: enabled });
-      } catch (err) {
-        logEvent("error", "Failed to set proxy enabled: " + (err && err.message ? err.message : err));
-        sendResponse({ ok: false, error: String(err) });
-      }
-    })();
-    return true;
-  }
-  if (action === "GET_LOGS") {
-    sendResponse({ logs: [...recentLogs] });
-    return true;
-  }
-  if (action === "CLEAR_LOGS") {
-    recentLogs = [];
-    try {
-      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.remove) {
-        chrome.storage.local.remove(["pecLogs"]);
-      }
-    } catch (e) {}
-    sendResponse({ ok: true, logs: [] });
-    return true;
-  }
-  if (action === "FORCE_SYNC" || action === "SYNC_NOW") {
-    checkForExtensionUpdates(true);
-    syncWithServer(true)
-      .then(() => {
-        persistProxyState();
-        updateActiveTabBadge();
-        sendResponse({ ok: true, ...currentProxyState });
-      })
-      .catch(() => {
-        sendResponse({ ok: false, ...currentProxyState });
-      });
-    return true;
-  }
-  if (action === "TOGGLE_BYPASS" || action === "BYPASS_TOGGLE") {
-    if (!PEC_ALLOW_MANUAL_BYPASS) {
-      logEvent("warn", "Manual bypass is disabled by policy");
-      sendResponse({ ok: false, error: "Manual bypass disabled by policy" });
-      return false;
+      })();
+      return true;
     }
-    currentProxyState.bypassActive = !currentProxyState.bypassActive;
-    if (currentProxyState.bypassActive) {
-      // Schedule automatic re-enable - "temporary bypass" must actually be temporary.
-      currentProxyState.bypassExpiresAt = Date.now() + BYPASS_TIMEOUT_MIN * 60 * 1000;
-      chrome.alarms.create(ALARM_BYPASS_EXPIRE, { delayInMinutes: Math.max(0.5, BYPASS_TIMEOUT_MIN) });
-      console.log("[PEC] Bypass enabled for " + BYPASS_TIMEOUT_MIN + " minutes.");
-    } else {
-      currentProxyState.bypassExpiresAt = null;
-      chrome.alarms.clear(ALARM_BYPASS_EXPIRE);
+    if (action === "SAVE_USER_RULES") {
+      const rules = Array.isArray(msg.rules) ? msg.rules : [];
+      (async () => {
+        try {
+          cachedUserRules = rules;
+          await chrome.storage.local.set({ pecUserRules: rules });
+          logEvent("info", "Saved " + rules.length + " user routing overrides");
+          await applyProxySettings();
+          updateActiveTabBadge();
+          sendResponse({ ok: true, count: rules.length });
+        } catch (err) {
+          logEvent("error", "Failed to save user rules: " + (err && err.message ? err.message : err));
+          sendResponse({ ok: false, error: String(err) });
+        }
+      })();
+      return true;
     }
-    logEvent("info", "Proxy bypass toggled: " + (currentProxyState.bypassActive ? "ON (expires in " + BYPASS_TIMEOUT_MIN + "m)" : "OFF"));
-    persistProxyState();
-    updateActiveTabBadge();
-    syncWithServer(true)
-      .then(() => {
-        persistProxyState();
-        updateActiveTabBadge();
-        sendResponse({ ok: true, bypassActive: currentProxyState.bypassActive, ...currentProxyState });
-      })
-      .catch(() => {
-        sendResponse({ ok: false, bypassActive: currentProxyState.bypassActive, ...currentProxyState });
-      });
+    if (action === "SET_ENABLED") {
+      const enabled = msg.enabled !== undefined ? Boolean(msg.enabled) : !currentProxyState.enabled;
+      currentProxyState.enabled = enabled;
+      persistProxyState();
+      (async () => {
+        try {
+          await chrome.storage.local.set({ pecEnabled: enabled });
+          logEvent("info", "Proxy power toggled: " + (enabled ? "ENABLED" : "DISABLED"));
+          await applyProxySettings();
+          updateActiveTabBadge();
+          sendResponse({ ok: true, enabled: enabled });
+        } catch (err) {
+          logEvent("error", "Failed to set proxy enabled: " + (err && err.message ? err.message : err));
+          sendResponse({ ok: false, error: String(err) });
+        }
+      })();
+      return true;
+    }
+    if (action === "GET_LOGS") {
+      sendResponse({ logs: [...recentLogs] });
+      return true;
+    }
+    if (action === "CLEAR_LOGS") {
+      recentLogs = [];
+      try {
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.remove) {
+          chrome.storage.local.remove(["pecLogs"]);
+        }
+      } catch (e) {}
+      sendResponse({ ok: true, logs: [] });
+      return true;
+    }
+    if (action === "FORCE_SYNC" || action === "SYNC_NOW") {
+      checkForExtensionUpdates(true);
+      syncWithServer(true)
+        .then(() => {
+          persistProxyState();
+          updateActiveTabBadge();
+          sendResponse({ ok: true, ...currentProxyState });
+        })
+        .catch(() => {
+          sendResponse({ ok: false, ...currentProxyState });
+        });
+      return true;
+    }
+    if (action === "TOGGLE_BYPASS" || action === "BYPASS_TOGGLE") {
+      if (!PEC_ALLOW_MANUAL_BYPASS) {
+        logEvent("warn", "Manual bypass is disabled by policy");
+        sendResponse({ ok: false, error: "Manual bypass disabled by policy" });
+        return false;
+      }
+      currentProxyState.bypassActive = !currentProxyState.bypassActive;
+      if (currentProxyState.bypassActive) {
+        // Schedule automatic re-enable - "temporary bypass" must actually be temporary.
+        currentProxyState.bypassExpiresAt = Date.now() + BYPASS_TIMEOUT_MIN * 60 * 1000;
+        chrome.alarms.create(ALARM_BYPASS_EXPIRE, { delayInMinutes: Math.max(0.5, BYPASS_TIMEOUT_MIN) });
+        console.log("[PEC] Bypass enabled for " + BYPASS_TIMEOUT_MIN + " minutes.");
+      } else {
+        currentProxyState.bypassExpiresAt = null;
+        chrome.alarms.clear(ALARM_BYPASS_EXPIRE);
+      }
+      logEvent("info", "Proxy bypass toggled: " + (currentProxyState.bypassActive ? "ON (expires in " + BYPASS_TIMEOUT_MIN + "m)" : "OFF"));
+      persistProxyState();
+      updateActiveTabBadge();
+
+      (async () => {
+        try {
+          if (currentProxyState.bypassActive) {
+            if (chrome.proxy && chrome.proxy.settings && chrome.proxy.settings.set) {
+              await chrome.proxy.settings.set({
+                value: { mode: "direct" },
+                scope: "regular",
+              });
+              updateBadge("○", "#94a3b8");
+            }
+          } else {
+            await applyProxySettings();
+          }
+        } catch (localErr) {
+          logEvent("warn", "Immediate local proxy toggle failed: " + (localErr && localErr.message ? localErr.message : localErr));
+        }
+
+        syncWithServer(true)
+          .then(() => {
+            persistProxyState();
+            updateActiveTabBadge();
+            sendResponse({ ok: true, bypassActive: currentProxyState.bypassActive, ...currentProxyState });
+          })
+          .catch(() => {
+            sendResponse({ ok: false, bypassActive: currentProxyState.bypassActive, ...currentProxyState });
+          });
+      })();
+      return true;
+    }
+    return false;
+  };
+
+  if (isStartupRestored) {
+    return dispatch();
+  } else {
+    restoreStartupState().then(() => {
+      dispatch();
+    });
     return true;
   }
 });

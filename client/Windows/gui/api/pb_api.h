@@ -7,6 +7,7 @@
 #define PB_API_H
 
 #include <windows.h>
+#include <strsafe.h>
 
 // enums (must match ProxyBridge.h)
 typedef enum { PB_PROXY_HTTP = 0, PB_PROXY_SOCKS5 = 1 } PBProxyType;
@@ -95,7 +96,7 @@ static BOOL PB_LoadDirect(PBApi* api)
     wchar_t path[MAX_PATH];
     DWORD n = GetModuleFileNameW(NULL, path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) {
-        wsprintfW(g_pb_load_error, L"GetModuleFileNameW failed (code %lu)", GetLastError());
+        StringCchPrintfW(g_pb_load_error, sizeof(g_pb_load_error) / sizeof(g_pb_load_error[0]), L"GetModuleFileNameW failed (code %lu)", GetLastError());
         return FALSE;
     }
     wchar_t dir[MAX_PATH];
@@ -104,7 +105,7 @@ static BOOL PB_LoadDirect(PBApi* api)
     for (DWORD i = n; i > 0; i--) { if (dir[i - 1] == L'\\') { dir[i] = 0; break; } }
 
     wchar_t corePath[MAX_PATH];
-    wsprintfW(corePath, L"%lsPECAppCore.dll", dir);
+    StringCchPrintfW(corePath, sizeof(corePath) / sizeof(corePath[0]), L"%lsPECAppCore.dll", dir);
 
     // Absolute path only, and its dependencies (WinDivert.dll) come from that folder or System32:
     // never from the current directory or PATH (DLL planting).
@@ -114,7 +115,7 @@ static BOOL PB_LoadDirect(PBApi* api)
         api->dll = LoadLibraryW(corePath);
     }
     if (!api->dll) {
-        wsprintfW(corePath, L"%lsProxyBridgeCore.dll", dir);
+        StringCchPrintfW(corePath, sizeof(corePath) / sizeof(corePath[0]), L"%lsProxyBridgeCore.dll", dir);
         api->dll = LoadLibraryExW(corePath, NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!api->dll) {
             api->dll = LoadLibraryW(corePath);
@@ -122,14 +123,14 @@ static BOOL PB_LoadDirect(PBApi* api)
     }
     if (!api->dll) {
         DWORD err = GetLastError();
-        wsprintfW(g_pb_load_error, L"LoadLibrary failed (code %lu) for path:\n%ls\n\nEnsure PECAppCore.dll and WinDivert.dll are located in that folder.", err, corePath);
+        StringCchPrintfW(g_pb_load_error, sizeof(g_pb_load_error) / sizeof(g_pb_load_error[0]), L"LoadLibrary failed (code %lu) for path:\n%ls\n\nEnsure PECAppCore.dll and WinDivert.dll are located in that folder.", err, corePath);
         return FALSE;
     }
 
     #define PB_BIND(field, name) \
         api->field = (PFN_##field)(void*)GetProcAddress(api->dll, "ProxyBridge_" name); \
         if (!api->field) { \
-            wsprintfW(g_pb_load_error, L"Required export 'ProxyBridge_%hs' was not found in ProxyBridgeCore.dll.", name); \
+            StringCchPrintfW(g_pb_load_error, sizeof(g_pb_load_error) / sizeof(g_pb_load_error[0]), L"Required export 'ProxyBridge_%hs' was not found in ProxyBridgeCore.dll.", name); \
             FreeLibrary(api->dll); \
             api->dll = NULL; \
             return FALSE; \

@@ -2,6 +2,7 @@ import "./loadEnv.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import dns from "node:dns";
 import { RotationConfig, RotationHistoryItem, Panel3xuiConfig } from "./types.js";
 import { writeJsonAtomic, readJsonStore } from "./jsonStore.js";
 import { getCredsStorePath, get3xuiPanelsPath, getRotationConfigPath } from "./storage.js";
@@ -176,6 +177,40 @@ export function validateSafeEndpointUrl(urlStr: string): { valid: boolean; error
 }
 
 /**
+ * Asynchronous URL validation performing DNS IP resolution when ALLOW_INTERNAL_PANEL !== "true".
+ * Blocks DNS rebinding attacks (e.g. *.nip.io resolving to 127.0.0.1 or RFC1918 addresses).
+ */
+export async function validateSafeEndpointUrlAsync(rawUrl: string): Promise<{ valid: boolean; error?: string }> {
+  const syncCheck = validateSafeEndpointUrl(rawUrl);
+  if (!syncCheck.valid) return syncCheck;
+  if (process.env.ALLOW_INTERNAL_PANEL === "true") return { valid: true };
+
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+    const lookupResult = await dns.promises.lookup(hostname, { all: true });
+    for (const addr of lookupResult) {
+      if (isPrivateOrLoopbackHost(addr.address)) {
+        return { valid: false, error: `Hostname resolves to private address ${addr.address} (SSRF prevention)` };
+      }
+    }
+    return { valid: true };
+  } catch (e: any) {
+    return { valid: false, error: `DNS resolution failed: ${e?.message || e}` };
+  }
+}
+
+let rotationInFlight = false;
+
+export function isRotationInFlight(): boolean {
+  return rotationInFlight;
+}
+
+export function setRotationInFlight(inFlight: boolean): void {
+  rotationInFlight = inFlight;
+}
+
+/**
  * Panel fetches must never follow redirects: a 30x would silently send the
  * admin credentials (or an authorized request) to whatever target the panel
  * (or an attacker who controls it) points at. redirect:"manual" keeps the
@@ -315,7 +350,7 @@ export async function sync3xuiInboundByTag(params: {
   password?: string;
   message: string;
 }> {
-  const urlCheck = validateSafeEndpointUrl(params.panelUrl);
+  const urlCheck = await validateSafeEndpointUrlAsync(params.panelUrl);
   if (!urlCheck.valid) {
     return { ok: false, message: `SSRF Security Check Failed: ${urlCheck.error}` };
   }
@@ -467,7 +502,7 @@ export async function test3xuiConnection(config: {
   inboundTag?: string;
   timeoutSec?: number;
 }): Promise<{ ok: boolean; message: string; inboundFound?: boolean; inboundId?: number }> {
-  const urlCheck = validateSafeEndpointUrl(config.panelUrl);
+  const urlCheck = await validateSafeEndpointUrlAsync(config.panelUrl);
   if (!urlCheck.valid) {
     return { ok: false, message: `SSRF Security Check Failed: ${urlCheck.error}` };
   }
@@ -527,6 +562,15 @@ export async function test3xuiConnection(config: {
 }
 
 export async function executeRotation(customConfig?: Partial<RotationConfig>): Promise<RotationHistoryItem> {
+  rotationInFlight = true;
+  try {
+    return await doExecuteRotation(customConfig);
+  } finally {
+    rotationInFlight = false;
+  }
+}
+
+async function doExecuteRotation(customConfig?: Partial<RotationConfig>): Promise<RotationHistoryItem> {
   let panel = customConfig?.panelUrl || process.env.XUI_PANEL_URL;
   let xuiUser = customConfig?.adminUser || process.env.XUI_ADMIN_USER;
   let xuiPass = customConfig?.adminPass || process.env.XUI_ADMIN_PASS;
@@ -792,7 +836,7 @@ export async function fetch3xuiInbounds(
     targetConfig = configOrId;
   }
 
-  const urlCheck = validateSafeEndpointUrl(targetConfig.panelUrl);
+  const urlCheck = await validateSafeEndpointUrlAsync(targetConfig.panelUrl);
   if (!urlCheck.valid) {
     throw new Error(`SSRF Security Check Failed: ${urlCheck.error}`);
   }

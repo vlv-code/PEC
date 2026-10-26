@@ -29,6 +29,7 @@ window.switchPopupTab = function(tabId) {
   }
 };
 
+const isRu = true;
 let currentProxyState = { enabled: true, online: false, bypassActive: false };
 let bypassCountdownTimer = null;
 
@@ -65,7 +66,7 @@ function escapeHtml(str) {
 // Global state applier - reactive to simulator and chrome.runtime
 window.applyPopupState = function(response) {
   if (!response) return;
-  const isRu = "true" === "true";
+  const isRu = true;
   currentProxyState = Object.assign({}, currentProxyState, response);
 
   const statusText = document.getElementById("statusText");
@@ -206,6 +207,9 @@ window.applyPopupState = function(response) {
     if (!isEnabled || isBypass) {
       webrtcVal.textContent = isRu ? "Отключено (Direct)" : "Disabled (Direct)";
       webrtcVal.className = "val warn-val";
+    } else if (response.webRtcProtection === false || (response.config && response.config.webRtcProtection === false)) {
+      webrtcVal.textContent = isRu ? "Отключено" : "Disabled";
+      webrtcVal.className = "val warn-val";
     } else {
       webrtcVal.textContent = isRu ? "Защищено (без утечки UDP)" : "Protected (UDP block)";
       webrtcVal.className = "val success-val";
@@ -215,9 +219,12 @@ window.applyPopupState = function(response) {
     if (!isEnabled || isBypass) {
       dnsVal.textContent = isRu ? "Отключена" : "Disabled";
       dnsVal.className = "val warn-val";
-    } else {
+    } else if (response.dnsProtection || response.customDns || (response.config && (response.config.dnsProtection || response.config.customDns))) {
       dnsVal.textContent = isRu ? "Включена" : "Enabled";
       dnsVal.className = "val success-val";
+    } else {
+      dnsVal.textContent = isRu ? "Системный" : "System";
+      dnsVal.className = "val";
     }
   }
 
@@ -508,8 +515,12 @@ function initPopup() {
           setTimeout(() => {
             btnSyncNow.disabled = false;
             if (syncIcon) syncIcon.classList.remove("spin");
-            if (res && res.ok && pingVal) {
-              pingVal.textContent = latencyMs + " ms";
+            if (pingVal) {
+              if (res && res.ok) {
+                pingVal.textContent = latencyMs + " ms";
+              } else {
+                pingVal.textContent = isRu ? "Недоступен" : "Unavailable";
+              }
             }
             if (res) window.applyPopupState(res);
             loadState();
@@ -847,6 +858,8 @@ function initPopup() {
             let res = await fetch(base + "/api/ip-echo", { cache: "no-store" }).catch(() => null);
             if (!res || !res.ok) res = await fetch(base + "/ip-echo", { cache: "no-store" }).catch(() => null);
             if (!res || !res.ok) throw new Error("All ping fallbacks failed");
+          } else {
+            throw new Error("All ping fallbacks failed");
           }
         });
         const latencyMs = Date.now() - startMs;
@@ -854,7 +867,7 @@ function initPopup() {
           pingVal.textContent = latencyMs + " ms";
         }
       } catch (e) {
-        if (pingVal) pingVal.textContent = "—";
+        if (pingVal) pingVal.textContent = isRu ? "Недоступен" : "Unavailable";
       } finally {
         if (t) clearTimeout(t);
         if (c) c.abort();

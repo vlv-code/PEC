@@ -23,7 +23,7 @@ static size_t wname(struct msg *m, const char *name)
     return start;
 }
 static void ptr(struct msg *m, size_t at) { w16(m, 0xC000 | (unsigned)at); }
-static void header(struct msg *m, unsigned flags, unsigned qd, unsigned an) { m->n = 0; w16(m, 0x1234); w16(m, flags); w16(m, qd); w16(m, an); w16(m, 0); w16(m, 0); }
+static void header(struct msg *m, unsigned flags, unsigned qd, unsigned an) { m->n = 0; w16(m, 0x1234); w16(m, flags); w16(m, qd); w16(m, an); w16(m, 0); w16(m, 0); if (flags & 0x8000) pb_dns_record_query(0x1234); }
 static void a_rr(struct msg *m, size_t owner_off, const char *ip) { ptr(m, owner_off); w16(m, 1); w16(m, 1); w32(m, 60); w16(m, 4); struct in_addr a; inet_pton(AF_INET, ip, &a); memcpy(m->b + m->n, &a, 4); m->n += 4; }
 static uint32_t H(const char *ip) { struct in_addr a; inet_pton(AF_INET, ip, &a); return ntohl(a.s_addr); }
 static bool has(uint32_t ip, const char *name) { char n[8][256]; int c = pb_dns_lookup(ip, n, 8); for (int i = 0; i < c; i++) if (!strcmp(n[i], name)) return true; return false; }
@@ -86,6 +86,41 @@ int main(void)
     CHECK(pb_dns_load_hosts("/tmp/pb_dns_test_hosts", &r) == 1);
     CHECK(has(H("192.0.2.44"), "intranet.test") && has(H("192.0.2.44"), "wiki.intranet.test"));
     remove("/tmp/pb_dns_test_hosts");
+
+    // 7. QID matching (L-13)
+    pb_dns_clear();
+    // Unsolicited response with no prior query must be rejected
+    m.n = 0; w16(&m, 0x7777); w16(&m, 0x8180); w16(&m, 1); w16(&m, 1); w16(&m, 0); w16(&m, 0);
+    q = wname(&m, "unsolicited.test"); w16(&m, 1); w16(&m, 1);
+    a_rr(&m, q, "192.0.2.99");
+    CHECK(pb_dns_observe(m.b, m.n, &r) == 0);
+    CHECK(!has(H("192.0.2.99"), "unsolicited.test"));
+
+    // Record query with QID 0x4321
+    m.n = 0; w16(&m, 0x4321); w16(&m, 0x0100); w16(&m, 1); w16(&m, 0); w16(&m, 0); w16(&m, 0);
+    q = wname(&m, "qid.test"); w16(&m, 1); w16(&m, 1);
+    CHECK(pb_dns_observe(m.b, m.n, &r) == 0);
+
+    // Response with mismatched QID 0x9999 should be rejected
+    m.n = 0; w16(&m, 0x9999); w16(&m, 0x8180); w16(&m, 1); w16(&m, 1); w16(&m, 0); w16(&m, 0);
+    q = wname(&m, "qid.test"); w16(&m, 1); w16(&m, 1);
+    a_rr(&m, q, "192.0.2.100");
+    CHECK(pb_dns_observe(m.b, m.n, &r) == 0);
+    CHECK(!has(H("192.0.2.100"), "qid.test"));
+
+    // Response with matching QID 0x4321 should be accepted
+    m.n = 0; w16(&m, 0x4321); w16(&m, 0x8180); w16(&m, 1); w16(&m, 1); w16(&m, 0); w16(&m, 0);
+    q = wname(&m, "qid.test"); w16(&m, 1); w16(&m, 1);
+    a_rr(&m, q, "192.0.2.100");
+    CHECK(pb_dns_observe(m.b, m.n, &r) == 1);
+    CHECK(has(H("192.0.2.100"), "qid.test"));
+
+    // Replay with already-consumed QID 0x4321 should be rejected
+    m.n = 0; w16(&m, 0x4321); w16(&m, 0x8180); w16(&m, 1); w16(&m, 1); w16(&m, 0); w16(&m, 0);
+    q = wname(&m, "qid2.test"); w16(&m, 1); w16(&m, 1);
+    a_rr(&m, q, "192.0.2.101");
+    CHECK(pb_dns_observe(m.b, m.n, &r) == 0);
+    CHECK(!has(H("192.0.2.101"), "qid2.test"));
 
     printf(fails ? "DNS TESTS FAILED (%d)\n" : "dns tests passed\n", fails);
     return fails != 0;

@@ -135,9 +135,8 @@ export function buildLogoutCookie(): string {
 }
 
 /** True when the request came over TLS (directly or via a trusted proxy). */
-export function requestIsSecure(req: { secure?: boolean; headers: Record<string, unknown> }): boolean {
-  const proto = String(req.headers["x-forwarded-proto"] || "");
-  return Boolean(req.secure) || proto.split(",")[0].trim() === "https";
+export function requestIsSecure(req?: { secure?: boolean; headers?: Record<string, unknown> } | null): boolean {
+  return Boolean(req?.secure);
 }
 
 // ---------------------------------------------------------------------------

@@ -18,6 +18,9 @@ struct pb_dns_result {
 // successful response or has no A records). Safe on arbitrary/malicious input.
 int  pb_dns_observe(const uint8_t *msg, size_t len, struct pb_dns_result *res);
 
+// Records an outgoing DNS query ID for response matching.
+void pb_dns_record_query(uint16_t qid);
+
 // Copies up to max names known for ip (host order) into out; returns the count.
 int  pb_dns_lookup(uint32_t ip, char out[][256], int max);
 

@@ -98,7 +98,7 @@ export function updateProxyConfig(updates: Partial<ProxyConfiguration>): ProxyCo
 // gives true O(1) LRU eviction (previously an O(n) scan over 2000 records
 // ran on every registration once the cap was hit).
 const MAX_INSTANCES = 2000;
-const MAX_PERSISTENT_META = 5000;
+export const MAX_PERSISTENT_META = 5000;
 const instancesMap = new Map<string, ExtensionInstance>();
 
 /**
@@ -161,7 +161,21 @@ try {
   }
 } catch {}
 
+/**
+ * Prune persistent metadata to MAX_PERSISTENT_META entries using FIFO eviction.
+ */
+export function prunePersistentMeta(): void {
+  const keys = Object.keys(persistentMeta);
+  if (keys.length > MAX_PERSISTENT_META) {
+    const excess = keys.length - MAX_PERSISTENT_META;
+    for (let i = 0; i < excess; i++) {
+      delete persistentMeta[keys[i]];
+    }
+  }
+}
+
 function saveInstancesMeta() {
+  prunePersistentMeta();
   try {
     writeJsonAtomic(INSTANCES_META_PATH, persistentMeta);
   } catch (e) {
@@ -261,14 +275,7 @@ export function assignInstanceProfile(instanceId: string, profileId?: string, gr
     persistentMeta[cleanId].group = group;
   }
 
-  // Cap the persistent meta: an unbounded stream of unique instance IDs
-  // previously grew this object (and its on-disk JSON) without limit.
-  const metaKeys = Object.keys(persistentMeta);
-  if (metaKeys.length > MAX_PERSISTENT_META) {
-    for (const k of metaKeys.slice(0, metaKeys.length - MAX_PERSISTENT_META)) {
-      delete persistentMeta[k];
-    }
-  }
+  prunePersistentMeta();
   saveInstancesMeta();
 
   const existing = instancesMap.get(cleanId);
@@ -290,12 +297,7 @@ export function assignInstanceProxy(instanceId: string, proxyId?: string) {
   const cleanProxy = proxyId ? String(proxyId).trim() : undefined;
   persistentMeta[cleanId].assignedProxyId = cleanProxy || undefined;
 
-  const metaKeys = Object.keys(persistentMeta);
-  if (metaKeys.length > MAX_PERSISTENT_META) {
-    for (const k of metaKeys.slice(0, metaKeys.length - MAX_PERSISTENT_META)) {
-      delete persistentMeta[k];
-    }
-  }
+  prunePersistentMeta();
   saveInstancesMeta();
 
   const existing = instancesMap.get(cleanId);
@@ -502,6 +504,7 @@ export function enrollInstanceToken(instanceId: string, tokenHash: string): void
   persistentMeta[cleanId].tokenHash = tokenHash;
   persistentMeta[cleanId].enrolledAt = now;
   persistentMeta[cleanId].revoked = false;
+  prunePersistentMeta();
   saveInstancesMeta();
 
   const existing = instancesMap.get(cleanId);
@@ -545,4 +548,12 @@ export function getInstanceMeta(instanceId: string): { group?: string; assignedP
 
 export const getAllInstances = getActiveInstances;
 
+export function _setPersistentMetaEntryForTesting(key: string, val: any): void {
+  persistentMeta[key] = val;
+}
 
+export function _clearPersistentMetaForTesting(): void {
+  for (const k of Object.keys(persistentMeta)) {
+    delete persistentMeta[k];
+  }
+}

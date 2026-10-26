@@ -157,11 +157,30 @@ export function calculateExtensionId(spkiDer: Buffer): string {
   return id;
 }
 
+export function escapeXmlAttr(value: string): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/'/g, "&apos;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function escapeCmdArg(value: string): string {
+  return String(value ?? "")
+    .replace(/[%&<>|^"`!]/g, "")
+    .replace(/[\r\n]/g, "")
+    .trim();
+}
+
 export function buildUpdatesXml(extensionId: string, version: string, codebaseUrl: string): string {
+  const safeExtensionId = escapeXmlAttr(extensionId);
+  const safeVersion = escapeXmlAttr(version);
+  const safeCodebaseUrl = escapeXmlAttr(codebaseUrl);
   return `<?xml version='1.0' encoding='UTF-8'?>
 <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
-  <app appid='${extensionId}'>
-    <updatecheck codebase='${codebaseUrl}' version='${version}' />
+  <app appid='${safeExtensionId}'>
+    <updatecheck codebase='${safeCodebaseUrl}' version='${safeVersion}' />
   </app>
 </gupdate>
 `;

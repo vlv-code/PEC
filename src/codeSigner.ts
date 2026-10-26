@@ -115,9 +115,15 @@ export function extractCertificateMetadata(
     if (!fs.existsSync(CERTS_DIR)) fs.mkdirSync(CERTS_DIR, { recursive: true });
     fs.writeFileSync(tmpPfx, pfxBuffer);
     try {
-      const out = child_process.execSync(
-        `openssl pkcs12 -in "${tmpPfx}" -nodes -passin pass:"${password.replace(/"/g, '\\"')}" -nokeys 2>&1`,
-        { windowsHide: true, timeout: 5000 }
+      const out = child_process.execFileSync(
+        "openssl",
+        ["pkcs12", "-in", tmpPfx, "-nodes", "-passin", "env:PFX_PASS", "-nokeys"],
+        {
+          windowsHide: true,
+          timeout: 5000,
+          env: { ...process.env, PFX_PASS: password },
+          stdio: ["ignore", "pipe", "pipe"],
+        }
       ).toString("utf8");
 
       const certMatch = out.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
@@ -143,8 +149,11 @@ export function extractCertificateMetadata(
       if (!fs.existsSync(CERTS_DIR)) fs.mkdirSync(CERTS_DIR, { recursive: true });
       fs.writeFileSync(tmpPfx, pfxBuffer);
       try {
-        const cmd = `certutil -dump -p "${password.replace(/"/g, '""')}" "${tmpPfx}"`;
-        const out = child_process.execSync(cmd, { windowsHide: true, timeout: 5000 }).toString("utf8");
+        const out = child_process.execFileSync(
+          "certutil",
+          ["-dump", "-p", password, tmpPfx],
+          { windowsHide: true, timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }
+        ).toString("utf8");
 
         const subjectMatch = out.match(/Subject:\s*([^\r\n]+)/i);
         const issuerMatch = out.match(/Issuer:\s*([^\r\n]+)/i);
@@ -296,7 +305,7 @@ export function signBinary(targetPath: string): boolean {
   // Check for osslsigncode (Linux / Docker or Windows)
   let hasOsslsigncode = false;
   try {
-    child_process.execSync("osslsigncode --version", { windowsHide: true, stdio: "ignore" });
+    child_process.execFileSync("osslsigncode", ["--version"], { windowsHide: true, stdio: "ignore" });
     hasOsslsigncode = true;
   } catch {}
 
@@ -304,7 +313,7 @@ export function signBinary(targetPath: string): boolean {
   let hasSigntool = false;
   if (isWin) {
     try {
-      child_process.execSync("signtool.exe /?", { windowsHide: true, stdio: "ignore" });
+      child_process.execFileSync("signtool.exe", ["/?"], { windowsHide: true, stdio: "ignore" });
       hasSigntool = true;
     } catch {}
   }
@@ -319,20 +328,32 @@ export function signBinary(targetPath: string): boolean {
   try {
     if (hasOsslsigncode) {
       const signedTmp = `${targetPath}.signed`;
-      const tsArgs = tsUrl ? `-ts "${tsUrl}"` : "";
-      const passArgs = password ? `-pass "${password.replace(/"/g, '\\"')}"` : "";
-      const cmd = `osslsigncode sign -pkcs12 "${pfxFile}" ${passArgs} -h sha256 ${tsArgs} -in "${targetPath}" -out "${signedTmp}"`;
-      child_process.execSync(cmd, { windowsHide: true, stdio: "pipe" });
+      const signArgs: string[] = ["sign", "-pkcs12", pfxFile];
+      if (password) {
+        signArgs.push("-pass", password);
+      }
+      signArgs.push("-h", "sha256");
+      if (tsUrl) {
+        signArgs.push("-ts", tsUrl);
+      }
+      signArgs.push("-in", targetPath, "-out", signedTmp);
+      child_process.execFileSync("osslsigncode", signArgs, { windowsHide: true, stdio: "pipe" });
       if (fs.existsSync(signedTmp) && fs.statSync(signedTmp).size > 0) {
         fs.copyFileSync(signedTmp, targetPath);
         fs.unlinkSync(signedTmp);
         return true;
       }
     } else if (hasSigntool) {
-      const tsArgs = tsUrl ? `/tr "${tsUrl}" /td sha256` : "";
-      const passArgs = password ? `/p "${password.replace(/"/g, '""')}"` : "";
-      const cmd = `signtool.exe sign /f "${pfxFile}" ${passArgs} /fd sha256 ${tsArgs} "${targetPath}"`;
-      child_process.execSync(cmd, { windowsHide: true, stdio: "pipe" });
+      const signArgs: string[] = ["sign", "/f", pfxFile];
+      if (password) {
+        signArgs.push("/p", password);
+      }
+      signArgs.push("/fd", "sha256");
+      if (tsUrl) {
+        signArgs.push("/tr", tsUrl, "/td", "sha256");
+      }
+      signArgs.push(targetPath);
+      child_process.execFileSync("signtool.exe", signArgs, { windowsHide: true, stdio: "pipe" });
       return true;
     }
   } catch (err: any) {

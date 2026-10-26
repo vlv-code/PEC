@@ -1,0 +1,17 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Binary files declaration
+templates/app/windows/** binary
+*.exe binary
+*.dll binary
+*.sys binary
+*.ico binary
+*.png binary
+*.zip binary
+*.crx binary
+*.pfx binary
+
+# Text overrides for template files within templates/app/windows
+templates/app/windows/*.template text diff merge
+templates/app/windows/*.txt text diff merge

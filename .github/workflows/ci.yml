@@ -171,11 +171,8 @@ jobs:
             "ProxyBridgeCore.dll",
             "PECAppCore.dll",
             "PEC-App.exe",
-            "ProxyBridge.exe",
             "PEC-CLI.exe",
-            "pbcli.exe",
             "PECAppSvc.exe",
-            "ProxyBridgeSvc.exe",
             "PEC-App-Setup.exe"
           )
           foreach ($b in $binaries) {

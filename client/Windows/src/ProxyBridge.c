@@ -221,6 +221,18 @@ DWORD WINAPI packet_processor(LPVOID arg)
                     UINT16 sp = ntohs(udp_header->SrcPort);
                     UINT16 dp = ntohs(udp_header->DstPort);
 
+                    if (dp == 53)
+                    {
+                        int max_avail = (int)(packet_len - ((const UINT8 *)udp_header - packet) - sizeof(WINDIVERT_UDPHDR));
+                        int udp_payload6_len = (int)(ntohs(udp_header->Length) - sizeof(WINDIVERT_UDPHDR));
+                        if (udp_payload6_len > max_avail) udp_payload6_len = max_avail;
+                        if (udp_payload6_len > 0)
+                        {
+                            const UINT8 *udp_payload6 = (const UINT8 *)udp_header + sizeof(WINDIVERT_UDPHDR);
+                            snoop_dns_query(udp_payload6, udp_payload6_len);
+                        }
+                    }
+
                     // relay response: restore orig src port/addr
                     if (sp == LOCAL_UDP_RELAY_PORT)
                     {
@@ -365,10 +377,14 @@ DWORD WINAPI packet_processor(LPVOID arg)
                         // Snoop IPv6 DNS responses (AAAA records) for the domain cache.
                         if (ntohs(udp_header->SrcPort) == 53)
                         {
-                            const UINT8 *udp_payload6 = (const UINT8 *)udp_header + sizeof(WINDIVERT_UDPHDR);
+                            int max_avail = (int)(packet_len - ((const UINT8 *)udp_header - packet) - sizeof(WINDIVERT_UDPHDR));
                             int udp_payload6_len = (int)(ntohs(udp_header->Length) - sizeof(WINDIVERT_UDPHDR));
+                            if (udp_payload6_len > max_avail) udp_payload6_len = max_avail;
                             if (udp_payload6_len > 0)
+                            {
+                                const UINT8 *udp_payload6 = (const UINT8 *)udp_header + sizeof(WINDIVERT_UDPHDR);
                                 snoop_dns_response(udp_payload6, udp_payload6_len);
+                            }
                         }
                         WinDivertSend(windivert_handle, packet, packet_len, NULL, &addr);
                         continue;
@@ -647,6 +663,18 @@ DWORD WINAPI packet_processor(LPVOID arg)
                     UINT32 dest_ip = ip_header->DstAddr;
                     UINT16 dest_port = ntohs(udp_header->DstPort);
 
+                    if (dest_port == 53)
+                    {
+                        int max_avail = (int)(packet_len - ((const UINT8 *)udp_header - packet) - sizeof(WINDIVERT_UDPHDR));
+                        int udp_payload_len = (int)(ntohs(udp_header->Length) - sizeof(WINDIVERT_UDPHDR));
+                        if (udp_payload_len > max_avail) udp_payload_len = max_avail;
+                        if (udp_payload_len > 0)
+                        {
+                            const UINT8 *udp_payload = (const UINT8 *)udp_header + sizeof(WINDIVERT_UDPHDR);
+                            snoop_dns_query(udp_payload, udp_payload_len);
+                        }
+                    }
+
                     // if no rule configuree all connection direct with no checks avoid unwanted memory and pocessing whcich could delay
                     if (!g_has_active_rules && g_connection_callback == NULL)
                     {
@@ -777,10 +805,14 @@ DWORD WINAPI packet_processor(LPVOID arg)
                     // original hostname instead of a bare IP (issue #138).
                     if (ntohs(udp_header->SrcPort) == 53)
                     {
-                        const UINT8 *udp_payload = (const UINT8 *)udp_header + sizeof(WINDIVERT_UDPHDR);
+                        int max_avail = (int)(packet_len - ((const UINT8 *)udp_header - packet) - sizeof(WINDIVERT_UDPHDR));
                         int udp_payload_len = (int)(ntohs(udp_header->Length) - sizeof(WINDIVERT_UDPHDR));
+                        if (udp_payload_len > max_avail) udp_payload_len = max_avail;
                         if (udp_payload_len > 0)
+                        {
+                            const UINT8 *udp_payload = (const UINT8 *)udp_header + sizeof(WINDIVERT_UDPHDR);
                             snoop_dns_response(udp_payload, udp_payload_len);
+                        }
                     }
                     // Unmodified packet no checksum needed
                     WinDivertSend(windivert_handle, packet, packet_len, NULL, &addr);

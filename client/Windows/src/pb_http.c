@@ -44,6 +44,12 @@ int http_connect_v6(SOCKET s, const UINT8 dest_ip6[16], UINT16 dest_port, const 
             host_part, dest_port, host_part, dest_port);
     }
 
+    if (len < 0 || (size_t)len >= sizeof(request))
+    {
+        log_message("HTTP v6: CONNECT request truncated or formatting failed");
+        return -1;
+    }
+
     if (send(s, request, len, 0) != len) return -1;
 
     len = recv(s, response, sizeof(response) - 1, 0);

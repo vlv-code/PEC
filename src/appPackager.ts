@@ -756,15 +756,24 @@ export function buildMsiPackage(
     // 1. Try wixl (standard on Linux Alpine with msitools, or cross-platform)
     let hasWixl = false;
     try {
-      child_process.execSync("wixl --version", { windowsHide: true, stdio: "ignore" });
+      child_process.execFileSync("wixl", ["--version"], { windowsHide: true, stdio: "ignore" });
       hasWixl = true;
     } catch {}
 
     if (hasWixl) {
-      const cmd = `wixl -v -o "${outputMsiPath}" "${wxsPath}"`;
-      child_process.execSync(cmd, { windowsHide: true, stdio: "pipe" });
-      if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
-        return { success: true, msiPath: outputMsiPath };
+      try {
+        child_process.execFileSync("wixl", ["-v", "-o", outputMsiPath, wxsPath], {
+          windowsHide: true,
+          stdio: "pipe",
+        });
+        if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
+          return { success: true, msiPath: outputMsiPath };
+        }
+      } catch (wixlErr) {
+        // If wixl failed on Linux, let the outer catch report it; on Windows, allow fallback to WiX Toolset
+        if (process.platform !== "win32") {
+          throw wixlErr;
+        }
       }
     }
 
@@ -775,6 +784,7 @@ export function buildMsiPackage(
       let hasWix3 = false;
 
       const wix3Dirs = [
+        ...(process.env.WIX ? [path.join(process.env.WIX, "bin")] : []),
         "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin",
         "C:\\Program Files\\WiX Toolset v3.11\\bin",
         "C:\\Program Files (x86)\\WiX Toolset v3.14\\bin",
@@ -782,8 +792,8 @@ export function buildMsiPackage(
       ];
       for (const d of wix3Dirs) {
         if (fs.existsSync(path.join(d, "candle.exe")) && fs.existsSync(path.join(d, "light.exe"))) {
-          candlePath = `"${path.join(d, "candle.exe")}"`;
-          lightPath = `"${path.join(d, "light.exe")}"`;
+          candlePath = path.join(d, "candle.exe");
+          lightPath = path.join(d, "light.exe");
           hasWix3 = true;
           break;
         }
@@ -791,24 +801,35 @@ export function buildMsiPackage(
 
       if (!hasWix3) {
         try {
-          child_process.execSync("candle.exe /?", { windowsHide: true, stdio: "ignore" });
+          child_process.execFileSync("candle.exe", ["/?"], { windowsHide: true, stdio: "ignore" });
           hasWix3 = true;
         } catch {}
       }
 
       if (hasWix3) {
-        const wixobj = path.join(stagedDir, "pec-app.wixobj");
-        child_process.execSync(`${candlePath} -out "${wixobj}" "${wxsPath}"`, { windowsHide: true, stdio: "pipe" });
-        child_process.execSync(`${lightPath} -out "${outputMsiPath}" "${wixobj}"`, { windowsHide: true, stdio: "pipe" });
-        if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
-          return { success: true, msiPath: outputMsiPath };
-        }
+        try {
+          const wixobj = path.join(stagedDir, "pec-app.wixobj");
+          child_process.execFileSync(candlePath, ["-out", wixobj, wxsPath], {
+            windowsHide: true,
+            stdio: "pipe",
+          });
+          child_process.execFileSync(lightPath, ["-out", outputMsiPath, wixobj], {
+            windowsHide: true,
+            stdio: "pipe",
+          });
+          if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
+            return { success: true, msiPath: outputMsiPath };
+          }
+        } catch {}
       }
 
       // Check WiX v4 / v5
       try {
-        child_process.execSync("wix.exe --version", { windowsHide: true, stdio: "ignore" });
-        child_process.execSync(`wix.exe build -o "${outputMsiPath}" "${wxsPath}"`, { windowsHide: true, stdio: "pipe" });
+        child_process.execFileSync("wix.exe", ["--version"], { windowsHide: true, stdio: "ignore" });
+        child_process.execFileSync("wix.exe", ["build", "-o", outputMsiPath, wxsPath], {
+          windowsHide: true,
+          stdio: "pipe",
+        });
         if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
           return { success: true, msiPath: outputMsiPath };
         }
@@ -826,6 +847,9 @@ export function buildMsiPackage(
     };
   }
 }
+
+/** Alias for buildMsiPackage referenced in wave2 remediation plan */
+export const buildMsiWithWix = buildMsiPackage;
 
 export function assembleAppPackage(
   baseUrl?: string,

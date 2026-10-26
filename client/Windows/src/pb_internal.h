@@ -327,6 +327,7 @@ UINT32 dns_bucket_v6(const UINT8 ip6[16]);
 void dns_cache_store_v6(const UINT8 ip6[16], const char *domain);
 BOOL dns_cache_lookup_v6(const UINT8 ip6[16], char *out_domain, size_t out_size);
 BOOL dns_parse_name(const UINT8 *msg, int msg_len, int *offset, char *dst, int dst_len);
+void snoop_dns_query(const UINT8 *payload, int payload_len);
 void snoop_dns_response(const UINT8 *payload, int payload_len);
 void cleanup_stale_dns_cache(void);
 void flush_dns_resolver_cache(void);

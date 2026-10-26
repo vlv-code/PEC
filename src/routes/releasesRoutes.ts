@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { getReleasesDir } from "../storage.js";
 import {
   getAllReleases,
@@ -54,6 +55,8 @@ export function createReleasesRouter(
     return res.status(401).json({ ok: false, error: "Unauthorized" });
   };
 
+  const VERSION_REGEX = /^[0-9]+(\.[0-9]+){1,3}(-[a-zA-Z0-9.-]+)?$/;
+
   router.get("/api/releases", adminAuthMiddleware, (_req: Request, res: Response) => {
     const store = getAllReleases();
     res.json({
@@ -70,8 +73,8 @@ export function createReleasesRouter(
       if (type !== "extension" && type !== "app" && type !== "msi") {
         return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension', 'app', or 'msi'" });
       }
-      if (!version || typeof version !== "string") {
-        return res.status(400).json({ ok: false, error: "version is required and must be a string" });
+      if (!version || typeof version !== "string" || !VERSION_REGEX.test(version.trim())) {
+        return res.status(400).json({ ok: false, error: "Invalid version format" });
       }
 
       const result = setActiveRelease(type, version.trim());
@@ -91,8 +94,8 @@ export function createReleasesRouter(
       if (type !== "extension" && type !== "app") {
         return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension' or 'app'" });
       }
-      if (!version) {
-        return res.status(400).json({ ok: false, error: "version is required" });
+      if (!version || !VERSION_REGEX.test(version.trim())) {
+        return res.status(400).json({ ok: false, error: "Invalid version format" });
       }
 
       const removed = deleteRelease(type, version.trim());
@@ -112,9 +115,18 @@ export function createReleasesRouter(
       if (rawType !== "extension" && rawType !== "app" && rawType !== "msi") {
         return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension', 'app', or 'msi'" });
       }
-      if (!version) {
-        return res.status(400).json({ ok: false, error: "version is required" });
+      if (!version || !VERSION_REGEX.test(version)) {
+        return res.status(400).json({ ok: false, error: "Invalid version format" });
       }
+
+      const releasesBaseDir = path.resolve(getReleasesDir());
+      const isInsideDir = (targetPath: string, parentDir: string): boolean => {
+        const resolvedTarget = path.resolve(targetPath);
+        const resolvedParent = path.resolve(parentDir);
+        const targetCased = process.platform === "win32" ? resolvedTarget.toLowerCase() : resolvedTarget;
+        const parentCased = process.platform === "win32" ? resolvedParent.toLowerCase() : resolvedParent;
+        return targetCased.startsWith(parentCased + path.sep);
+      };
 
       if (rawType === "msi") {
         const msiCandidates = [
@@ -125,7 +137,11 @@ export function createReleasesRouter(
         if (!msiPath) {
           return res.status(404).json({ ok: false, error: "MSI release file not found" });
         }
-        return res.download(path.resolve(msiPath), `PEC-App-${version}.msi`);
+        const resolvedMsi = path.resolve(msiPath);
+        if (!isInsideDir(resolvedMsi, releasesBaseDir)) {
+          return res.status(403).json({ ok: false, error: "Access denied" });
+        }
+        return res.download(resolvedMsi, `PEC-App-${version}.msi`);
       }
       const type = rawType as "extension" | "app";
       const store = getAllReleases();
@@ -138,8 +154,23 @@ export function createReleasesRouter(
         return res.status(404).json({ ok: false, error: "Release file not found on disk" });
       }
 
-      const filename = release.fileName || path.basename(release.filePath);
-      res.download(path.resolve(release.filePath), filename);
+      const resolvedFile = path.resolve(release.filePath);
+      if (!isInsideDir(resolvedFile, releasesBaseDir)) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
+
+      // Check SHA-256 integrity of release file on download (M-3)
+      if (release.sha256 && /^[0-9a-fA-F]{64}$/.test(release.sha256)) {
+        const fileBuf = fs.readFileSync(resolvedFile);
+        const actualHash = crypto.createHash("sha256").update(fileBuf).digest("hex");
+        if (actualHash.toLowerCase() !== release.sha256.toLowerCase()) {
+          return res.status(500).json({ ok: false, error: "Integrity check failed: release file SHA-256 mismatch" });
+        }
+      }
+
+      const rawFilename = release.fileName || path.basename(release.filePath);
+      const filename = path.basename(rawFilename).replace(/[\r\n"]/g, "");
+      res.download(resolvedFile, filename);
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err.message || "Failed to download release" });
     }

@@ -27,6 +27,11 @@ LimitNOFILE=65536
 ProtectSystem=full
 ProtectHome=read-only
 PrivateTmp=true
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_BPF CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_BPF CAP_NET_BIND_SERVICE
+ProtectControlGroups=yes
+ProtectKernelModules=yes
 
 [Install]
 WantedBy=multi-user.target

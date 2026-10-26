@@ -3,10 +3,98 @@
 #define UNICODE
 #endif
 #include <windows.h>
+#include <wincrypt.h>
 #include <stdio.h>
 #include <string.h>
 #include "profile.h"
 #include "json.h"
+
+#pragma comment(lib, "crypt32.lib")
+
+#define DPAPI_PREFIX "dpapi:"
+#define DPAPI_PREFIX_LEN 6
+
+// Encrypt a wide string with Windows DPAPI (CryptProtectData).
+// Returns a dynamically allocated UTF-8 string "dpapi:<base64>" (caller frees with free()).
+// Returns NULL on error or empty input.
+static char* dpapi_encrypt_wstr(const wchar_t* wstr)
+{
+    if (!wstr || wstr[0] == L'\0') return NULL;
+
+    DATA_BLOB in_blob;
+    DATA_BLOB out_blob;
+    in_blob.pbData = (BYTE*)wstr;
+    in_blob.cbData = (DWORD)((wcslen(wstr) + 1) * sizeof(wchar_t));
+
+    if (!CryptProtectData(&in_blob, L"PEC-App Credential", NULL, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &out_blob))
+    {
+        return NULL;
+    }
+
+    DWORD b64_len = 0;
+    if (!CryptBinaryToStringA(out_blob.pbData, out_blob.cbData, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, NULL, &b64_len) || b64_len == 0)
+    {
+        LocalFree(out_blob.pbData);
+        return NULL;
+    }
+
+    char* res = (char*)malloc(DPAPI_PREFIX_LEN + b64_len + 1);
+    if (res)
+    {
+        memcpy(res, DPAPI_PREFIX, DPAPI_PREFIX_LEN);
+        if (!CryptBinaryToStringA(out_blob.pbData, out_blob.cbData, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, res + DPAPI_PREFIX_LEN, &b64_len))
+        {
+            free(res);
+            res = NULL;
+        }
+    }
+
+    LocalFree(out_blob.pbData);
+    return res;
+}
+
+// Decrypt a "dpapi:<base64>" UTF-8 string with Windows DPAPI (CryptUnprotectData).
+// Returns TRUE on successful decryption into out_wstr, or FALSE if not dpapi-prefixed or decryption failed.
+static BOOL dpapi_decrypt_wstr(const char* str, wchar_t* out_wstr, size_t out_cch)
+{
+    if (!str || strncmp(str, DPAPI_PREFIX, DPAPI_PREFIX_LEN) != 0 || out_cch == 0) return FALSE;
+
+    const char* b64 = str + DPAPI_PREFIX_LEN;
+    DWORD bin_len = 0;
+    if (!CryptStringToBinaryA(b64, 0, CRYPT_STRING_BASE64, NULL, &bin_len, NULL, NULL) || bin_len == 0)
+    {
+        return FALSE;
+    }
+
+    BYTE* bin_data = (BYTE*)malloc(bin_len);
+    if (!bin_data) return FALSE;
+
+    if (!CryptStringToBinaryA(b64, 0, CRYPT_STRING_BASE64, bin_data, &bin_len, NULL, NULL))
+    {
+        free(bin_data);
+        return FALSE;
+    }
+
+    DATA_BLOB in_blob;
+    DATA_BLOB out_blob;
+    in_blob.pbData = bin_data;
+    in_blob.cbData = bin_len;
+
+    BOOL ok = FALSE;
+    if (CryptUnprotectData(&in_blob, NULL, NULL, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &out_blob))
+    {
+        if (out_blob.cbData >= sizeof(wchar_t))
+        {
+            const wchar_t* decrypted = (const wchar_t*)out_blob.pbData;
+            wcsncpy_s(out_wstr, out_cch, decrypted, _TRUNCATE);
+            ok = TRUE;
+        }
+        LocalFree(out_blob.pbData);
+    }
+
+    free(bin_data);
+    return ok;
+}
 
 // UTF-8 <-> UTF-16
 static void u2w(const char* s, wchar_t* out, int cch)
@@ -521,7 +609,11 @@ void PB_ProfileLoad(const wchar_t* name, PBProfile* p)
                 u2w(json_str(c, "Host", ""), cf->host, 128);
                 u2w(json_str(c, "Port", ""), cf->port, 16);
                 u2w(json_str(c, "Username", ""), cf->user, 128);
-                u2w(json_str(c, "Password", ""), cf->pass, 128);
+                const char* passStr = json_str(c, "Password", "");
+                if (!dpapi_decrypt_wstr(passStr, cf->pass, 128))
+                {
+                    u2w(passStr, cf->pass, 128);
+                }
                 cf->sendDomain = json_bool(c, "SendDomainToProxy", 1);   // default on
             }
 
@@ -580,7 +672,11 @@ void PB_ProfileLoad(const wchar_t* name, PBProfile* p)
             p->pecSync.intervalMinutes = (int)json_long(sync, "intervalMinutes", 15);
             if (p->pecSync.intervalMinutes <= 0) p->pecSync.intervalMinutes = 15;
             u2w(json_str(sync, "pairedExtension", ""), p->pecSync.pairedExtension, 128);
-            u2w(json_str(sync, "instanceToken", ""), p->pecSync.instanceToken, 256);
+            const char* instTokStr = json_str(sync, "instanceToken", "");
+            if (!dpapi_decrypt_wstr(instTokStr, p->pecSync.instanceToken, 256))
+            {
+                u2w(instTokStr, p->pecSync.instanceToken, 256);
+            }
         }
 
         JVal* th = json_get(root, "Theme");
@@ -641,7 +737,25 @@ BOOL PB_ProfileSave(const wchar_t* name, const PBProfile* p)
         put_kv_str(&b, "      ", "Host", c->host, ",\n");
         put_kv_str(&b, "      ", "Port", c->port, ",\n");
         put_kv_str(&b, "      ", "Username", c->user, ",\n");
-        put_kv_str(&b, "      ", "Password", c->pass, ",\n");
+        if (c->pass[0])
+        {
+            char* encPass = dpapi_encrypt_wstr(c->pass);
+            if (encPass)
+            {
+                sb_put(&b, "      \"Password\": \"");
+                sb_put(&b, encPass);
+                sb_put(&b, "\",\n");
+                free(encPass);
+            }
+            else
+            {
+                put_kv_str(&b, "      ", "Password", c->pass, ",\n");
+            }
+        }
+        else
+        {
+            put_kv_str(&b, "      ", "Password", c->pass, ",\n");
+        }
         sb_put(&b, "      \"SendDomainToProxy\": "); sb_put(&b, c->sendDomain ? "true" : "false"); sb_put(&b, "\n");
         sb_put(&b, "    }");
     }
@@ -704,7 +818,18 @@ BOOL PB_ProfileSave(const wchar_t* name, const PBProfile* p)
         if (p->pecSync.instanceToken[0])
         {
             sb_put(&b, ",\n");
-            put_kv_str(&b, "    ", "instanceToken", p->pecSync.instanceToken, "");
+            char* encTok = dpapi_encrypt_wstr(p->pecSync.instanceToken);
+            if (encTok)
+            {
+                sb_put(&b, "    \"instanceToken\": \"");
+                sb_put(&b, encTok);
+                sb_put(&b, "\"");
+                free(encTok);
+            }
+            else
+            {
+                put_kv_str(&b, "    ", "instanceToken", p->pecSync.instanceToken, "");
+            }
         }
         sb_put(&b, "\n  }");
     }

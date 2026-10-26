@@ -613,14 +613,15 @@ static DWORD WINAPI connection_handler_impl(LPVOID arg)
 
     free(config);
 
-    // Look up the proxy config for this connection
-    PROXY_CONFIG *proxy = find_proxy_config(proxy_config_id);
-    if (proxy == NULL || proxy->host[0] == '\0' || proxy->port == 0)
+    // Look up the proxy config for this connection (snapshot by value to avoid raw pointer race)
+    PROXY_CONFIG proxy_copy;
+    if (!get_proxy_config_snapshot(proxy_config_id, &proxy_copy) || proxy_copy.host[0] == '\0' || proxy_copy.port == 0)
     {
         log_message("[RELAY] No proxy config (id=%u) - dropping connection", proxy_config_id);
         closesocket(client_sock);
         return 1;
     }
+    PROXY_CONFIG *proxy = &proxy_copy;
 
     // Connect to proxy, use cached resolved IP to avoid DNS per connection
     UINT32 proxy_ip = proxy->resolved_ip ? proxy->resolved_ip : resolve_hostname(proxy->host);

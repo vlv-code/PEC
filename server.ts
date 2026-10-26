@@ -52,6 +52,12 @@ const DEFAULT_TOKEN = "corp-proxy-secret-token-change-me";
 const EXT_SHARED_TOKEN = process.env.EXT_SHARED_TOKEN || DEFAULT_TOKEN;
 const isDefaultTokenInUse = EXT_SHARED_TOKEN === DEFAULT_TOKEN;
 
+if (process.env.NODE_ENV === "production" && isDefaultTokenInUse) {
+  console.error("[FATAL SECURITY ERROR] EXT_SHARED_TOKEN is set to the default insecure value in production!");
+  console.error("Please configure a strong random EXT_SHARED_TOKEN in .env or environment variables.");
+  process.exit(1);
+}
+
 // Two-token model: the fleet token (EXT_SHARED_TOKEN) is low-privilege - it
 // authenticates extensions and is intentionally baked into CRX/GPO artifacts.
 // The admin token (ADMIN_TOKEN) never leaves the server and unlocks every
@@ -175,6 +181,23 @@ app.use(securityHeadersMiddleware);
 app.use(safeCorsMiddleware);
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// Enforce max 16KB payload on sync endpoints (M-1)
+app.use(["/api/sync", "/api/app/sync"], (req: Request, res: Response, next: NextFunction) => {
+  const contentLength = Number(req.headers["content-length"] || 0);
+  let bodyTooLarge = false;
+  if (req.body && typeof req.body === "object") {
+    try {
+      if (JSON.stringify(req.body).length > 16384) {
+        bodyTooLarge = true;
+      }
+    } catch {}
+  }
+  if (contentLength > 16384 || bodyTooLarge) {
+    return res.status(413).json({ error: "Payload Too Large: max 16kb allowed" });
+  }
+  next();
+});
 
 // Authentication gate for management APIs. Two ways in:
 //   1. X-Admin-Token bearer header (scripts, automation, API testers);

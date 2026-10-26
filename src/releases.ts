@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { ReleaseItem, ReleasesMetaStore } from "./types.js";
 import { readJsonStore, writeJsonAtomic } from "./jsonStore.js";
 import { getReleasesMetaPath, getReleasesDir } from "./storage.js";
@@ -108,6 +109,19 @@ export function setActiveRelease(type: "extension" | "app", version: string): { 
     throw new Error(`Release not found: ${type} ${cleanVersion}`);
   }
 
+  // Verify SHA-256 integrity of target release file before activating or copying (M-3)
+  if (targetRelease.filePath && fs.existsSync(targetRelease.filePath) && targetRelease.sha256) {
+    if (/^[0-9a-fA-F]{64}$/.test(targetRelease.sha256)) {
+      const fileBuf = fs.readFileSync(targetRelease.filePath);
+      const actualHash = crypto.createHash("sha256").update(fileBuf).digest("hex");
+      if (actualHash.toLowerCase() !== targetRelease.sha256.toLowerCase()) {
+        throw new Error(
+          `Integrity check failed: SHA-256 mismatch for release ${type} ${cleanVersion} (expected ${targetRelease.sha256}, got ${actualHash})`
+        );
+      }
+    }
+  }
+
   if (type === "extension") {
     store.activeExtensionVersion = cleanVersion;
   } else {
@@ -200,3 +214,5 @@ export function deleteRelease(type: "extension" | "app", version: string): boole
   persistStore(store);
   return true;
 }
+
+export const activateRelease = setActiveRelease;

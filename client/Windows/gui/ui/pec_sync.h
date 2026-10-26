@@ -6,6 +6,37 @@
 #define APP_VERSION_STR "2.2.0"
 #endif
 
+#ifndef PEC_APP_VERSION
+#define PEC_APP_VERSION L"2.2.0"
+#endif
+
+static void PecParseVersion(const wchar_t* s, int out[3])
+{
+    out[0] = out[1] = out[2] = 0;
+    int i = 0;
+    while (*s && (*s < L'0' || *s > L'9')) s++; // skip 'v' etc.
+    while (*s && i < 3)
+    {
+        if (*s >= L'0' && *s <= L'9')
+        {
+            int n = 0;
+            while (*s >= L'0' && *s <= L'9') { n = n * 10 + (*s - L'0'); s++; }
+            out[i++] = n;
+        }
+        else if (*s == L'.') s++;
+        else break;
+    }
+}
+
+static int PecCompareVersion(const int a[3], const int b[3])
+{
+    for (int i = 0; i < 3; i++)
+    {
+        if (a[i] != b[i]) return (a[i] < b[i]) ? -1 : 1;
+    }
+    return 0;
+}
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <winhttp.h>
@@ -533,11 +564,21 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
             if (WinHttpCrackUrl(g_profile.pecSync.serverUrl, 0, 0, &uc))
             {
                 BOOL isHttps = (uc.nScheme == INTERNET_SCHEME_HTTPS);
-                HINTERNET hSession = WinHttpOpen(L"PEC-App-SyncClient/2.1",
-                    WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-
-                if (hSession)
+                BOOL isLoopback = (_wcsicmp(host, L"localhost") == 0 || _wcsicmp(host, L"127.0.0.1") == 0 ||
+                                   _wcsicmp(host, L"::1") == 0 || _wcsicmp(host, L"[::1]") == 0);
+                if (!isHttps && !isLoopback)
                 {
+                    g_lastSyncError = ERROR_ACCESS_DENIED;
+                    _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Ошибка: требуется HTTPS для удаленного сервера");
+                    PB_WriteAppLog("PecSync: Insecure HTTP rejected for remote host %ls (HTTPS required)", host);
+                }
+                else
+                {
+                    HINTERNET hSession = WinHttpOpen(L"PEC-App-SyncClient/2.1",
+                        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+
+                    if (hSession)
+                    {
                     HINTERNET hConnect = WinHttpConnect(hSession, host, uc.nPort, 0);
                     if (hConnect)
                     {
@@ -868,13 +909,32 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                                 const char* dlUrl = json_str(upd, "downloadUrl", "");
                                                 if (hasUpd && latestVer[0] != 0 && g_hSyncMainWnd)
                                                 {
-                                                    UpdInfo* info = (UpdInfo*)calloc(1, sizeof(UpdInfo));
-                                                    if (info)
+                                                    wchar_t wLatest[32] = { 0 };
+                                                    MultiByteToWideChar(CP_UTF8, 0, latestVer, -1, wLatest, 32);
+
+                                                    int curVer[3] = { 0 }, latVer[3] = { 0 };
+                                                    PecParseVersion(PEC_APP_VERSION, curVer);
+                                                    PecParseVersion(wLatest, latVer);
+
+                                                    if (PecCompareVersion(latVer, curVer) <= 0)
                                                     {
-                                                        info->available = TRUE;
-                                                        MultiByteToWideChar(CP_UTF8, 0, latestVer, -1, info->latest, 32);
-                                                        MultiByteToWideChar(CP_UTF8, 0, dlUrl, -1, info->download, 512);
-                                                        PostMessageW(g_hSyncMainWnd, WM_APP_UPDATE, 1, (LPARAM)info);
+                                                        PB_WriteAppLog("PecSync: Update offer ignored: version not newer (latest: %ls, current: %ls)", wLatest, PEC_APP_VERSION);
+                                                    }
+                                                    else
+                                                    {
+                                                        UpdInfo* info = (UpdInfo*)calloc(1, sizeof(UpdInfo));
+                                                        if (info)
+                                                        {
+                                                            info->available = TRUE;
+                                                            lstrcpynW(info->latest, wLatest, 32);
+                                                            MultiByteToWideChar(CP_UTF8, 0, dlUrl, -1, info->download, 512);
+                                                            const char* sha = json_str(upd, "sha256", "");
+                                                            if (sha && sha[0] != 0)
+                                                            {
+                                                                MultiByteToWideChar(CP_UTF8, 0, sha, -1, info->sha256, 65);
+                                                            }
+                                                            PostMessageW(g_hSyncMainWnd, WM_APP_UPDATE, 1, (LPARAM)info);
+                                                        }
                                                     }
                                                 }
                                             }
@@ -923,6 +983,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                     DWORD err = GetLastError();
                     g_lastSyncError = err;
                     PB_WriteAppLog("PecSync: WinHttpOpen failed (err %lu)", err);
+                }
                 }
             }
             else

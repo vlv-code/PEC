@@ -118,23 +118,33 @@ cp .env.example .env
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Port for the HTTP server to listen on |
 | `HOST` | `0.0.0.0` | Network interface binding |
-| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Critical:** Fleet token required by Chrome extensions in `X-Ext-Token` (low privilege - baked into CRX/GPO artifacts) |
+| `PUBLIC_BASE_URL` | *(empty)* | Public URL baked into updates.xml / GPO artifacts; prevents Host-header poisoning. **Required in production** (validated: bare origin, no path/trailing slash) |
+| `TRUST_PROXY` | `false` | Client IP resolution: `false` (direct exposure, X-Forwarded-For ignored), `1` (one reverse-proxy hop), `true` (trust all - trusted networks only) |
+| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Critical:** Fleet token required by Chrome extensions and desktop clients in `X-Ext-Token` / `X-Fleet-Token` (low privilege - baked into CRX/GPO artifacts) |
 | `ADMIN_TOKEN` | *(none; required in production)* | **Critical:** Admin token for ALL management APIs (`X-Admin-Token`). Must be distinct from `EXT_SHARED_TOKEN`; never baked into artifacts |
 | `ADMIN_USERNAME` | `admin` | Dashboard login username (bootstrap) |
 | `ADMIN_PASSWORD` | *(falls back to `ADMIN_TOKEN`)* | Initial dashboard login password; change it in the dashboard settings — credentials persist as a scrypt hash in `DASHBOARD_AUTH_PATH` |
-| `DASHBOARD_AUTH_PATH` | `./dashboard_auth.json` | Path to the dashboard credential store (scrypt-hashed, never plaintext) |
-| `CREDS_STORE` | `./current_creds.json` | Path to persistent credentials JSON store |
-| `PROXY_CONFIG_PATH` | `./proxy_config.json` | Path to saved proxy host, port, and bypass config |
+| `PAC_REQUIRE_SIGNATURE` | `false` | Enforce cryptographic HMAC-SHA256 signature verification on `/proxy.pac` requests |
+| `PAC_SIGNING_SECRET` | *(falls back to `EXT_SHARED_TOKEN`)* | Secret HMAC key used for signing and verifying `/proxy.pac` requests |
+| `PEC_PRIVATE_KEY_PATH` | *(empty)* | Path to RSA private key PEM file for signing CRX packages (defaults to auto-generating `extension/key.pem`) |
+| `PEC_PRIVATE_KEY_PEM` | *(empty)* | Inline RSA private key PEM string for signing CRX packages (container environment alternative) |
+| `DATA_DIR` | `./data` | Base directory for runtime persistent state files |
+| `CREDS_STORE` | `./data/current_creds.json` | Path to persistent credentials JSON store |
+| `DASHBOARD_AUTH_PATH` | `./data/dashboard_auth.json` | Path to the dashboard credential store (scrypt-hashed, never plaintext) |
+| `PROXY_CONFIG_PATH` | `./data/proxy_config.json` | Path to saved proxy host, port, and bypass config |
+| `ROUTING_PROFILES_PATH` | `./data/routing_profiles.json` | Path to routing profiles store |
+| `INSTANCES_META_PATH` | `./data/instances_meta.json` | Path to connected client instances metadata store |
+| `ROTATION_CONFIG_PATH` | `./data/rotation_config.json` | Path to rotation scheduler config |
+| `ROTATION_HISTORY_PATH` | `./data/rotation_history.json` | Path to rotation history audit log |
+| `BUILDER_CONFIG` | `./data/extension_build_config.json` | Path to extension build configuration store |
 | `PROXY_HOST` | `10.0.0.1` | Default proxy host IP or domain name |
 | `PROXY_PORT` | `10809` | Default proxy port |
+| `ROTATION_INTERVAL_MIN` | `1440` | Default interval for proxy credential rotation in minutes (24 hours) |
 | `XUI_PANEL_URL` | `https://3xui-host:2053/basepath` | Base URL of the 3x-ui management panel |
 | `XUI_ADMIN_USER` | `admin` | Admin username for 3x-ui panel login |
 | `XUI_ADMIN_PASS` | `change-me` | Admin password for 3x-ui panel login |
 | `XUI_INBOUND_REMARK` | `squid-in` | Remark of the inbound proxy to rotate |
-| `TRUST_PROXY` | `false` | Client IP resolution: `false` (direct exposure, X-Forwarded-For ignored), `1` (one reverse-proxy hop), `true` (trust all - trusted networks only) |
-| `PUBLIC_BASE_URL` | *(empty)* | Public URL baked into updates.xml / GPO artifacts; prevents Host-header poisoning. **Required in production** (validated: bare origin, no path/trailing slash) |
-| `ROTATION_CONFIG_PATH` | `./rotation_config.json` | Path to rotation scheduler config |
-| `ROUTING_PROFILES_PATH` | `./routing_profiles.json` | Path to routing profiles store |
+| `UPDATE_CHECK_REPO` | `vlv-code/PEC` | GitHub repository used for version update checks |
 
 > ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` and set a distinct `ADMIN_TOKEN` before deploying to a production or public environment! The dashboard login password and the management APIs authenticate with `ADMIN_TOKEN`, not with the fleet token.
 >

@@ -14,6 +14,14 @@
 
 #define UPD_FEED_URL  L"/api/releases"
 
+#ifndef PEC_APP_VERSION
+#ifdef APP_VERSION
+#define PEC_APP_VERSION APP_VERSION
+#else
+#define PEC_APP_VERSION L"2.2.0"
+#endif
+#endif
+
 #define WM_APP_UPDATE  (WM_APP + 6)   // check worker -> main window (result)
 #define WM_APP_DLPROG  (WM_APP + 7)   // download worker -> dialog (percent)
 #define WM_APP_DLDONE  (WM_APP + 8)   // download worker -> dialog (success + job)
@@ -186,6 +194,17 @@ static BOOL UpdDownload(const wchar_t* url, const wchar_t* dest, HWND dlg)
 {
     HINTERNET s, c, r = UpdOpenGet(url, &s, &c);
     if (!r) return FALSE;
+    DWORD statusCode = 0, scSz = sizeof(statusCode);
+    if (WinHttpQueryHeaders(r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                            WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &scSz, WINHTTP_NO_HEADER_INDEX))
+    {
+        if (statusCode != 200)
+        {
+            PB_WriteAppLog("[UPDATE ERROR] Download failed with HTTP status %lu", statusCode);
+            UpdCloseGet(s, c, r);
+            return FALSE;
+        }
+    }
     BOOL ok = FALSE;
     DWORD total = 0, tsz = sizeof(total);
     WinHttpQueryHeaders(r, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
@@ -241,9 +260,17 @@ static BOOL UpdCheck(UpdInfo* out)
         if (date)  U8W(date,   out->date,     32);
         if (sha)   U8W(sha,    out->sha256,   65);
         int cur[3], lat[3];
-        UpdParseVer(APP_VERSION, cur);
+        UpdParseVer(PEC_APP_VERSION, cur);
         UpdParseVer(out->latest, lat);
-        out->available = (out->download[0] != 0) && (UpdVerCmp(lat, cur) > 0);
+        if (UpdVerCmp(lat, cur) <= 0)
+        {
+            PB_WriteAppLog("Update offer ignored: version not newer (latest: %ls, current: %ls)", out->latest, PEC_APP_VERSION);
+            out->available = FALSE;
+        }
+        else
+        {
+            out->available = (out->download[0] != 0);
+        }
         ok = TRUE;
     }
     json_free(root);
@@ -295,15 +322,22 @@ INT_PTR CALLBACK UpdateDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     case WM_APP_DLDONE:
     {
         UpdDl* d = (UpdDl*)lp;
+        if (!d) return TRUE;
         if (wp)   // success: launch the installer and quit so it can replace files
         {
             UpdInfo* info = (UpdInfo*)GetWindowLongPtrW(dlg, GWLP_USERDATA);
-            if (info && info->sha256[0] != 0 && !UpdVerifyFileSha256(d->dest, info->sha256))
+            BOOL shaValid = FALSE;
+            if (info && wcslen(info->sha256) == 64)
+            {
+                shaValid = UpdVerifyFileSha256(d->dest, info->sha256);
+            }
+
+            if (!shaValid)
             {
                 DeleteFileW(d->dest);
-                PB_WriteAppLog("[UPDATE ERROR] SHA-256 mismatch for downloaded update! Aborting.");
-                MessageBoxW(dlg, L"Ошибка проверки целостности обновления (SHA-256 mismatch). Файл удален.", L"Ошибка обновления", MB_ICONERROR);
-                SetDlgItemTextW(dlg, IDC_UP_STATUS, L"Ошибка проверки целостности (SHA-256 mismatch)");
+                PB_WriteAppLog("[UPDATE ERROR] SHA-256 verification failed or missing! Aborting update execution.");
+                MessageBoxW(dlg, L"Ошибка проверки подлинности обновления (SHA-256 отсутствует или не совпадает). Файл удален.", L"Ошибка обновления", MB_ICONERROR);
+                SetDlgItemTextW(dlg, IDC_UP_STATUS, L"Ошибка проверки целостности (SHA-256)");
                 EnableWindow(GetDlgItem(dlg, IDC_UP_NOW), TRUE);
                 free(d);
                 return TRUE;

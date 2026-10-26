@@ -5,6 +5,9 @@
   "license": "AGPL-3.0-or-later",
   "author": "PEC Team (https://github.com/vlv-code/PEC)",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "build": "npm run build:server",
@@ -21,6 +24,7 @@
   "dependencies": {
     "@types/adm-zip": "^0.5.8",
     "adm-zip": "^0.6.1",
+    "body-parser": "^1.20.9",
     "express": "^4.21.2"
   },
   "devDependencies": {

@@ -2,9 +2,6 @@
 
 Universal proxy client for Windows applications - route any application through SOCKS5/HTTP proxies without modifying the application.
 
-> **ProxyBridge is a proxy client - it routes your traffic. [InterceptSuite](https://interceptsuite.com) is the MITM SOCKS5 proxy server that lets you inspect it.**
-> Point ProxyBridge at InterceptSuite to intercept TCP, UDP, StartTLS, DTLS and TLS traffic from any application. [**Try InterceptSuite →**](https://interceptsuite.com)
-
 ## Table of Contents
 
 - [ProxyBridge for Windows](#proxybridge-for-windows)
@@ -30,7 +27,6 @@ Universal proxy client for Windows applications - route any application through 
     - [Manual Build - DLL (MSVC)](#manual-build---dll-msvc)
     - [Manual Build - DLL (GCC / MinGW-w64)](#manual-build---dll-gcc--mingw-w64)
     - [Manual Build - CLI (MSVC)](#manual-build---cli-msvc)
-  - [InterceptSuite](#interceptsuite)
   - [License](#license)
 
 ## Installation
@@ -50,7 +46,7 @@ Universal proxy client for Windows applications - route any application through 
 
 ### GUI Application
 
-Launch `ProxyBridge.exe` with Administrator privileges for an intuitive graphical interface.
+Launch `PEC-App.exe` with Administrator privileges for an intuitive graphical interface.
 
 #### Proxy Settings
 
@@ -242,7 +238,7 @@ saved per profile. It only changes what is listed: rules are applied to the same
 
 ### Command Line Interface (CLI)
 
-`ProxyBridge_CLI.exe` is a lightweight native CLI that loads a `.pbprofile` exported from the GUI and runs ProxyBridge headlessly - no GUI required.
+`PEC-CLI.exe` is a lightweight native CLI that loads a `.pbprofile` exported from the GUI and runs ProxyBridge headlessly - no GUI required.
 
 #### Profile Format
 
@@ -262,22 +258,22 @@ The CLI reads `.pbprofile` files exported directly from the GUI (**File → Expo
 
 ```powershell
 # Run a profile (requires Administrator)
-ProxyBridge_CLI.exe --profile C:\Users\user\myconfig.pbprofile
+PEC-CLI.exe --profile C:\Users\user\myconfig.pbprofile
 
 # Run with connection logging
-ProxyBridge_CLI.exe --profile myconfig.pbprofile --verbose 2
+PEC-CLI.exe --profile myconfig.pbprofile --verbose 2
 
 # Run with full log and connection output
-ProxyBridge_CLI.exe --profile myconfig.pbprofile --verbose 3
+PEC-CLI.exe --profile myconfig.pbprofile --verbose 3
 
 # Check for updates (does not require Administrator)
-ProxyBridge_CLI.exe --update
+PEC-CLI.exe --update
 
 # Show version
-ProxyBridge_CLI.exe --version
+PEC-CLI.exe --version
 
 # Show help
-ProxyBridge_CLI.exe --help
+PEC-CLI.exe --help
 ```
 
 #### Command Line Options
@@ -448,8 +444,8 @@ cd Windows
 The script automatically:
 - Locates your Visual Studio installation via `vswhere`
 - Compiles `ProxyBridgeCore.dll` (C, MSVC, WinDivert)
-- Compiles `ProxyBridge_CLI.exe` (C, MSVC, native)
-- Builds `ProxyBridge.exe` (C GUI, MSVC, self-contained)
+- Compiles `PEC-CLI.exe` (C, MSVC, native)
+- Builds `PEC-App.exe` (C GUI, MSVC, self-contained)
 - Copies all outputs to `Windows\output\`
 
 ### Manual Build - DLL (MSVC)
@@ -481,14 +477,8 @@ cl /O2 /W4 /D_WIN32_WINNT=0x0601 /DNDEBUG /GS /guard:cf ^
    cli\main.c ^
    /link /RELEASE /DYNAMICBASE /NXCOMPAT /SUBSYSTEM:CONSOLE ^
    winhttp.lib shell32.lib advapi32.lib ^
-   /OUT:ProxyBridge_CLI.exe
+   /OUT:PEC-CLI.exe
 ```
-
-## InterceptSuite
-
-ProxyBridge routes your traffic through a SOCKS5 or HTTP proxy. **[InterceptSuite](https://interceptsuite.com)** is the MITM SOCKS5 proxy server to pair it with - intercept and analyze TCP, UDP, StartTLS, DTLS, TLS traffic from any application without modifying it.
-
-[**Try InterceptSuite →**](https://interceptsuite.com)
 
 ## License
 

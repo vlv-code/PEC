@@ -4,7 +4,8 @@ set -e
 
 GITHUB_REPO="PEC/PEC-App"
 GITHUB_API="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
-TEMP_DIR="/tmp/pec-app-install-$$"
+TEMP_DIR=$(mktemp -d /tmp/pec-app-install.XXXXXX)
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 echo ""
 echo "==================================="
@@ -100,10 +101,65 @@ download_latest_release() {
 
     echo "Download complete"
 
-    # Extract archive
+    # Verify SHA-256 checksum if available
+    local checksums_url=""
+    if command -v jq &> /dev/null; then
+        checksums_url=$(echo "$api_response" | jq -r --arg fn "$filename" '.assets[] | select(.name == ($fn + ".sha256") or .name == "checksums.txt" or .name == "SHA256SUMS" or (.name | test("(?i)sha256.*\\.txt$"))) | .browser_download_url' | head -1)
+    else
+        checksums_url=$(echo "$api_response" | grep -o '"browser_download_url": *"[^"]*\(checksums\.txt\|SHA256SUMS\|sha256\)[^"]*"' | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
+    fi
+
+    if [ -n "$checksums_url" ]; then
+        echo "Downloading checksum file: $(basename "$checksums_url")..."
+        local checksum_file
+        checksum_file=$(basename "$checksums_url")
+        if curl -sL -o "$checksum_file" "$checksums_url"; then
+            echo "Verifying SHA-256 checksum..."
+            local expected_hash=""
+            if grep -F "$filename" "$checksum_file" &> /dev/null; then
+                local match_line
+                match_line=$(grep -F "$filename" "$checksum_file" | head -1)
+                if echo "$match_line" | grep -q "="; then
+                    expected_hash=$(echo "$match_line" | awk -F'=' '{print $NF}' | tr -d ' \r\n\t')
+                else
+                    expected_hash=$(echo "$match_line" | awk '{print $1}' | tr -d ' \r\n\t')
+                fi
+            elif [ "$(wc -w < "$checksum_file" 2>/dev/null | tr -d ' ')" -eq 1 ]; then
+                expected_hash=$(tr -d ' \r\n\t' < "$checksum_file")
+            fi
+
+            if [ -n "$expected_hash" ]; then
+                expected_hash=$(echo "$expected_hash" | tr '[:upper:]' '[:lower:]')
+                local actual_hash=""
+                if command -v sha256sum &> /dev/null; then
+                    actual_hash=$(sha256sum "$filename" | awk '{print $1}')
+                elif command -v shasum &> /dev/null; then
+                    actual_hash=$(shasum -a 256 "$filename" | awk '{print $1}')
+                fi
+
+                if [ -n "$actual_hash" ]; then
+                    actual_hash=$(echo "$actual_hash" | tr '[:upper:]' '[:lower:]')
+                    if [ "$actual_hash" = "$expected_hash" ]; then
+                        echo "SHA-256 verified successfully: $actual_hash"
+                    else
+                        echo "ERROR: SHA-256 checksum mismatch for $filename"
+                        echo "  Expected: $expected_hash"
+                        echo "  Actual:   $actual_hash"
+                        exit 1
+                    fi
+                else
+                    echo "WARNING: Neither sha256sum nor shasum found, skipping checksum verification"
+                fi
+            else
+                echo "WARNING: Could not parse checksum from $checksum_file, skipping verification"
+            fi
+        fi
+    fi
+
+    # Extract archive safely
     echo ""
     echo "Extracting archive..."
-    if ! tar -xzf "$filename"; then
+    if ! tar -xzf "$filename" --no-same-owner --no-same-permissions; then
         echo "ERROR: Failed to extract archive"
         exit 1
     fi
@@ -340,7 +396,7 @@ main() {
     echo ""
 }
 
-# Trap errors and cleanup
-trap 'echo ""; echo "ERROR: Installation failed. Cleaning up..."; rm -rf "$TEMP_DIR"; exit 1' ERR
+# Trap errors
+trap 'echo ""; echo "ERROR: Installation failed."; exit 1' ERR
 
 main

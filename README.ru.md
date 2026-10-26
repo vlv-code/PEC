@@ -118,23 +118,33 @@ cp .env.example .env
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Порт, на котором запускается веб-сервер |
 | `HOST` | `0.0.0.0` | Сетевой интерфейс прослушивания |
-| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Важно:** Fleet-токен расширений (заголовок `X-Ext-Token`), низкие привилегии — зашивается в CRX/GPO-артефакты |
+| `PUBLIC_BASE_URL` | *(пусто)* | Публичный URL сервера в updates.xml / GPO-артефактах; защищает от Host-header poisoning. **Обязателен в prod** (валидация: только origin, без пути и слэша) |
+| `TRUST_PROXY` | `false` | Режим работы за reverse-proxy: `false` (прямой доступ), `1` (один хоп прокси), `true` (доверять заголовкам X-Forwarded-For) |
+| `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Важно:** Fleet-токен расширений и клиентов (заголовок `X-Ext-Token` / `X-Fleet-Token`), низкие привилегии — зашивается в CRX/GPO-артефакты |
 | `ADMIN_TOKEN` | *(нет; обязателен в prod)* | **Важно:** Админ-токен для ВСЕХ management-API (`X-Admin-Token`). Должен отличаться от `EXT_SHARED_TOKEN`; никогда не попадает в артефакты |
 | `ADMIN_USERNAME` | `admin` | Логин администратора для входа в веб-панель (bootstrap) |
 | `ADMIN_PASSWORD` | *(fallback на `ADMIN_TOKEN`)* | Начальный пароль веб-панели; сохраняется в виде scrypt-хеша в `DASHBOARD_AUTH_PATH` |
-| `DASHBOARD_AUTH_PATH` | `./dashboard_auth.json` | Путь к хранилищу учетных данных веб-панели (scrypt-хеш) |
-| `TRUST_PROXY` | `false` | Режим работы за reverse-proxy: `false` (прямой доступ), `1` (один хоп прокси), `true` (доверять заголовкам X-Forwarded-For) |
-| `ROTATION_CONFIG_PATH` | `./rotation_config.json` | Путь к конфигурации планировщика ротации |
-| `ROUTING_PROFILES_PATH` | `./routing_profiles.json` | Путь к хранилищу профилей маршрутизации |
-| `PUBLIC_BASE_URL` | *(пусто)* | Публичный URL сервера в updates.xml / GPO-артефактах; защищает от Host-header poisoning. **Обязателен в prod** (валидация: только origin, без пути и слэша) |
-| `CREDS_STORE` | `./current_creds.json` | Путь к файлу актуальных учетных данных |
-| `PROXY_CONFIG_PATH` | `./proxy_config.json` | Путь к сохраненным параметрам прокси |
+| `PAC_REQUIRE_SIGNATURE` | `false` | Требовать проверку криптографической HMAC-SHA256 подписи для запросов `/proxy.pac` |
+| `PAC_SIGNING_SECRET` | *(fallback на `EXT_SHARED_TOKEN`)* | Секретный HMAC-ключ для генерации и валидации подписей запросов `/proxy.pac` |
+| `PEC_PRIVATE_KEY_PATH` | *(пусто)* | Путь к файлу закрытого ключа RSA (.pem) для подписи CRX-пакетов расширения (по умолчанию генерируется `extension/key.pem`) |
+| `PEC_PRIVATE_KEY_PEM` | *(пусто)* | Содержимое RSA закрытого ключа в формате PEM одной строкой (для сред контейнеризации) |
+| `DATA_DIR` | `./data` | Базовый каталог для постоянных файлов состояния и настроек |
+| `CREDS_STORE` | `./data/current_creds.json` | Путь к файлу актуальных учетных данных прокси |
+| `DASHBOARD_AUTH_PATH` | `./data/dashboard_auth.json` | Путь к хранилищу учетных данных веб-панели (scrypt-хеш, не в открытом виде) |
+| `PROXY_CONFIG_PATH` | `./data/proxy_config.json` | Путь к сохраненным параметрам прокси |
+| `ROUTING_PROFILES_PATH` | `./data/routing_profiles.json` | Путь к хранилищу профилей маршрутизации |
+| `INSTANCES_META_PATH` | `./data/instances_meta.json` | Путь к хранилищу метаданных подключенных клиентских инстансов |
+| `ROTATION_CONFIG_PATH` | `./data/rotation_config.json` | Путь к конфигурации планировщика ротации |
+| `ROTATION_HISTORY_PATH` | `./data/rotation_history.json` | Путь к журналу истории ротаций учетных данных |
+| `BUILDER_CONFIG` | `./data/extension_build_config.json` | Путь к файлу конфигурации сборки браузерного расширения |
 | `PROXY_HOST` | `10.0.0.1` | Хост/IP корпоративного прокси |
 | `PROXY_PORT` | `10809` | Порт корпоративного прокси |
-| `XUI_PANEL_URL` | `https://3xui-host:2053/basepath` | URL панели 3x-ui |
+| `ROTATION_INTERVAL_MIN` | `1440` | Интервал автоматической ротации учетных данных прокси в минутах (24 часа) |
+| `XUI_PANEL_URL` | `https://3xui-host:2053/basepath` | URL панели управления 3x-ui |
 | `XUI_ADMIN_USER` | `admin` | Логин администратора 3x-ui |
 | `XUI_ADMIN_PASS` | `change-me` | Пароль администратора 3x-ui |
-| `XUI_INBOUND_REMARK` | `squid-in` | Примечание (Remark) целевого инбаунда |
+| `XUI_INBOUND_REMARK` | `squid-in` | Примечание (Remark) целевого инбаунда для ротации |
+| `UPDATE_CHECK_REPO` | `vlv-code/PEC` | Репозиторий GitHub для проверки обновлений версий |
 
 > ⚠️ **Предупреждение по безопасности:** Обязательно замените `EXT_SHARED_TOKEN` и задайте отдельный `ADMIN_TOKEN` перед запуском в рабочей среде! Дашборд и management-API авторизуются через `ADMIN_TOKEN` (заголовок `X-Admin-Token`), а не через fleet-токен.
 >
@@ -245,6 +255,22 @@ npm test
 # Сборка production бандла
 npm run build
 ```
+
+---
+
+## 🧩 Упаковка и тестирование расширения
+
+### Сборка пакета через CLI
+Для сборки расширения из командной строки:
+```bash
+# Укажите целевой URL сервера (обязательно)
+PEC_SERVER_URL=https://pec.example.corp npm run pack:extension
+```
+Собранные ZIP и CRX артефакты генерируются в каталоге `dist/updates/`, а готовый к установке распакованный каталог — в `dist/unpacked/`.
+
+> [!WARNING]
+> Всегда загружайте **`dist/unpacked/`** в `chrome://extensions` (Режим разработчика -> "Загрузить распакованное расширение").
+> **Никогда не загружайте исходный каталог `extension/` напрямую**: он содержит неподставленные плейсхолдеры сборки (`__PEC_SERVER_BASE__`) и не сможет подключиться к вашему серверу.
 
 ---
 

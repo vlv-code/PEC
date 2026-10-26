@@ -65,6 +65,33 @@ class EnrollmentTracker {
   }
 }
 
+let inMemoryPacSecret: string | null = null;
+
+export function getFallbackPacSecret(): string {
+  if (!inMemoryPacSecret) {
+    inMemoryPacSecret = crypto.randomBytes(32).toString("hex");
+  }
+  return inMemoryPacSecret;
+}
+
+export function resetFallbackPacSecretForTest(): void {
+  inMemoryPacSecret = null;
+}
+
+export function resolvePacSecret(getSharedToken?: () => string): string {
+  const envSecret = typeof process.env.PAC_SIGNING_SECRET === "string" ? process.env.PAC_SIGNING_SECRET.trim() : "";
+  let tokenSecret = "";
+  if (getSharedToken) {
+    try {
+      const t = getSharedToken();
+      if (typeof t === "string") {
+        tokenSecret = t.trim();
+      }
+    } catch {}
+  }
+  return envSecret || tokenSecret || getFallbackPacSecret();
+}
+
 export function createCredsRouter(getSharedToken: () => string): Router {
   const router = Router();
 
@@ -138,6 +165,21 @@ export function createCredsRouter(getSharedToken: () => string): Router {
 
   // POST /api/sync
   router.post("/api/sync", express.json({ limit: "16kb" }), syncLimiter, async (req: Request, res: Response) => {
+    const rawContentLength = req.headers["content-length"];
+    const contentLength = typeof rawContentLength === "string" ? parseInt(rawContentLength, 10) : 0;
+    let bodyTooLarge = false;
+    if (req.body && typeof req.body === "object") {
+      try {
+        const bodyStr = JSON.stringify(req.body);
+        if (Buffer.byteLength(bodyStr, "utf8") > 16384) {
+          bodyTooLarge = true;
+        }
+      } catch {}
+    }
+    if ((Number.isFinite(contentLength) && contentLength > 16384) || bodyTooLarge) {
+      return res.status(413).json({ error: "Payload Too Large: max 16kb allowed" });
+    }
+
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     const clientHost = getClientIp(req);
     const xExtTokenHeader = req.headers["x-ext-token"];
@@ -233,7 +275,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
     }
 
     // Generate tailored PAC URL for this instance or profile (HMAC signed)
-    const pacSecret = process.env.PAC_SIGNING_SECRET || getSharedToken() || "pec-pac-secret";
+    const pacSecret = resolvePacSecret(getSharedToken);
     const { exp, sig } = signPacUrlParams(assignedProfile.id, pacSecret, 86400);
     const pacProxyQuery = effectiveNode ? `&proxyId=${encodeURIComponent(effectiveNode.id)}` : "";
     const pacUrl = `${getBaseUrl(req)}/proxy.pac?profileId=${encodeURIComponent(assignedProfile.id)}&exp=${exp}&sig=${sig}${pacProxyQuery}`;
@@ -315,7 +357,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       const expParam = typeof req.query.exp === "string" ? req.query.exp : "";
       const sigParam = typeof req.query.sig === "string" ? req.query.sig : "";
       const effectiveProfileId = profile?.id || profileId || "";
-      const pacSecret = process.env.PAC_SIGNING_SECRET || getSharedToken() || "pec-pac-secret";
+      const pacSecret = resolvePacSecret(getSharedToken);
       const verifyResult = verifyPacUrlParams(effectiveProfileId, expParam, sigParam, pacSecret);
       if (!verifyResult.valid) {
         recordAudit({

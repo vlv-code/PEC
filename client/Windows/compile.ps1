@@ -201,7 +201,7 @@ if ($success) {
     }
 
     # ── C GUI (MSVC) ─────────────────────────────────────────────────────────
-    # Single self-contained ProxyBridge.exe (~0.5 MB, static CRT) that loads
+    # Single self-contained PEC-App.exe (~0.5 MB, static CRT) that loads
     # ProxyBridgeCore.dll from its own folder. No extra runtime or DLLs.
     Write-Host "`nBuilding C GUI (MSVC)..." -ForegroundColor Green
     if ($script:foundVcvarsPath -and (Test-Path $script:foundVcvarsPath)) {
@@ -228,9 +228,8 @@ if ($success) {
         Pop-Location
 
         if ($guiExit -eq 0 -and (Test-Path "gui\PEC-App.exe")) {
-            Copy-Item "gui\PEC-App.exe" -Destination "$OutputDir\ProxyBridge.exe" -Force
             Move-Item "gui\PEC-App.exe" -Destination "$OutputDir\PEC-App.exe" -Force
-            Write-Host "  C GUI built: PEC-App.exe (and ProxyBridge.exe alias)" -ForegroundColor Gray
+            Write-Host "  C GUI built: PEC-App.exe" -ForegroundColor Gray
             Remove-Item "gui\*.obj","gui\app.res" -Force -ErrorAction SilentlyContinue
         } else {
             Write-Host "  C GUI build failed!" -ForegroundColor Red
@@ -273,7 +272,7 @@ if ($success) {
 
     # ── Build engine service ─────────────────────────────────────────────────
     # ProxyBridgeSvc.exe runs as LocalSystem (registered by the installer) and owns
-    # ProxyBridgeCore.dll / WinDivert, so ProxyBridge.exe itself does not need admin.
+    # ProxyBridgeCore.dll / WinDivert, so PEC-App.exe itself does not need admin.
     Write-Host "`nBuilding service..." -ForegroundColor Green
     if ($script:foundVcvarsPath -and (Test-Path $script:foundVcvarsPath)) {
         $svcArgs = "/nologo /O2 /GL /Gy /W4 /MT /GS /guard:cf /sdl /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /DUNICODE /D_UNICODE " +

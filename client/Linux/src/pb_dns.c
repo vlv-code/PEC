@@ -5,9 +5,72 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "pb_dns.h"
 
 #define BUCKETS 16384
+#define PB_DNS_MAX_PENDING_QIDS 1024
+#define PB_DNS_QID_TIMEOUT_SEC  5
+
+struct pending_qid {
+    uint16_t qid;
+    uint32_t expire_time;
+    bool active;
+};
+
+static struct {
+    pthread_mutex_t lock;
+    struct pending_qid entries[PB_DNS_MAX_PENDING_QIDS];
+    size_t count;
+} Q = { .lock = PTHREAD_MUTEX_INITIALIZER };
+
+void pb_dns_record_query(uint16_t qid)
+{
+    pthread_mutex_lock(&Q.lock);
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint32_t now = (uint32_t)ts.tv_sec;
+
+    int slot = -1;
+    for (size_t i = 0; i < PB_DNS_MAX_PENDING_QIDS; i++) {
+        if (!Q.entries[i].active || (int32_t)(now - Q.entries[i].expire_time) >= 0) {
+            slot = (int)i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        slot = (int)(Q.count % PB_DNS_MAX_PENDING_QIDS);
+    }
+    Q.entries[slot].qid = qid;
+    Q.entries[slot].expire_time = now + PB_DNS_QID_TIMEOUT_SEC;
+    Q.entries[slot].active = true;
+    Q.count++;
+    pthread_mutex_unlock(&Q.lock);
+}
+
+static bool match_and_consume_qid(uint16_t qid)
+{
+    pthread_mutex_lock(&Q.lock);
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint32_t now = (uint32_t)ts.tv_sec;
+    bool matched = false;
+    for (size_t i = 0; i < PB_DNS_MAX_PENDING_QIDS; i++) {
+        if (Q.entries[i].active) {
+            if ((int32_t)(now - Q.entries[i].expire_time) >= 0) {
+                Q.entries[i].active = false;
+                continue;
+            }
+            if (Q.entries[i].qid == qid) {
+                Q.entries[i].active = false;
+                matched = true;
+                break;
+            }
+        }
+    }
+    pthread_mutex_unlock(&Q.lock);
+    return matched;
+}
 
 struct ent {
     uint32_t ip;
@@ -134,9 +197,18 @@ int pb_dns_observe(const uint8_t *m, size_t len, struct pb_dns_result *res)
 {
     if (res) memset(res, 0, sizeof *res);
     if (len < 12) return 0;
+    uint16_t qid = rd16(m);
     uint16_t flags = rd16(m + 2), qd = rd16(m + 4), an = rd16(m + 6);
-    if (!(flags & 0x8000) || (flags & 0x7800) || (flags & 0x000F)) return 0;   // response, QUERY opcode, NOERROR only
+    if (!(flags & 0x8000)) {
+        // Query (QR=0): record QID if standard query
+        if ((flags & 0x7800) == 0 && qd > 0 && qd <= 4) {
+            pb_dns_record_query(qid);
+        }
+        return 0;
+    }
+    if ((flags & 0x7800) || (flags & 0x000F)) return 0;   // response, QUERY opcode, NOERROR only
     if (qd > 4 || an == 0 || an > 128) return 0;
+    if (!match_and_consume_qid(qid)) return 0;
 
     char names[PB_DNS_MAX_NAMES][256];
     int nn = 0;
@@ -247,6 +319,11 @@ void pb_dns_clear(void)
     pthread_mutex_lock(&T.lock);
     while (T.head) evict_oldest(NULL);
     pthread_mutex_unlock(&T.lock);
+
+    pthread_mutex_lock(&Q.lock);
+    memset(Q.entries, 0, sizeof(Q.entries));
+    Q.count = 0;
+    pthread_mutex_unlock(&Q.lock);
 }
 
 size_t pb_dns_count(void)

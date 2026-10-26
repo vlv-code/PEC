@@ -35,6 +35,7 @@
 #define MAX_FLOWS       64
 #define UDP_QMAX        32
 #define UDP_QBYTES      (256 * 1024)
+#define DNS_TCP_DBUF_MAX (256 * 1024)
 #define UDP_MAXDG       65536
 #define UDP_BATCH       16
 #define FLOW_TTL_MS     1000
@@ -935,6 +936,11 @@ static int dns_pump_up(struct conn *c, uint8_t *scratch)
     ssize_t n = recv(c->fd[1], scratch, SCRATCH_SZ, 0);
     if (n < 0 && errno != EAGAIN && errno != EINTR) return -1;
     if (n > 0) {
+        if (c->dhave + (size_t)n > DNS_TCP_DBUF_MAX) {
+            pb_core_log("relay: DNS-over-TCP dbuf limit exceeded (%zu bytes > 256KB); resetting connection",
+                        c->dhave + (size_t)n);
+            return -1;
+        }
         if (c->dhave + (size_t)n > c->dcap) {
             size_t nc = c->dhave + (size_t)n;
             uint8_t *nb = realloc(c->dbuf, nc);
@@ -1004,6 +1010,12 @@ static int conn_pump(struct dthread *t, struct conn *c)
                     ssize_t n = recv(c->fd[d], scratch, SCRATCH_SZ, 0);
                     if (n > 0) {
                         progress = true;
+                        if (c->dns && d == 0 && (size_t)n >= 14) {
+                            size_t L = (size_t)(scratch[0] << 8 | scratch[1]);
+                            if (L >= 12 && (size_t)n >= 2 + L && (scratch[4] & 0x80) == 0) {
+                                pb_core_dns_observe(scratch + 2, L);
+                            }
+                        }
                         ssize_t w = send(c->fd[o], scratch, (size_t)n, MSG_NOSIGNAL);
                         if (w < 0) {
                             if (errno != EAGAIN && errno != EINTR) return -1;
@@ -1311,6 +1323,9 @@ static void udp_dgram(const struct sockaddr_in *cli, uint32_t flow_be, const uin
     if (e->action == PB_ACT_BLOCK) return;
 
     const struct pb_orig *o = &e->o;
+    if (o->port == 53 && pl && n >= 12 && (pl[2] & 0x80) == 0) {
+        pb_core_dns_observe(pl, n);
+    }
     struct sess *s;
     if (e->action == PB_ACT_DIRECT) {
         s = sess_find(cli, DIRECT_ID, flow_be);
