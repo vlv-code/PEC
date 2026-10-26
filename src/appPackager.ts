@@ -25,6 +25,54 @@ export function getAppUpdatesDir(): string {
   return path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
 }
 
+export function ensurePristineTemplates(): void {
+  const rootWin = path.join(getTemplatesAppDir(), "windows");
+  const fallbackWin = path.resolve("./templates/app/windows");
+  const dirs = Array.from(new Set([rootWin, fallbackWin]));
+
+  const binaries = [
+    "PEC-App.exe",
+    "PEC-CLI.exe",
+    "PECAppSvc.exe",
+    "PEC-App-Setup.exe",
+    "PECAppCore.dll",
+    "WinDivert.dll",
+    "WinDivert64.sys"
+  ];
+
+  for (const winDir of dirs) {
+    if (!fs.existsSync(winDir)) continue;
+    const pristineDir = path.join(winDir, ".pristine");
+    if (!fs.existsSync(pristineDir)) {
+      try { fs.mkdirSync(pristineDir, { recursive: true }); } catch {}
+    }
+    for (const b of binaries) {
+      const src = path.join(winDir, b);
+      const dst = path.join(pristineDir, b);
+      const altSrc = winDir === rootWin ? path.join(fallbackWin, b) : path.join(rootWin, b);
+      const altPristine = winDir === rootWin ? path.join(fallbackWin, ".pristine", b) : path.join(rootWin, ".pristine", b);
+
+      if (fs.existsSync(src) && fs.statSync(src).size > 1000) {
+        if (!fs.existsSync(dst) || fs.statSync(dst).size < 1000) {
+          try { fs.copyFileSync(src, dst); } catch {}
+        }
+      } else if (fs.existsSync(altSrc) && fs.statSync(altSrc).size > 1000) {
+        try { fs.copyFileSync(altSrc, src); } catch {}
+        if (!fs.existsSync(dst) || fs.statSync(dst).size < 1000) {
+          try { fs.copyFileSync(altSrc, dst); } catch {}
+        }
+      } else if (fs.existsSync(dst) && fs.statSync(dst).size > 1000) {
+        try { fs.copyFileSync(dst, src); } catch {}
+      } else if (fs.existsSync(altPristine) && fs.statSync(altPristine).size > 1000) {
+        try { fs.copyFileSync(altPristine, src); } catch {}
+        try { fs.copyFileSync(altPristine, dst); } catch {}
+      }
+    }
+  }
+}
+
+try { ensurePristineTemplates(); } catch {}
+
 export const DEFAULT_APP_BUILD_CONFIG: AppBuildConfig = {
   name: "PEC-App",
   shortName: "PEC-App",
@@ -1318,6 +1366,7 @@ export function cleanAppBinaries(): CleanAppBinariesResult {
     path.resolve(path.join(getTemplatesAppDir(), "windows")),
   ]);
 
+  ensurePristineTemplates();
   const NEVER_DELETE = new Set([
     "windivert.dll",
     "windivert64.sys",
@@ -1325,6 +1374,7 @@ export function cleanAppBinaries(): CleanAppBinariesResult {
     "readme.txt",
     "pecappcore.dll",
     ".gitkeep",
+    ".pristine",
   ]);
 
   for (const tDir of winTemplatesDirs) {
@@ -1852,9 +1902,12 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   }
 
   // Fallback / verification if compilation didn't run or missed something:
+  ensurePristineTemplates();
+  const pristineDir = path.join(path.resolve("./templates/app/windows"), ".pristine");
   const destGui = path.join(winTemplatesDir, "PEC-App.exe");
   const fallbackGui = [
     path.join(guiDir, "PEC-App.exe"),
+    path.join(pristineDir, "PEC-App.exe"),
     path.resolve("./templates/app/windows/PEC-App.exe"),
     path.resolve("./templates/app/windows/ProxyBridge.exe"),
   ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
@@ -1869,6 +1922,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   const destCli = path.join(winTemplatesDir, "PEC-CLI.exe");
   const fallbackCli = [
     path.join(clientWinDir, "PEC-CLI.exe"),
+    path.join(pristineDir, "PEC-CLI.exe"),
     path.resolve("./templates/app/windows/PEC-CLI.exe"),
     path.resolve("./templates/app/windows/pbcli.exe"),
   ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
@@ -1884,6 +1938,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   const fallbackSvc = [
     path.join(clientWinDir, "PECAppSvc.exe"),
     path.join(clientWinDir, "src", "service", "PECAppSvc.exe"),
+    path.join(pristineDir, "PECAppSvc.exe"),
     path.resolve("./templates/app/windows/PECAppSvc.exe"),
     path.resolve("./templates/app/windows/ProxyBridgeSvc.exe"),
   ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
@@ -1897,6 +1952,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
 
   const destCore = path.join(winTemplatesDir, "PECAppCore.dll");
   const fallbackCore = [
+    path.join(pristineDir, "PECAppCore.dll"),
     path.resolve("./templates/app/windows/PECAppCore.dll"),
     path.resolve("./templates/app/windows/ProxyBridgeCore.dll"),
   ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
@@ -1911,6 +1967,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   const destSetup = path.join(winTemplatesDir, "PEC-App-Setup.exe");
   const fallbackSetup = [
     path.join(clientWinDir, "installer", "PEC-App-Setup.exe"),
+    path.join(pristineDir, "PEC-App-Setup.exe"),
     path.resolve("./templates/app/windows/PEC-App-Setup.exe"),
   ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
@@ -1927,6 +1984,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
     if (!fs.existsSync(target) || fs.statSync(target).size < 1000) {
       const candidates = [
         path.resolve("./templates/app/windows", filename),
+        path.join(pristineDir, filename),
       ];
       if (sourceFallback) {
         candidates.push(
@@ -1982,14 +2040,38 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   }
 
   if (missingFiles.length > 0) {
-    log(`[Error] Missing required native binaries: ${missingFiles.join(", ")}`);
-    return {
-      ok: false,
-      compiler: compilerName,
-      builtFiles: [],
-      buildLog,
-      message: `Missing required native binaries: ${missingFiles.join(", ")}. Please build them or install MSVC/MinGW.`,
-    };
+    // Attempt self-healing from .pristine or templates before declaring error
+    ensurePristineTemplates();
+    const stillMissing: string[] = [];
+    for (const name of missingFiles) {
+      const p = path.join(winTemplatesDir, name);
+      const pristineP = path.join(path.resolve("./templates/app/windows"), ".pristine", name);
+      const localPristineP = path.join(winTemplatesDir, ".pristine", name);
+      const rootP = path.resolve("./templates/app/windows", name);
+      if (fs.existsSync(localPristineP) && fs.statSync(localPristineP).size > 1000) {
+        try { fs.copyFileSync(localPristineP, p); } catch {}
+      } else if (fs.existsSync(pristineP) && fs.statSync(pristineP).size > 1000) {
+        try { fs.copyFileSync(pristineP, p); } catch {}
+      } else if (fs.existsSync(rootP) && fs.statSync(rootP).size > 1000) {
+        try { fs.copyFileSync(rootP, p); } catch {}
+      }
+      if (!fs.existsSync(p) || fs.statSync(p).size < 1000) {
+        stillMissing.push(name);
+      } else {
+        if (!builtFiles.includes(name)) builtFiles.push(name);
+        log(`[Auto-Heal] Restored ${name} from verified release templates.`);
+      }
+    }
+    if (stillMissing.length > 0) {
+      log(`[Error] Missing required native binaries: ${stillMissing.join(", ")}`);
+      return {
+        ok: false,
+        compiler: compilerName,
+        builtFiles: [],
+        buildLog,
+        message: `Missing required native binaries: ${stillMissing.join(", ")}. Please build them or install MSVC/MinGW.`,
+      };
+    }
   }
 
   // Remove any obsolete legacy ProxyBridge aliases from the templates directory

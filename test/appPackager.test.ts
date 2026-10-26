@@ -394,3 +394,22 @@ test("cleanAppBinaries cleans output binaries but never deletes kernel drivers o
   }
 });
 
+test("cleanAppBinaries followed by buildAppBinaries recovers binaries from pristine templates without compiler", () => {
+  cleanAppBinaries();
+  const prevEnv = process.env.SKIP_NATIVE_REBUILD;
+  try {
+    process.env.SKIP_NATIVE_REBUILD = "true";
+    const res = buildAppBinaries();
+    assert.strictEqual(res.ok, true, `Expected buildAppBinaries to succeed: ${res.message}`);
+    assert.strictEqual(res.builtFiles.includes("PEC-App.exe"), true);
+    assert.strictEqual(res.builtFiles.includes("PEC-CLI.exe"), true);
+    assert.strictEqual(res.builtFiles.includes("PECAppSvc.exe"), true);
+  } finally {
+    if (prevEnv !== undefined) {
+      process.env.SKIP_NATIVE_REBUILD = prevEnv;
+    } else {
+      delete process.env.SKIP_NATIVE_REBUILD;
+    }
+  }
+});
+
