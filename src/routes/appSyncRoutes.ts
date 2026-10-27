@@ -275,7 +275,11 @@ export function createAppSyncRouter(
         },
       });
     } catch (err: any) {
-      res.status(400).json({ ok: false, error: err.message || "Failed to process app sync" });
+      if (err?.message === "Invalid instanceId" || err?.message === "Forbidden instanceId") {
+        return res.status(400).json({ ok: false, error: err.message });
+      }
+      console.error("[appSync] Error processing app sync:", err);
+      res.status(500).json({ ok: false, error: "Internal server error" });
     } finally {
       releaseLock();
     }

@@ -89,10 +89,15 @@ test("codeSigner: signBinary invokes tools via execFileSync with discrete array 
     assert.ok(signCall, "osslsigncode sign must be called");
     assert.ok(Array.isArray(signCall.args), "args must be an array");
 
-    // Check that maliciousPassword is a discrete argument and not concatenated into shell string
-    const passIdx = signCall.args.indexOf("-pass");
-    assert.ok(passIdx !== -1, "-pass flag must be present");
-    assert.equal(signCall.args[passIdx + 1], maliciousPassword, "password must be passed verbatim without shell escaping");
+    // Check that maliciousPassword is NOT passed as a CLI argument (M-7 security hardening)
+    assert.ok(!signCall.args.includes(maliciousPassword), "raw password must NOT be passed in CLI arguments");
+    assert.equal(signCall.args.indexOf("-pass"), -1, "-pass flag must not be used to avoid process table leakage");
+    assert.ok(signCall.args.includes("-readpass"), "-readpass flag must be used with temporary file");
+    assert.equal(
+      signCall.options?.env?.PFX_PASS,
+      maliciousPassword,
+      "password must be safely passed via environment or secure temporary file"
+    );
   } finally {
     if (fs.existsSync(dummyTarget)) fs.unlinkSync(dummyTarget);
     deleteCertificate();

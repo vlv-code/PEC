@@ -41,16 +41,22 @@ jobs:
             echo "See [CHANGELOG.md](https://github.com/vlv-code/PEC/blob/main/CHANGELOG.md)." > RELEASE_NOTES.md
           fi
 
+      - name: Generate release checksums (L-38)
+        run: |
+          (cd dist && sha256sum server.cjs) > sha256sums.txt
+
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME exists, updating release notes..."
+            echo "Release $GITHUB_REF_NAME exists, updating release notes and assets..."
             gh release edit "$GITHUB_REF_NAME" --title "PEC $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+            gh release upload "$GITHUB_REF_NAME" dist/server.cjs sha256sums.txt --clobber
           else
-            echo "Creating new release $GITHUB_REF_NAME..."
+            echo "Creating new release $GITHUB_REF_NAME with artifacts..."
             gh release create "$GITHUB_REF_NAME" \
               --title "PEC $GITHUB_REF_NAME" \
-              --notes-file RELEASE_NOTES.md
+              --notes-file RELEASE_NOTES.md \
+              dist/server.cjs sha256sums.txt
           fi

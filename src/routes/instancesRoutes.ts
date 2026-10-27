@@ -2,6 +2,32 @@ import { Router, Request, Response } from "express";
 import { getActiveInstances, assignInstanceProfile, assignInstanceProxy, deleteInstance, revokeInstanceToken, getProxyConfig, updateProxyConfig } from "../instances.js";
 import { getProxyById } from "../proxies.js";
 import { recordAudit, getClientIp } from "../audit.js";
+import type { ProxyConfiguration } from "../types.js";
+
+const ALLOWED_PROXY_CONFIG_KEYS: ReadonlySet<string> = new Set([
+  "enabled",
+  "protocol",
+  "host",
+  "port",
+  "bypassList",
+  "pacScript",
+  "pacUrl",
+  "syncIntervalMs",
+  "killSwitch",
+  "activeProfileId",
+  "routingMode",
+]);
+
+function filterProxyConfig(input: any): Partial<ProxyConfiguration> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const filtered: Record<string, any> = {};
+  for (const key of Object.keys(input)) {
+    if (ALLOWED_PROXY_CONFIG_KEYS.has(key)) {
+      filtered[key] = input[key];
+    }
+  }
+  return filtered;
+}
 
 export function createInstancesRouter(): Router {
   const router = Router();
@@ -198,7 +224,8 @@ export function createInstancesRouter(): Router {
 
   router.post("/api/config", (req: Request, res: Response) => {
     try {
-      const updated = updateProxyConfig(req.body);
+      const cleanBody = filterProxyConfig(req.body);
+      const updated = updateProxyConfig(cleanBody);
       recordAudit({
         ip: getClientIp(req),
         endpoint: "/api/config",

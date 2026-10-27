@@ -267,6 +267,27 @@ function isValidUrl(url) {
   }
 }
 
+function isValidPacUrl(pacUrl, serverBase) {
+  if (typeof pacUrl !== "string" || !pacUrl) return false;
+  try {
+    const p = new URL(pacUrl);
+    if (p.protocol === "https:") {
+      return true;
+    }
+    const base = serverBase || currentProxyState.serverBase || DEFAULT_SERVER_BASE;
+    if (base && typeof base === "string" && !base.startsWith("__" + "PEC_")) {
+      const baseWithProto = base.includes("://") ? base : "http://" + base;
+      const baseOrigin = new URL(baseWithProto).origin;
+      if (p.origin === baseOrigin) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function getManagedConfig() {
   try {
     const managed = await chrome.storage.managed.get([
@@ -429,6 +450,17 @@ async function updateActiveTabBadge(tabId, url) {
       chrome.action.setBadgeText({ text: "●", tabId: tabId });
       if (chrome.action.setBadgeBackgroundColor) {
         chrome.action.setBadgeBackgroundColor({ color: "#64748b", tabId: tabId });
+      }
+      if (chrome.action.setBadgeTextColor) {
+        chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
+      }
+      return;
+    }
+
+    if (currentProxyState.proxyReachable === false) {
+      chrome.action.setBadgeText({ text: "●", tabId: tabId });
+      if (chrome.action.setBadgeBackgroundColor) {
+        chrome.action.setBadgeBackgroundColor({ color: "#f59e0b", tabId: tabId });
       }
       if (chrome.action.setBadgeTextColor) {
         chrome.action.setBadgeTextColor({ color: "#ffffff", tabId: tabId });
@@ -718,6 +750,13 @@ function injectUserRulesIntoPac(pacText, userRules, proxyServer, proxyProtocol) 
 //     fails - Chrome silently routes everything DIRECT (mandatory:false),
 //     with no feedback anywhere.
 async function applyPacScript(pacUrl, config, forcePacFetch = false) {
+  const serverBase = (config && config.serverBase) || currentProxyState.serverBase;
+  if (!isValidPacUrl(pacUrl, serverBase)) {
+    console.error("[PEC] Blocked invalid or untrusted pacUrl:", pacUrl);
+    logEvent("error", "Blocked invalid or untrusted pacUrl: " + pacUrl);
+    updateBadge("●", "#f59e0b");
+    return;
+  }
   let pacText = (!forcePacFetch && cachedBasePacText) ? cachedBasePacText : null;
   if (!pacText) {
     logEvent("info", "Fetching PAC script from " + pacUrl);
@@ -980,6 +1019,13 @@ async function applyProxyConfig(config, forcePacFetch = false) {
 
     const usePac = (effectiveConfig.protocol === "pac" || (effectiveConfig.pacUrl && effectiveConfig.routingMode !== "fixed"));
     if (usePac && effectiveConfig.pacUrl) {
+      const serverBase = effectiveConfig.serverBase || currentProxyState.serverBase;
+      if (!isValidPacUrl(effectiveConfig.pacUrl, serverBase)) {
+        console.error("[PEC] Blocked invalid or untrusted pacUrl:", effectiveConfig.pacUrl);
+        logEvent("error", "Blocked invalid or untrusted pacUrl: " + effectiveConfig.pacUrl);
+        updateBadge("●", "#f59e0b");
+        return;
+      }
       await applyPacScript(effectiveConfig.pacUrl, effectiveConfig, forcePacFetch);
       return;
     }
@@ -1018,7 +1064,7 @@ async function applyProxyConfig(config, forcePacFetch = false) {
   } catch (err) {
     console.error("[PEC] Error applying proxy settings:", err);
     logEvent("error", "Error applying proxy settings: " + (err && err.message ? err.message : err));
-    updateBadge("●", "#ef4444");
+    updateBadge("●", "#f59e0b");
   }
 }
 
@@ -1030,6 +1076,7 @@ if (chrome.proxy && chrome.proxy.onProxyError && chrome.proxy.onProxyError.addLi
     const fatal = details && details.fatal;
     console.warn("[PEC] onProxyError:", errDesc, fatal ? "(FATAL - request failed)" : "(recovered)");
     logEvent("warn", "Proxy network/PAC error: " + errDesc + (fatal ? " (FATAL - request failed)" : " (recovered)"), details);
+    updateBadge("●", "#f59e0b");
   });
 }
 
@@ -1139,6 +1186,12 @@ async function executeSync(forceRefresh = false, applyConfig = true, selectedPro
   if (forceRefresh) {
     memoryCredsCache = null;
     cachedBasePacText = null;
+    try {
+      const sessionStore = (typeof chrome !== "undefined" && chrome.storage && chrome.storage.session) ? chrome.storage.session : null;
+      if (sessionStore && sessionStore.remove) {
+        sessionStore.remove(["pecCredsCache"]);
+      }
+    } catch (e) {}
   }
 
   syncPromise = (async () => {
@@ -1301,15 +1354,15 @@ async function executeSync(forceRefresh = false, applyConfig = true, selectedPro
           throw new Error("Creds fetch failed: HTTP " + resFallback.status);
         }
 
-        const data = await resFallback.json();
-        if (!data.user || !data.pass) {
+        const credsPayload = await resFallback.json();
+        if (!credsPayload || !credsPayload.user || !credsPayload.pass) {
           logEvent("error", "Invalid creds payload from server");
           throw new Error("Invalid creds payload from server");
         }
 
         memoryCredsCache = {
-          user: data.user,
-          pass: data.pass,
+          user: credsPayload.user,
+          pass: credsPayload.pass,
           fetchedAt: Date.now(),
         };
         try {
@@ -1321,7 +1374,7 @@ async function executeSync(forceRefresh = false, applyConfig = true, selectedPro
         currentProxyState.online = true;
         currentProxyState.lastSync = Date.now();
         persistProxyState();
-        logEvent("info", "Creds fallback successful for user " + data.user);
+        logEvent("info", "Creds fallback successful");
       }
 
       return memoryCredsCache;
@@ -1429,6 +1482,7 @@ chrome.webRequest.onAuthRequired.addListener(
 
 // Listen for popup messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id && sender.id !== chrome.runtime.id) return false;
   if (!msg) return false;
   const action = msg.action || msg.type;
 

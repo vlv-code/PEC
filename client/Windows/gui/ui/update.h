@@ -405,10 +405,72 @@ INT_PTR CALLBACK UpdateDlgProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
             UpdDl* d = (UpdDl*)calloc(1, sizeof(UpdDl));
             if (!d) return TRUE;
             d->dlg = dlg; lstrcpynW(d->url, info->download, 512);
-            const wchar_t* fn = info->download;
-            for (const wchar_t* p = info->download; *p; p++) if (*p == L'/') fn = p + 1;
-            wchar_t tmp[MAX_PATH]; GetTempPathW(MAX_PATH, tmp);
-            _snwprintf_s(d->dest, MAX_PATH, _TRUNCATE, L"%s%s", tmp, fn[0] ? fn : L"PEC-App-Setup.exe");
+
+            // Sanitize download filename: extract only basename, strip path traversals ('..', '/', '\')
+            const wchar_t* url = info->download;
+            const wchar_t* path_end = url;
+            while (*path_end && *path_end != L'?' && *path_end != L'#') {
+                path_end++;
+            }
+
+            const wchar_t* last_slash = NULL;
+            for (const wchar_t* p = url; p < path_end; p++) {
+                if (*p == L'/' || *p == L'\\') last_slash = p;
+            }
+            const wchar_t* fn = last_slash ? (last_slash + 1) : url;
+
+            wchar_t clean_fn[MAX_PATH] = {0};
+            size_t c_idx = 0;
+            for (const wchar_t* p = fn; p < path_end && c_idx < MAX_PATH - 1; p++) {
+                if (*p <= 31 || *p == L'/' || *p == L'\\' || *p == L':' || *p == L'*' ||
+                    *p == L'?' || *p == L'\"' || *p == L'<' || *p == L'>' || *p == L'|') {
+                    continue;
+                }
+                clean_fn[c_idx++] = *p;
+            }
+            clean_fn[c_idx] = L'\0';
+
+            // Trim trailing spaces and dots (invalid in Windows filenames)
+            while (c_idx > 0 && (clean_fn[c_idx - 1] == L' ' || clean_fn[c_idx - 1] == L'.')) {
+                clean_fn[--c_idx] = L'\0';
+            }
+
+            // Verify safe basename: non-empty, no traversal, not reserved device, must end in .exe
+            BOOL is_safe = (c_idx >= 4) && (wcsstr(clean_fn, L"..") == NULL);
+            if (is_safe) {
+                static const wchar_t* reserved[] = {
+                    L"CON", L"PRN", L"AUX", L"NUL",
+                    L"COM1", L"COM2", L"COM3", L"COM4", L"COM5", L"COM6", L"COM7", L"COM8", L"COM9",
+                    L"LPT1", L"LPT2", L"LPT3", L"LPT4", L"LPT5", L"LPT6", L"LPT7", L"LPT8", L"LPT9"
+                };
+                wchar_t stem[16] = {0};
+                size_t s_len = 0;
+                while (s_len < 15 && clean_fn[s_len] && clean_fn[s_len] != L'.') {
+                    stem[s_len] = clean_fn[s_len];
+                    s_len++;
+                }
+                stem[s_len] = L'\0';
+                for (size_t r = 0; r < sizeof(reserved) / sizeof(reserved[0]); r++) {
+                    if (_wcsicmp(stem, reserved[r]) == 0) {
+                        is_safe = FALSE;
+                        break;
+                    }
+                }
+                if (_wcsicmp(&clean_fn[c_idx - 4], L".exe") != 0) {
+                    is_safe = FALSE;
+                }
+            }
+            if (!is_safe) {
+                lstrcpynW(clean_fn, L"PEC-App-Setup.exe", MAX_PATH);
+            }
+
+            wchar_t tmp[MAX_PATH];
+            DWORD tlen = GetTempPathW(MAX_PATH, tmp);
+            if (tlen > 0 && tmp[tlen - 1] == L'\\') {
+                _snwprintf_s(d->dest, MAX_PATH, _TRUNCATE, L"%s%s", tmp, clean_fn);
+            } else {
+                _snwprintf_s(d->dest, MAX_PATH, _TRUNCATE, L"%s\\%s", tmp, clean_fn);
+            }
             EnableWindow(GetDlgItem(dlg, IDC_UP_NOW), FALSE);
             ShowWindow(GetDlgItem(dlg, IDC_UP_PROGRESS), SW_SHOW);
             SendDlgItemMessageW(dlg, IDC_UP_PROGRESS, PBM_SETRANGE, 0, MAKELPARAM(0, 100));

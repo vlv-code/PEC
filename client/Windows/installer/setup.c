@@ -23,6 +23,8 @@
 #include <shellapi.h>
 #include <shlobj.h>
 #include <sddl.h>
+#include <softpub.h>
+#include <wintrust.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -33,6 +35,7 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "uuid.lib")
+#pragma comment(lib, "wintrust.lib")
 
 #define APP_NAME       L"PEC-App"
 #ifndef APP_VERSION
@@ -284,24 +287,95 @@ static BOOL ExtractEmbeddedPayload(const wchar_t* destDir)
     return ok;
 }
 
-static void CopyFromSourceFolder(const wchar_t* srcDir, const wchar_t* destDir)
+static BOOL VerifyFileAuthenticode(const wchar_t* filePath)
+{
+    if (!filePath || !*filePath) return FALSE;
+
+    WINTRUST_FILE_INFO fileInfo;
+    ZeroMemory(&fileInfo, sizeof(fileInfo));
+    fileInfo.cbStruct = sizeof(fileInfo);
+    fileInfo.pcwszFilePath = filePath;
+
+    WINTRUST_DATA trustData;
+    ZeroMemory(&trustData, sizeof(trustData));
+    trustData.cbStruct = sizeof(trustData);
+    trustData.dwUIChoice = WTD_UI_NONE;
+    trustData.fdwRevocationChecks = WTD_REVOKE_NONE;
+    trustData.dwUnionChoice = WTD_CHOICE_FILE;
+    trustData.pFile = &fileInfo;
+    trustData.dwStateAction = WTD_STATEACTION_VERIFY;
+
+    GUID policyGuid = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    LONG status = WinVerifyTrust((HWND)INVALID_HANDLE_VALUE, &policyGuid, &trustData);
+
+    trustData.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust((HWND)INVALID_HANDLE_VALUE, &policyGuid, &trustData);
+
+    return (status == ERROR_SUCCESS);
+}
+
+static BOOL IsSignedBinaryExtension(const wchar_t* fileName)
+{
+    if (!fileName) return FALSE;
+    size_t len = wcslen(fileName);
+    if (len >= 4) {
+        const wchar_t* ext = fileName + len - 4;
+        if (_wcsicmp(ext, L".exe") == 0 ||
+            _wcsicmp(ext, L".dll") == 0 ||
+            _wcsicmp(ext, L".sys") == 0) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static BOOL CopyFromSourceFolder(const wchar_t* srcDir, const wchar_t* destDir)
 {
     const wchar_t* files[] = {
         L"PEC-App.exe", L"PEC-CLI.exe", L"PECAppSvc.exe", L"PECAppCore.dll",
         L"ProxyBridgeCore.dll", L"ProxyBridge.exe", L"pbcli.exe", L"ProxyBridgeSvc.exe",
-        L"WinDivert.dll", L"WinDivert64.sys", L"pec_profile.pbprofile",
-        L"Install.cmd", L"Uninstall.cmd", L"deploy-pec-app.ps1", L"verify-pec-app.ps1",
-        L"README.txt"
+        L"WinDivert.dll", L"WinDivert64.sys"
     };
 
+    BOOL hasApp = FALSE;
+    BOOL hasSvc = FALSE;
+    int binaryCount = 0;
+
+    // Step 1: Verify Authenticode signatures for all present binary files BEFORE copying
+    for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+        wchar_t srcPath[MAX_PATH];
+        wsprintfW(srcPath, L"%ls\\%ls", srcDir, files[i]);
+        if (GetFileAttributesW(srcPath) != INVALID_FILE_ATTRIBUTES) {
+            if (!IsSignedBinaryExtension(files[i]) || !VerifyFileAuthenticode(srcPath)) {
+                return FALSE;
+            }
+            if (_wcsicmp(files[i], L"PEC-App.exe") == 0 || _wcsicmp(files[i], L"ProxyBridge.exe") == 0) {
+                hasApp = TRUE;
+            }
+            if (_wcsicmp(files[i], L"PECAppSvc.exe") == 0 || _wcsicmp(files[i], L"ProxyBridgeSvc.exe") == 0) {
+                hasSvc = TRUE;
+            }
+            binaryCount++;
+        }
+    }
+
+    if (binaryCount == 0 || !hasApp || !hasSvc) {
+        return FALSE;
+    }
+
+    // Step 2: Copy verified files into destination
     for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
         wchar_t srcPath[MAX_PATH], destPath[MAX_PATH];
         wsprintfW(srcPath, L"%ls\\%ls", srcDir, files[i]);
         wsprintfW(destPath, L"%ls\\%ls", destDir, files[i]);
         if (GetFileAttributesW(srcPath) != INVALID_FILE_ATTRIBUTES) {
-            CopyFileW(srcPath, destPath, FALSE);
+            if (!CopyFileW(srcPath, destPath, FALSE)) {
+                return FALSE;
+            }
         }
     }
+
+    return TRUE;
 }
 
 static BOOL RegisterService(const wchar_t* installDir)
@@ -413,7 +487,30 @@ static DWORD WINAPI InstallThread(LPVOID lpParam)
         wchar_t myDir[MAX_PATH];
         GetModuleFileNameW(NULL, myDir, MAX_PATH);
         for (DWORD i = (DWORD)wcslen(myDir); i > 0; i--) { if (myDir[i - 1] == L'\\') { myDir[i] = 0; break; } }
-        CopyFromSourceFolder(myDir, g_installDir);
+        if (!CopyFromSourceFolder(myDir, g_installDir)) {
+            if (!g_silent) {
+                MessageBoxW(g_hMain,
+                    L"Failed to verify digital signature (Authenticode) of fallback installer files. Installation aborted.",
+                    L"PEC-App Security Verification Error",
+                    MB_ICONERROR | MB_OK);
+            }
+            SetStatus(L"Installation aborted: digital signature verification failed.", 0);
+            if (g_hChkRun && IsWindow(g_hChkRun)) {
+                SendMessageW(g_hChkRun, BM_SETCHECK, BST_UNCHECKED, 0);
+                ShowWindow(g_hChkRun, SW_HIDE);
+            }
+            if (g_hBtnAction && IsWindow(g_hBtnAction)) {
+                SetWindowTextW(g_hBtnAction, L"Close");
+                EnableWindow(g_hBtnAction, TRUE);
+            }
+            g_completed = TRUE;
+            RemoveDirectoryW(g_installDir);
+            if (g_silent) {
+                PostQuitMessage(1);
+            }
+            CoUninitialize();
+            return 1;
+        }
     }
 
     // Save copy of installer as uninstaller

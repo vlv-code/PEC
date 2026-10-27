@@ -177,6 +177,13 @@ export function createRoutingRouter(): Router {
         return res.status(400).json({ error: "Cannot overwrite builtin preset" });
       }
 
+      if (
+        req.body.source === "builtin" ||
+        (typeof req.body?.source === "string" && req.body.source.trim().toLowerCase() === "builtin")
+      ) {
+        return res.status(400).json({ error: "Cannot create or modify builtin presets" });
+      }
+
       const presetItem: RoutingPresetItem = {
         id: cleanId,
         name: name.trim(),
@@ -307,6 +314,12 @@ export function createRoutingRouter(): Router {
 
       const presets = getRoutingPresets();
       const existingIdx = presets.findIndex((p) => p.id === preset.id);
+      if (
+        (existingIdx >= 0 && presets[existingIdx].source === "builtin") ||
+        GEO_PRESETS.some((gp) => gp.id === preset.id)
+      ) {
+        return res.status(400).json({ error: "Cannot overwrite builtin preset" });
+      }
       if (existingIdx >= 0) {
         presets[existingIdx] = preset;
       } else {
@@ -385,6 +398,12 @@ export function createRoutingRouter(): Router {
 
       const presets = getRoutingPresets();
       const existingIdx = presets.findIndex((p) => p.id === preset.id);
+      if (
+        (existingIdx >= 0 && presets[existingIdx].source === "builtin") ||
+        GEO_PRESETS.some((gp) => gp.id === preset.id)
+      ) {
+        return res.status(400).json({ error: "Cannot overwrite builtin preset" });
+      }
       if (existingIdx >= 0) {
         presets[existingIdx] = preset;
       } else {

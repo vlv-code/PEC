@@ -32,32 +32,6 @@ function normalizeIntervalMinutes(value: unknown): number {
   return n;
 }
 
-// Helper to sync updated rotation secrets back to .env if present
-function syncSecretsToEnv(vars: Record<string, string | undefined>): void {
-  try {
-    const envPath = path.resolve(".env");
-    if (!fs.existsSync(envPath)) return;
-    let content = fs.readFileSync(envPath, "utf-8");
-    let changed = false;
-    for (const [k, v] of Object.entries(vars)) {
-      if (v === undefined) continue;
-      const regex = new RegExp(`^${k}=.*$`, "m");
-      if (regex.test(content)) {
-        content = content.replace(regex, `${k}=${v}`);
-        changed = true;
-      } else {
-        content += `\n${k}=${v}`;
-        changed = true;
-      }
-    }
-    if (changed) {
-      fs.writeFileSync(envPath, content, { encoding: "utf-8", mode: 0o600 });
-    }
-  } catch {
-    // Non-fatal if .env is read-only in container
-  }
-}
-
 const DEFAULT_CONFIG: RotationConfig = {
   enabled: true,
   intervalMinutes: parseInt(process.env.ROTATION_INTERVAL_MIN || "1440", 10), // default 24h
@@ -83,37 +57,7 @@ function loadInitialConfig(): RotationConfig {
     console.warn("[scheduler] Error reading rotation_config.json:", e);
   }
 
-  // 2. Secondary backup secrets store
-  const secretsFile = path.join(path.dirname(ROTATION_CONFIG_FILE), ".rotation_secrets.json");
-  if (!loaded.adminPass && fs.existsSync(secretsFile)) {
-    try {
-      const secRaw = fs.readFileSync(secretsFile, "utf-8");
-      const secData = JSON.parse(secRaw);
-      if (secData && secData.adminPass) {
-        loaded.adminPass = secData.adminPass;
-      }
-      if (secData && secData.panelUrl && (!loaded.panelUrl || loaded.panelUrl.includes("3xui-host"))) {
-        loaded.panelUrl = secData.panelUrl;
-      }
-      if (secData && secData.adminUser && !loaded.adminUser) {
-        loaded.adminUser = secData.adminUser;
-      }
-    } catch {}
-  }
-
-  // 3. Fallback to ./data/.rotation_secrets.json if running in a different dir
-  const fallbackSecrets = path.resolve("./data/.rotation_secrets.json");
-  if (!loaded.adminPass && fs.existsSync(fallbackSecrets)) {
-    try {
-      const fbRaw = fs.readFileSync(fallbackSecrets, "utf-8");
-      const fbData = JSON.parse(fbRaw);
-      if (fbData && fbData.adminPass) {
-        loaded.adminPass = fbData.adminPass;
-      }
-    } catch {}
-  }
-
-  // 4. Merge: Never let an empty adminPass or placeholder panelUrl wipe out environment variables
+  // Merge: Never let an empty adminPass or placeholder panelUrl wipe out environment variables
   const finalPass =
     (loaded.adminPass && loaded.adminPass.trim()) ||
     (process.env.XUI_ADMIN_PASS && process.env.XUI_ADMIN_PASS.trim()) ||
@@ -166,35 +110,12 @@ try {
 function saveState() {
   try {
     writeJsonAtomic(ROTATION_CONFIG_FILE, currentConfig);
-    // Secondary persistent backup
-    const secretsFile = path.join(path.dirname(ROTATION_CONFIG_FILE), ".rotation_secrets.json");
-    if (currentConfig.adminPass) {
-      writeJsonAtomic(secretsFile, {
-        adminPass: currentConfig.adminPass,
-        adminUser: currentConfig.adminUser,
-        panelUrl: currentConfig.panelUrl,
-        inboundRemark: currentConfig.inboundRemark,
-      });
-      // Also backup in ./data if different
-      const fallbackSecrets = path.resolve("./data/.rotation_secrets.json");
-      if (secretsFile !== fallbackSecrets) {
-        try {
-          writeJsonAtomic(fallbackSecrets, {
-            adminPass: currentConfig.adminPass,
-            adminUser: currentConfig.adminUser,
-            panelUrl: currentConfig.panelUrl,
-            inboundRemark: currentConfig.inboundRemark,
-          });
-        } catch {}
-      }
+    try {
+      fs.chmodSync(ROTATION_CONFIG_FILE, 0o600);
+    } catch {
+      // Non-fatal if filesystem doesn't support chmod (e.g. Windows)
     }
     writeJsonAtomic(HISTORY_FILE, rotationHistory.slice(0, MAX_HISTORY_ENTRIES));
-    syncSecretsToEnv({
-      XUI_PANEL_URL: currentConfig.panelUrl,
-      XUI_ADMIN_USER: currentConfig.adminUser,
-      XUI_ADMIN_PASS: currentConfig.adminPass,
-      XUI_INBOUND_REMARK: currentConfig.inboundRemark,
-    });
   } catch (err) {
     console.error("[scheduler] Error persisting state:", err);
   }

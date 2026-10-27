@@ -15,6 +15,59 @@ import {
 } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter } from "../middleware/security.js";
+import type { ExtensionBuildConfig } from "../types.js";
+
+const ALLOWED_BUILD_CONFIG_KEYS: ReadonlySet<string> = new Set([
+  "name",
+  "shortName",
+  "version",
+  "description",
+  "serverUrl",
+  "updateUrl",
+  "token",
+  "locale",
+  "uiMode",
+  "presetTemplate",
+  "presetStyle",
+  "uiLayout",
+  "colorPalette",
+  "defaultThemeMode",
+  "themeColor",
+  "themeBackground",
+  "themeCard",
+  "iconEmoji",
+  "customIconDataUrl",
+  "iconType",
+  "webRtcProtection",
+  "dnsLeakProtection",
+  "badgeIndicator",
+  "allowUserBypass",
+  "bypassAutoTimeoutMinutes",
+  "showIpGeoChecker",
+  "showSupportButton",
+  "supportUrl",
+  "pingTestUrl",
+  "syncIntervalMinutes",
+  "defaultServerUrl",
+  "defaultToken",
+  "targetProfileId",
+  "defaultProxyId",
+  "allowUserProxySwitch",
+  "autoConfigureProxy",
+  "targetGroup",
+  "overriddenFiles",
+]);
+
+function filterBuildConfig(input: any): Partial<ExtensionBuildConfig> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const filtered: Record<string, any> = {};
+  for (const key of Object.keys(input)) {
+    if (ALLOWED_BUILD_CONFIG_KEYS.has(key)) {
+      filtered[key] = input[key];
+    }
+  }
+  return filtered;
+}
 
 export function createBuilderRouter(getFleetToken: () => string, getAdminToken?: () => string): Router {
   const router = Router();
@@ -37,7 +90,8 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
         error: "defaultToken must never equal ADMIN_TOKEN - artifacts (CRX/GPO) ship the fleet token publicly.",
       });
     }
-    const updated = saveBuildConfig(req.body);
+    const cleanConfig = filterBuildConfig(req.body);
+    const updated = saveBuildConfig(cleanConfig);
     generateExtensionFiles(updated);
     res.json(updated);
   });
@@ -69,7 +123,8 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
   router.post("/api/builder/build", (req: Request, res: Response) => {
     try {
       if (req.body && Object.keys(req.body).length > 0) {
-        const saved = saveBuildConfig(req.body);
+        const cleanConfig = filterBuildConfig(req.body);
+        const saved = saveBuildConfig(cleanConfig);
         warnIfAdminTokenInArtifact(saved.defaultToken);
       }
       const baseUrl = getBaseUrl(req);

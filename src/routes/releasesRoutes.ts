@@ -10,6 +10,51 @@ import {
 } from "../releases.js";
 import { createRateLimiter, createTokenAuthMiddleware, timingSafeEqualString } from "../middleware/security.js";
 
+export const releaseHashCache = new Map<string, string>();
+const inFlightHashes = new Map<string, Promise<string>>();
+
+export async function computeFileSha256(filePath: string): Promise<string> {
+  const resolved = path.resolve(filePath);
+  const stat = await fs.promises.stat(resolved);
+  const cacheKey = `${resolved}:${stat.mtimeMs}:${stat.size}`;
+  const cached = releaseHashCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const inFlight = inFlightHashes.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const hashPromise = (async () => {
+    try {
+      const hash = await new Promise<string>((resolve, reject) => {
+        const stream = fs.createReadStream(resolved);
+        const hasher = crypto.createHash("sha256");
+        stream.on("data", (chunk) => hasher.update(chunk));
+        stream.on("end", () => resolve(hasher.digest("hex")));
+        stream.on("error", (err) => {
+          try {
+            stream.destroy();
+          } catch {}
+          reject(err);
+        });
+      });
+      if (releaseHashCache.size >= 200) {
+        const oldestKey = releaseHashCache.keys().next().value;
+        if (oldestKey) releaseHashCache.delete(oldestKey);
+      }
+      releaseHashCache.set(cacheKey, hash);
+      return hash;
+    } finally {
+      inFlightHashes.delete(cacheKey);
+    }
+  })();
+
+  inFlightHashes.set(cacheKey, hashPromise);
+  return hashPromise;
+}
+
 export function createReleasesRouter(
   getAdminToken?: () => string,
   cookieAuth?: (req: Request) => boolean,
@@ -108,7 +153,7 @@ export function createReleasesRouter(
     }
   });
 
-  router.get("/api/releases/download/:type/:version", downloadAuthMiddleware, (req: Request, res: Response) => {
+  router.get("/api/releases/download/:type/:version", downloadAuthMiddleware, async (req: Request, res: Response) => {
     try {
       const rawType = String(req.params.type || "").toLowerCase();
       const version = String(req.params.version || "").trim();
@@ -161,8 +206,7 @@ export function createReleasesRouter(
 
       // Check SHA-256 integrity of release file on download (M-3)
       if (release.sha256 && /^[0-9a-fA-F]{64}$/.test(release.sha256)) {
-        const fileBuf = fs.readFileSync(resolvedFile);
-        const actualHash = crypto.createHash("sha256").update(fileBuf).digest("hex");
+        const actualHash = await computeFileSha256(resolvedFile);
         if (actualHash.toLowerCase() !== release.sha256.toLowerCase()) {
           return res.status(500).json({ ok: false, error: "Integrity check failed: release file SHA-256 mismatch" });
         }
@@ -170,9 +214,15 @@ export function createReleasesRouter(
 
       const rawFilename = release.fileName || path.basename(release.filePath);
       const filename = path.basename(rawFilename).replace(/[\r\n"]/g, "");
-      res.download(resolvedFile, filename);
+      res.download(resolvedFile, filename, (err) => {
+        if (err && !res.headersSent) {
+          console.error("[releases] Download transfer error:", err);
+          res.status(500).json({ ok: false, error: "Internal server error" });
+        }
+      });
     } catch (err: any) {
-      res.status(500).json({ ok: false, error: err.message || "Failed to download release" });
+      console.error("[releases] Download error:", err);
+      res.status(500).json({ ok: false, error: "Internal server error" });
     }
   });
 

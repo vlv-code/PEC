@@ -219,6 +219,7 @@ export function saveProfile(profile: Partial<RoutingProfile>): RoutingProfile {
       name: profile.name || "Custom Profile",
       description: profile.description || "",
       defaultPolicy: cleanDefaultPolicy || "direct",
+      failClosed: profile.failClosed !== undefined ? Boolean(profile.failClosed) : undefined,
       rules: cleanRules || [],
       targetScope: profile.targetScope || "all",
       targetGroup: profile.targetGroup,
@@ -309,7 +310,8 @@ export function generatePacScript(profile: RoutingProfile, proxyConfig: ProxyCon
   const safeHost = String(rawHost).replace(/[^a-zA-Z0-9.-]/g, "");
   const safePort = Math.min(65535, Math.max(1, parseInt(String(rawPort), 10) || 10809));
 
-  const fallbackSuffix = profile.failClosed ? "" : "; DIRECT";
+  const isFailClosed = profile.failClosed === true || (profile.failClosed !== false && profile.defaultPolicy === "proxy" && Boolean(profile.rules && profile.rules.length > 0));
+  const fallbackSuffix = isFailClosed ? "" : "; DIRECT";
   let proxyDirective = "PROXY " + safeHost + ":" + safePort + fallbackSuffix;
   if (effectiveProtocol === "socks5") {
     proxyDirective = "SOCKS5 " + safeHost + ":" + safePort + fallbackSuffix;

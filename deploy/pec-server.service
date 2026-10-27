@@ -6,12 +6,12 @@ After=network.target
 [Service]
 Type=simple
 User=pecuser
-Group=pecgroup
+Group=pecuser
 WorkingDirectory=/opt/pec-proxy-server
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=HOST=0.0.0.0
-EnvironmentFile=/opt/pec-proxy-server/.env
+EnvironmentFile=/etc/pec-server/pec-server.env
 Environment=CREDS_STORE=/opt/pec-proxy-server/data/current_creds.json
 ExecStart=/usr/bin/npm start
 Restart=always
@@ -25,7 +25,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/opt/pec-proxy-server/data /opt/pec-proxy-server/extension /opt/pec-proxy-server/dist/updates
+ReadWritePaths=/opt/pec-proxy-server/data /opt/pec-proxy-server/extension /opt/pec-proxy-server/dist/updates /opt/pec-proxy-server/dist/releases
 
 [Install]
 WantedBy=multi-user.target

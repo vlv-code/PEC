@@ -436,7 +436,7 @@ void cleanup_stale_connections(void)
         PID_CACHE_ENTRY **entry_ptr = &pid_cache[i];
         while (*entry_ptr != NULL)
         {
-            if (now_cache - (*entry_ptr)->timestamp > 10000)
+            if (now_cache - (*entry_ptr)->timestamp > PID_CACHE_TTL_MS)
             {
                 PID_CACHE_ENTRY *to_free = *entry_ptr;
                 *entry_ptr = (*entry_ptr)->next;

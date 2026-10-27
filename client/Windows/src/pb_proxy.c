@@ -187,6 +187,9 @@ PROXYBRIDGE_API BOOL ProxyBridge_DeleteProxyConfig(UINT32 config_id)
         {
             SOCKET old_tcp = cfg->udp_tcp_ctrl;
             SOCKET old_udp = cfg->udp_send_sock;
+            cfg->udp_tcp_ctrl  = INVALID_SOCKET;
+            cfg->udp_send_sock = INVALID_SOCKET;
+            cfg->udp_connected = FALSE;
 
             // Shift remaining entries down
             int remaining = g_proxy_config_count - i - 1;
@@ -194,6 +197,7 @@ PROXYBRIDGE_API BOOL ProxyBridge_DeleteProxyConfig(UINT32 config_id)
                 memmove(&g_proxy_configs[i], &g_proxy_configs[i + 1], remaining * sizeof(PROXY_CONFIG));
 
             g_proxy_config_count--;
+            memset(&g_proxy_configs[g_proxy_config_count], 0, sizeof(PROXY_CONFIG));
             ReleaseSRWLockExclusive(&g_proxy_lock);
 
             if (old_tcp != INVALID_SOCKET) closesocket(old_tcp);

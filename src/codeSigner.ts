@@ -20,19 +20,60 @@ interface StoredCertificateConfig extends CertificateMetadata {
   tag?: string;
 }
 
-const CERTS_DIR = process.env.CODE_SIGN_DIR
-  ? path.resolve(process.env.CODE_SIGN_DIR)
-  : path.resolve("./data/certs");
+export function getCertsDir(): string {
+  return process.env.CODE_SIGN_DIR
+    ? path.resolve(process.env.CODE_SIGN_DIR)
+    : path.resolve("./data/certs");
+}
 
-const PFX_PATH = process.env.CODE_SIGN_PFX_PATH
-  ? path.resolve(process.env.CODE_SIGN_PFX_PATH)
-  : path.join(CERTS_DIR, "code_signing.pfx");
+export function getPfxPath(): string {
+  return process.env.CODE_SIGN_PFX_PATH
+    ? path.resolve(process.env.CODE_SIGN_PFX_PATH)
+    : path.join(getCertsDir(), "code_signing.pfx");
+}
 
-const CONFIG_PATH = path.join(CERTS_DIR, "code_signing.json");
+export function getConfigPath(): string {
+  return path.join(getCertsDir(), "code_signing.json");
+}
 
-function getEncryptionKey(): Buffer {
-  const masterSecret = process.env.ADMIN_TOKEN || "pec-default-code-sign-master-key-seed";
-  return crypto.createHash("sha256").update(masterSecret).digest();
+export const CERTS_DIR = getCertsDir();
+export const PFX_PATH = getPfxPath();
+export const CONFIG_PATH = getConfigPath();
+
+export function getEncryptionKey(): Buffer {
+  if (process.env.CODE_SIGN_MASTER_KEY && process.env.CODE_SIGN_MASTER_KEY.trim().length > 0) {
+    return crypto.createHash("sha256").update(process.env.CODE_SIGN_MASTER_KEY).digest();
+  }
+
+  const certsDir = getCertsDir();
+  const keyPath = path.join(certsDir, ".code_sign_master_key");
+
+  if (fs.existsSync(keyPath)) {
+    try {
+      const existing = fs.readFileSync(keyPath);
+      if (existing.length === 32) {
+        return existing;
+      }
+      if (existing.length > 0) {
+        return crypto.createHash("sha256").update(existing).digest();
+      }
+      throw new Error("Master key file is empty (0 bytes)");
+    } catch (err) {
+      throw new Error(`[CodeSign] Failed to read existing master key file at ${keyPath}: ${err}`);
+    }
+  }
+
+  // Generate a new 32-byte secret and store with mode 0o600
+  try {
+    if (!fs.existsSync(certsDir)) {
+      fs.mkdirSync(certsDir, { recursive: true, mode: 0o700 });
+    }
+    const secret = crypto.randomBytes(32);
+    fs.writeFileSync(keyPath, secret, { mode: 0o600 });
+    return secret;
+  } catch (err) {
+    throw new Error(`[CodeSign] Failed to generate/store master key at ${keyPath}: ${err}`);
+  }
 }
 
 function encryptPassword(password: string): { encryptedPassword: string; iv: string; tag: string } {
@@ -111,9 +152,11 @@ export function extractCertificateMetadata(
 
   // Strategy 2: If openssl CLI is available (standard on Linux/Docker)
   try {
-    const tmpPfx = path.join(CERTS_DIR, `tmp_${Date.now()}.pfx`);
-    if (!fs.existsSync(CERTS_DIR)) fs.mkdirSync(CERTS_DIR, { recursive: true });
-    fs.writeFileSync(tmpPfx, pfxBuffer);
+    const certsDir = getCertsDir();
+    const randomSuffix = crypto.randomBytes(8).toString("hex");
+    const tmpPfx = path.join(certsDir, `tmp_${Date.now()}_${randomSuffix}.pfx`);
+    if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(tmpPfx, pfxBuffer, { mode: 0o600 });
     try {
       const out = child_process.execFileSync(
         "openssl",
@@ -138,21 +181,42 @@ export function extractCertificateMetadata(
         };
       }
     } finally {
-      if (fs.existsSync(tmpPfx)) fs.unlinkSync(tmpPfx);
+      if (fs.existsSync(tmpPfx)) {
+        try { fs.unlinkSync(tmpPfx); } catch {}
+      }
     }
   } catch {}
 
   // Strategy 3: On Windows with certutil
   if (process.platform === "win32") {
+    let tmpPfx = "";
+    let tmpPassFile = "";
     try {
-      const tmpPfx = path.join(CERTS_DIR, `tmp_${Date.now()}.pfx`);
-      if (!fs.existsSync(CERTS_DIR)) fs.mkdirSync(CERTS_DIR, { recursive: true });
-      fs.writeFileSync(tmpPfx, pfxBuffer);
+      const certsDir = getCertsDir();
+      const randomSuffix = crypto.randomBytes(8).toString("hex");
+      if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true, mode: 0o700 });
+      tmpPfx = path.join(certsDir, `tmp_${Date.now()}_${randomSuffix}.pfx`);
+      fs.writeFileSync(tmpPfx, pfxBuffer, { mode: 0o600 });
+
+      const certutilArgs = ["-dump"];
+      if (password) {
+        const passSuffix = crypto.randomBytes(8).toString("hex");
+        tmpPassFile = path.join(certsDir, `tmp_pass_${Date.now()}_${passSuffix}.txt`);
+        fs.writeFileSync(tmpPassFile, password, { mode: 0o600 });
+        certutilArgs.push("-p", `@${tmpPassFile}`);
+      }
+      certutilArgs.push(tmpPfx);
+
       try {
         const out = child_process.execFileSync(
           "certutil",
-          ["-dump", "-p", password, tmpPfx],
-          { windowsHide: true, timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }
+          certutilArgs,
+          {
+            windowsHide: true,
+            timeout: 5000,
+            env: { ...process.env, PFX_PASS: password },
+            stdio: ["ignore", "pipe", "pipe"],
+          }
         ).toString("utf8");
 
         const subjectMatch = out.match(/Subject:\s*([^\r\n]+)/i);
@@ -171,9 +235,52 @@ export function extractCertificateMetadata(
           };
         }
       } finally {
-        if (fs.existsSync(tmpPfx)) fs.unlinkSync(tmpPfx);
+        if (tmpPassFile && fs.existsSync(tmpPassFile)) {
+          try { fs.unlinkSync(tmpPassFile); } catch {}
+        }
       }
-    } catch {}
+
+      // Fallback on Windows: PowerShell with env:PFX_PASS (securely reads password from env without CLI leakage)
+      try {
+        const psCmd = `
+          $c = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2('${tmpPfx.replace(/'/g, "''")}', $env:PFX_PASS)
+          [PSCustomObject]@{
+            Subject = $c.Subject
+            Issuer = $c.Issuer
+            NotBefore = $c.NotBefore.ToString('o')
+            NotAfter = $c.NotAfter.ToString('o')
+            Thumbprint = $c.Thumbprint
+          } | ConvertTo-Json
+        `;
+        const psOut = child_process.execFileSync(
+          "powershell",
+          ["-NoProfile", "-Command", psCmd],
+          {
+            windowsHide: true,
+            timeout: 5000,
+            env: { ...process.env, PFX_PASS: password },
+            stdio: ["ignore", "pipe", "pipe"],
+          }
+        ).toString("utf8");
+        const parsed = JSON.parse(psOut);
+        if (parsed.Subject || parsed.Thumbprint) {
+          return {
+            subject: parsed.Subject || "Enterprise Code Signing Certificate",
+            issuer: parsed.Issuer || "Internal CA",
+            validFrom: parsed.NotBefore || new Date().toISOString(),
+            validTo: parsed.NotAfter || new Date(Date.now() + 365 * 86400000).toISOString(),
+            thumbprint: parsed.Thumbprint ? parsed.Thumbprint.replace(/\s+/g, "").toUpperCase() : "",
+          };
+        }
+      } catch {}
+    } catch {} finally {
+      if (tmpPassFile && fs.existsSync(tmpPassFile)) {
+        try { fs.unlinkSync(tmpPassFile); } catch {}
+      }
+      if (tmpPfx && fs.existsSync(tmpPfx)) {
+        try { fs.unlinkSync(tmpPfx); } catch {}
+      }
+    }
   }
 
   // Fallback defaults
@@ -193,11 +300,15 @@ export function saveCertificate(
   type: "commercial" | "internal" = "commercial",
   timestampUrl?: string
 ): CertificateMetadata {
-  if (!fs.existsSync(CERTS_DIR)) {
-    fs.mkdirSync(CERTS_DIR, { recursive: true, mode: 0o700 });
+  const certsDir = getCertsDir();
+  const pfxPath = getPfxPath();
+  const configPath = getConfigPath();
+
+  if (!fs.existsSync(certsDir)) {
+    fs.mkdirSync(certsDir, { recursive: true, mode: 0o700 });
   }
 
-  fs.writeFileSync(PFX_PATH, pfxBuffer, { mode: 0o600 });
+  fs.writeFileSync(pfxPath, pfxBuffer, { mode: 0o600 });
 
   const meta = extractCertificateMetadata(pfxBuffer, password);
   const enc = encryptPassword(password);
@@ -216,12 +327,15 @@ export function saveCertificate(
     tag: enc.tag,
   };
 
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(stored, null, 2), { mode: 0o600 });
+  fs.writeFileSync(configPath, JSON.stringify(stored, null, 2), { mode: 0o600 });
 
   return getCertificateStatus();
 }
 
 export function getCertificateStatus(): CertificateMetadata {
+  const pfxPath = getPfxPath();
+  const configPath = getConfigPath();
+
   if (process.env.CODE_SIGN_PFX_PATH && fs.existsSync(process.env.CODE_SIGN_PFX_PATH)) {
     return {
       hasCertificate: true,
@@ -232,9 +346,9 @@ export function getCertificateStatus(): CertificateMetadata {
     };
   }
 
-  if (fs.existsSync(CONFIG_PATH) && fs.existsSync(PFX_PATH)) {
+  if (fs.existsSync(configPath) && fs.existsSync(pfxPath)) {
     try {
-      const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+      const raw = fs.readFileSync(configPath, "utf8");
       const parsed: StoredCertificateConfig = JSON.parse(raw);
       return {
         hasCertificate: true,
@@ -256,16 +370,18 @@ export function getCertificateStatus(): CertificateMetadata {
 }
 
 export function deleteCertificate(): boolean {
+  const pfxPath = getPfxPath();
+  const configPath = getConfigPath();
   let removed = false;
-  if (fs.existsSync(PFX_PATH)) {
+  if (fs.existsSync(pfxPath)) {
     try {
-      fs.unlinkSync(PFX_PATH);
+      fs.unlinkSync(pfxPath);
       removed = true;
     } catch {}
   }
-  if (fs.existsSync(CONFIG_PATH)) {
+  if (fs.existsSync(configPath)) {
     try {
-      fs.unlinkSync(CONFIG_PATH);
+      fs.unlinkSync(configPath);
       removed = true;
     } catch {}
   }
@@ -282,16 +398,16 @@ export function signBinary(targetPath: string): boolean {
     return false;
   }
 
-  let pfxFile = PFX_PATH;
+  let pfxFile = getPfxPath();
   let password = "";
   let tsUrl = status.timestampUrl || "";
 
   if (process.env.CODE_SIGN_PFX_PATH && fs.existsSync(process.env.CODE_SIGN_PFX_PATH)) {
     pfxFile = process.env.CODE_SIGN_PFX_PATH;
-    password = process.env.CODE_SIGN_PASSWORD || "";
-  } else if (fs.existsSync(CONFIG_PATH)) {
+    password = process.env.CODE_SIGN_PASSWORD || process.env.PFX_PASS || "";
+  } else if (fs.existsSync(getConfigPath())) {
     try {
-      const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+      const raw = fs.readFileSync(getConfigPath(), "utf8");
       const parsed: StoredCertificateConfig = JSON.parse(raw);
       password = decryptPassword(parsed);
       if (parsed.timestampUrl !== undefined) {
@@ -325,40 +441,65 @@ export function signBinary(targetPath: string): boolean {
     return false;
   }
 
+  let tmpPassFile = "";
+  let signedTmp = "";
   try {
+    const certsDir = getCertsDir();
+    if (password) {
+      const passSuffix = crypto.randomBytes(8).toString("hex");
+      tmpPassFile = path.join(certsDir, `tmp_pass_${Date.now()}_${passSuffix}.txt`);
+      fs.writeFileSync(tmpPassFile, password, { mode: 0o600 });
+    }
+
     if (hasOsslsigncode) {
-      const signedTmp = `${targetPath}.signed`;
+      signedTmp = `${targetPath}.${crypto.randomBytes(8).toString("hex")}.signed`;
       const signArgs: string[] = ["sign", "-pkcs12", pfxFile];
-      if (password) {
-        signArgs.push("-pass", password);
+      if (tmpPassFile) {
+        signArgs.push("-readpass", tmpPassFile);
       }
       signArgs.push("-h", "sha256");
       if (tsUrl) {
         signArgs.push("-ts", tsUrl);
       }
       signArgs.push("-in", targetPath, "-out", signedTmp);
-      child_process.execFileSync("osslsigncode", signArgs, { windowsHide: true, stdio: "pipe" });
+      child_process.execFileSync("osslsigncode", signArgs, {
+        windowsHide: true,
+        env: { ...process.env, PFX_PASS: password },
+        stdio: "pipe",
+      });
       if (fs.existsSync(signedTmp) && fs.statSync(signedTmp).size > 0) {
         fs.copyFileSync(signedTmp, targetPath);
         fs.unlinkSync(signedTmp);
+        signedTmp = "";
         return true;
       }
     } else if (hasSigntool) {
       const signArgs: string[] = ["sign", "/f", pfxFile];
-      if (password) {
-        signArgs.push("/p", password);
+      if (tmpPassFile) {
+        signArgs.push("/pfile", tmpPassFile);
       }
       signArgs.push("/fd", "sha256");
       if (tsUrl) {
         signArgs.push("/tr", tsUrl, "/td", "sha256");
       }
       signArgs.push(targetPath);
-      child_process.execFileSync("signtool.exe", signArgs, { windowsHide: true, stdio: "pipe" });
+      child_process.execFileSync("signtool.exe", signArgs, {
+        windowsHide: true,
+        env: { ...process.env, PFX_PASS: password },
+        stdio: "pipe",
+      });
       return true;
     }
   } catch (err: any) {
     console.warn(`[CodeSign] Failed to sign ${path.basename(targetPath)}:`, err?.message || err);
     return false;
+  } finally {
+    if (tmpPassFile && fs.existsSync(tmpPassFile)) {
+      try { fs.unlinkSync(tmpPassFile); } catch {}
+    }
+    if (signedTmp && fs.existsSync(signedTmp)) {
+      try { fs.unlinkSync(signedTmp); } catch {}
+    }
   }
 
   return false;
