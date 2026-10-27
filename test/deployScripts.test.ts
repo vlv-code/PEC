@@ -4,21 +4,16 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 
-test("docker-compose.yml: binds port to 127.0.0.1 by default (H-9)", () => {
+test("docker-compose.yml: binds port with configurable host (H-9)", () => {
   const composePath = path.resolve("docker-compose.yml");
   assert.strictEqual(fs.existsSync(composePath), true, "docker-compose.yml must exist");
   const content = fs.readFileSync(composePath, "utf-8");
 
-  // Must bind to 127.0.0.1
+  // Must honor HOST variable from .env
   assert.match(
     content,
-    /["']?127\.0\.0\.1:\$\{PORT:-3000\}:3000["']?/,
-    "docker-compose.yml should bind port to 127.0.0.1"
-  );
-  assert.doesNotMatch(
-    content,
-    /-\s+["']\$\{PORT:-3000\}:3000["']/,
-    "docker-compose.yml must not expose port globally on 0.0.0.0"
+    /["']?\$\{HOST:-0\.0\.0\.0\}:\$\{PORT:-3000\}:3000["']?/,
+    "docker-compose.yml should bind port according to HOST in .env"
   );
 });
 
