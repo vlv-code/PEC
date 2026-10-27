@@ -117,28 +117,37 @@ cp .env.example .env
 | Переменная | Значение по умолчанию | Описание |
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Порт, на котором запускается веб-сервер |
-| `HOST` | `0.0.0.0` | Сетевой интерфейс прослушивания |
-| `PUBLIC_BASE_URL` | *(пусто)* | Публичный URL сервера в updates.xml / GPO-артефактах; защищает от Host-header poisoning. **Обязателен в prod** (валидация: только origin, без пути и слэша) |
+| `HOST` | `0.0.0.0` | Сетевой интерфейс прослушивания (0.0.0.0 для всех интерфейсов) |
+| `PUBLIC_BASE_URL` | *(пусто)* | Публичный URL сервера в updates.xml / GPO-артефактах и клиентах; защищает от Host-header poisoning. **Обязателен в prod** (валидация: только origin, без пути и слэша) |
 | `TRUST_PROXY` | `false` | Режим работы за reverse-proxy: `false` (прямой доступ), `1` (один хоп прокси), `true` (доверять заголовкам X-Forwarded-For) |
+| `HTTP_PORT` | `80` | Внешний HTTP-порт хоста в `docker-compose.prod.yml` |
+| `HTTPS_PORT` | `443` | Внешний HTTPS-порт хоста в `docker-compose.prod.yml` |
 | `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Важно:** Fleet-токен расширений и клиентов (заголовок `X-Ext-Token` / `X-Fleet-Token`), низкие привилегии — зашивается в CRX/GPO-артефакты |
 | `ADMIN_TOKEN` | *(нет; обязателен в prod)* | **Важно:** Админ-токен для ВСЕХ management-API (`X-Admin-Token`). Должен отличаться от `EXT_SHARED_TOKEN`; никогда не попадает в артефакты |
 | `ADMIN_USERNAME` | `admin` | Логин администратора для входа в веб-панель (bootstrap) |
 | `ADMIN_PASSWORD` | *(fallback на `ADMIN_TOKEN`)* | Начальный пароль веб-панели; сохраняется в виде scrypt-хеша в `DASHBOARD_AUTH_PATH` |
 | `PAC_REQUIRE_SIGNATURE` | `false` | Требовать проверку криптографической HMAC-SHA256 подписи для запросов `/proxy.pac` |
 | `PAC_SIGNING_SECRET` | *(fallback на `EXT_SHARED_TOKEN`)* | Секретный HMAC-ключ для генерации и валидации подписей запросов `/proxy.pac` |
+| `ALLOW_INTERNAL_PANEL` | `false` | Разрешить обращение к 3x-ui панелям в частных сетях RFC 1918 без блокировки SSRF-фильтром |
 | `PEC_PRIVATE_KEY_PATH` | *(пусто)* | Путь к файлу закрытого ключа RSA (.pem) для подписи CRX-пакетов расширения (по умолчанию генерируется `extension/key.pem`) |
 | `PEC_PRIVATE_KEY_PEM` | *(пусто)* | Содержимое RSA закрытого ключа в формате PEM одной строкой (для сред контейнеризации) |
 | `DATA_DIR` | `./data` | Базовый каталог для постоянных файлов состояния и настроек |
+| `PROXIES_STORE_PATH` | `./data/proxies.json` | Путь к хранилищу добавленных прокси-узлов |
 | `CREDS_STORE` | `./data/current_creds.json` | Путь к файлу актуальных учетных данных прокси |
 | `DASHBOARD_AUTH_PATH` | `./data/dashboard_auth.json` | Путь к хранилищу учетных данных веб-панели (scrypt-хеш, не в открытом виде) |
 | `PROXY_CONFIG_PATH` | `./data/proxy_config.json` | Путь к сохраненным параметрам прокси |
 | `ROUTING_PROFILES_PATH` | `./data/routing_profiles.json` | Путь к хранилищу профилей маршрутизации |
+| `ROUTING_PRESETS_PATH` | `./data/routing_presets.json` | Путь к хранилищу встроенных и пользовательских гео-пресетов маршрутизации |
 | `INSTANCES_META_PATH` | `./data/instances_meta.json` | Путь к хранилищу метаданных подключенных клиентских инстансов |
 | `ROTATION_CONFIG_PATH` | `./data/rotation_config.json` | Путь к конфигурации планировщика ротации |
 | `ROTATION_HISTORY_PATH` | `./data/rotation_history.json` | Путь к журналу истории ротаций учетных данных |
 | `BUILDER_CONFIG` | `./data/extension_build_config.json` | Путь к файлу конфигурации сборки браузерного расширения |
-| `PROXY_HOST` | `10.0.0.1` | Хост/IP корпоративного прокси |
-| `PROXY_PORT` | `10809` | Порт корпоративного прокси |
+| `APP_BUILD_CONFIG` | `./data/app_build_config.json` | Путь к файлу конфигурации десктопного клиента PEC-App |
+| `APP_BUILD_INFO` | `./data/app_build_info.json` | Путь к метаданным последней сборки десктопного клиента |
+| `PANELS_3XUI_PATH` | `./data/panels_3xui.json` | Путь к хранилищу параметров подключения к панелям 3x-ui |
+| `RELEASES_META_PATH` | `./data/releases_meta.json` | Путь к метаданным релизов и журналам версий |
+| `PROXY_HOST` | `10.0.0.1` | Хост/IP корпоративного прокси по умолчанию |
+| `PROXY_PORT` | `10809` | Порт корпоративного прокси по умолчанию |
 | `ROTATION_INTERVAL_MIN` | `1440` | Интервал автоматической ротации учетных данных прокси в минутах (24 часа) |
 | `XUI_PANEL_URL` | `https://3xui-host:2053/basepath` | URL панели управления 3x-ui |
 | `XUI_ADMIN_USER` | `admin` | Логин администратора 3x-ui |
@@ -191,6 +200,8 @@ npm start
 
 ### Вариант 2: Запуск в Docker Compose (Рекомендуется для серверов)
 
+Порт контейнера динамически привязывается к интерфейсу согласно переменным `HOST` и `PORT` в `.env` (по умолчанию `0.0.0.0:3000`):
+
 ```bash
 # 1. Настройка окружения
 cp .env.example .env
@@ -201,6 +212,11 @@ docker compose up -d --build
 
 # 3. Просмотр логов
 docker compose logs -f pec-server
+```
+
+Для production-развертывания с автоматической терминацией SSL через Nginx используйте `docker-compose.prod.yml`:
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ---
@@ -249,7 +265,7 @@ sudo nginx -t && sudo systemctl reload nginx
 # Проверка типов TypeScript
 npm run lint
 
-# Запуск автоматизированного тестового набора (365+ тестов)
+# Запуск автоматизированного тестового набора (585+ тестов)
 npm test
 
 # Сборка production бандла

@@ -12,7 +12,7 @@ test("packager accepts uiLayout, colorPalette, and defaultThemeMode and renders 
     name: "Corporate Proxy",
     shortName: "CorpProxy",
     version: "1.4.0",
-    serverUrl: "https://proxyex.ic-iskra.ru",
+    serverUrl: "https://pec.example.corp",
     token: "fleet-secret-123",
     uiLayout: "terminal",
     colorPalette: "emerald",

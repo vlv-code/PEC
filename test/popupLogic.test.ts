@@ -7,7 +7,7 @@ import { renderPopupJs } from "../src/extensionTemplates.js";
 test("popup.js compiles syntactically and contains core action handlers", () => {
   const js = renderPopupJs({
     name: "PEC",
-    serverUrl: "https://proxyex.ic-iskra.ru",
+    serverUrl: "https://pec.example.corp",
   } as any);
 
   assert.ok(js.includes("btnThemeToggle"), "Theme toggle handler must be registered");
@@ -179,7 +179,7 @@ test("popup.js and renderPopupJs defensively filter user rules", () => {
   const rawJs = fs.readFileSync("extension/popup.js", "utf8");
   assert.ok(rawJs.includes('rules || []).filter(r => r && typeof r.pattern === "string")'), "popup.js must filter invalid rules defensively");
 
-  const generatedJs = renderPopupJs({ name: "PEC", serverUrl: "https://proxyex.ic-iskra.ru" } as any);
+  const generatedJs = renderPopupJs({ name: "PEC", serverUrl: "https://pec.example.corp" } as any);
   assert.ok(generatedJs.includes('rules || []).filter(r => r && typeof r.pattern === "string")'), "renderPopupJs must filter invalid rules defensively");
 });
 
@@ -188,7 +188,7 @@ test("btnCheckIp in popup.js and renderPopupJs queries public IP services first 
   assert.ok(rawJs.includes("api.ipify.org"), "popup.js must query api.ipify.org");
   assert.ok(rawJs.includes("icanhazip.com"), "popup.js must have icanhazip.com fallback");
 
-  const generatedJs = renderPopupJs({ name: "PEC", serverUrl: "https://proxyex.ic-iskra.ru" } as any);
+  const generatedJs = renderPopupJs({ name: "PEC", serverUrl: "https://pec.example.corp" } as any);
   assert.ok(generatedJs.includes("api.ipify.org"), "renderPopupJs must query api.ipify.org");
   assert.ok(generatedJs.includes("icanhazip.com"), "renderPopupJs must have icanhazip.com fallback");
 });

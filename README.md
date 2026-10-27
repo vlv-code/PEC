@@ -117,26 +117,35 @@ cp .env.example .env
 | Variable | Default | Description |
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Port for the HTTP server to listen on |
-| `HOST` | `0.0.0.0` | Network interface binding |
-| `PUBLIC_BASE_URL` | *(empty)* | Public URL baked into updates.xml / GPO artifacts; prevents Host-header poisoning. **Required in production** (validated: bare origin, no path/trailing slash) |
+| `HOST` | `0.0.0.0` | Network interface binding (0.0.0.0 listens on all interfaces) |
+| `PUBLIC_BASE_URL` | *(empty)* | Public URL baked into updates.xml / GPO artifacts and desktop profiles; prevents Host-header poisoning. **Required in production** (validated: bare origin, no path/trailing slash) |
 | `TRUST_PROXY` | `false` | Client IP resolution: `false` (direct exposure, X-Forwarded-For ignored), `1` (one reverse-proxy hop), `true` (trust all - trusted networks only) |
+| `HTTP_PORT` | `80` | Host external HTTP port for Nginx service in `docker-compose.prod.yml` |
+| `HTTPS_PORT` | `443` | Host external HTTPS port for Nginx service in `docker-compose.prod.yml` |
 | `EXT_SHARED_TOKEN` | `corp-proxy-secret-token-change-me` | **Critical:** Fleet token required by Chrome extensions and desktop clients in `X-Ext-Token` / `X-Fleet-Token` (low privilege - baked into CRX/GPO artifacts) |
 | `ADMIN_TOKEN` | *(none; required in production)* | **Critical:** Admin token for ALL management APIs (`X-Admin-Token`). Must be distinct from `EXT_SHARED_TOKEN`; never baked into artifacts |
 | `ADMIN_USERNAME` | `admin` | Dashboard login username (bootstrap) |
 | `ADMIN_PASSWORD` | *(falls back to `ADMIN_TOKEN`)* | Initial dashboard login password; change it in the dashboard settings — credentials persist as a scrypt hash in `DASHBOARD_AUTH_PATH` |
 | `PAC_REQUIRE_SIGNATURE` | `false` | Enforce cryptographic HMAC-SHA256 signature verification on `/proxy.pac` requests |
 | `PAC_SIGNING_SECRET` | *(falls back to `EXT_SHARED_TOKEN`)* | Secret HMAC key used for signing and verifying `/proxy.pac` requests |
+| `ALLOW_INTERNAL_PANEL` | `false` | Allow connecting to 3x-ui panels located on RFC 1918 private subnets without SSRF guard blocking |
 | `PEC_PRIVATE_KEY_PATH` | *(empty)* | Path to RSA private key PEM file for signing CRX packages (defaults to auto-generating `extension/key.pem`) |
 | `PEC_PRIVATE_KEY_PEM` | *(empty)* | Inline RSA private key PEM string for signing CRX packages (container environment alternative) |
 | `DATA_DIR` | `./data` | Base directory for runtime persistent state files |
+| `PROXIES_STORE_PATH` | `./data/proxies.json` | Path to persistent proxies JSON store |
 | `CREDS_STORE` | `./data/current_creds.json` | Path to persistent credentials JSON store |
 | `DASHBOARD_AUTH_PATH` | `./data/dashboard_auth.json` | Path to the dashboard credential store (scrypt-hashed, never plaintext) |
 | `PROXY_CONFIG_PATH` | `./data/proxy_config.json` | Path to saved proxy host, port, and bypass config |
 | `ROUTING_PROFILES_PATH` | `./data/routing_profiles.json` | Path to routing profiles store |
+| `ROUTING_PRESETS_PATH` | `./data/routing_presets.json` | Path to builtin and custom routing presets store |
 | `INSTANCES_META_PATH` | `./data/instances_meta.json` | Path to connected client instances metadata store |
 | `ROTATION_CONFIG_PATH` | `./data/rotation_config.json` | Path to rotation scheduler config |
 | `ROTATION_HISTORY_PATH` | `./data/rotation_history.json` | Path to rotation history audit log |
 | `BUILDER_CONFIG` | `./data/extension_build_config.json` | Path to extension build configuration store |
+| `APP_BUILD_CONFIG` | `./data/app_build_config.json` | Path to native desktop app build configuration store |
+| `APP_BUILD_INFO` | `./data/app_build_info.json` | Path to desktop client latest build info store |
+| `PANELS_3XUI_PATH` | `./data/panels_3xui.json` | Path to 3x-ui panels configuration store |
+| `RELEASES_META_PATH` | `./data/releases_meta.json` | Path to releases and version history store |
 | `PROXY_HOST` | `10.0.0.1` | Default proxy host IP or domain name |
 | `PROXY_PORT` | `10809` | Default proxy port |
 | `ROTATION_INTERVAL_MIN` | `1440` | Default interval for proxy credential rotation in minutes (24 hours) |

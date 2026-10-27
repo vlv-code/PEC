@@ -25,7 +25,7 @@ test("popup HTML has 380px width, 3 tabs, user overrides, and theme toggle", () 
     name: "PEC Corp Proxy",
     shortName: "PEC",
     version: "1.4.0",
-    serverUrl: "https://proxyex.ic-iskra.ru",
+    serverUrl: "https://pec.example.corp",
     token: "tok",
     colorPalette: "cyber",
     uiLayout: "console",
