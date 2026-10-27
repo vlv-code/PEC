@@ -173,6 +173,13 @@ echo -e "${YELLOW}[*] Токены (ADMIN_TOKEN, EXT_SHARED_TOKEN) сохран�
 echo -e "${YELLOW}[*] Для безопасного просмотра токенов выполните: sudo cat /etc/pec-server/pec-server.env${NC}"
 echo -e "Статус службы:   systemctl status pec-server"
 echo -e "Просмотр логов:   journalctl -u pec-server -f"
-echo -e "Веб-интерфейс:    http://127.0.0.1:3000"
+if [ -f /etc/pec-server/pec-server.env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . /etc/pec-server/pec-server.env
+    set +a
+fi
+
+echo -e "Веб-интерфейс:    http://${HOST:-127.0.0.1}:${PORT:-3000}"
 echo -e "${YELLOW}[!] ВНИМАНИЕ: Для продуктивной среды настройте обратный прокси с HTTPS (см. deploy/nginx-proxy.conf).${NC}"
 echo -e "${BLUE}================================================================${NC}"

@@ -1849,7 +1849,13 @@ export function renderBackgroundJs(cfg: {
   allowUserBypass?: boolean;
 }, customSource?: string): string {
   const source = customSource || BACKGROUND_TEMPLATE;
-  const serverBase = String(cfg.defaultServerUrl || "https://update.example.com").replace(/\/+$/, "");
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const serverBase = String(
+    (cfg.defaultServerUrl && !cfg.defaultServerUrl.includes("update.example.com") ? cfg.defaultServerUrl : "") ||
+    envPublicBase ||
+    cfg.defaultServerUrl ||
+    "https://update.example.com"
+  ).replace(/\/+$/, "");
   const syncInterval = Math.max(1, Math.round(Number(cfg.syncIntervalMinutes) || 5));
   const bypassTimeout = Math.max(1, Math.round(Number(cfg.bypassAutoTimeoutMinutes) || 15));
   const badgeEnabled = cfg.badgeIndicator === false ? "false" : "true";

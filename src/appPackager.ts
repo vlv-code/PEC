@@ -85,7 +85,7 @@ export const DEFAULT_APP_BUILD_CONFIG: AppBuildConfig = {
   themeBackground: "#0b1120",
   themeCard: "#131d36",
   iconType: "shield",
-  defaultServerUrl: "https://update.example.com",
+  defaultServerUrl: (process.env.PUBLIC_BASE_URL || "https://update.example.com").trim().replace(/\/+$/, ""),
   defaultToken: process.env.EXT_SHARED_TOKEN || "corp-proxy-secret-token-change-me",
   syncIntervalMinutes: 15,
   autoStartWithWindows: true,
@@ -353,7 +353,8 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
     };
   });
 
-  const effectiveServerUrl = (baseUrl || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const effectiveServerUrl = (baseUrl || envPublicBase || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
 
   return {
     Version: "1.0",
@@ -386,7 +387,8 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
 export function renderAppDeployPs1(cfg: AppBuildConfig, baseUrl: string): string {
   const appName = cfg.name || "PEC - Proxy Client";
   const appVersion = cfg.version || "2.1.0";
-  const serverUrl = (baseUrl || cfg.defaultServerUrl || "").replace(/\/+$/, "");
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const serverUrl = (baseUrl || envPublicBase || cfg.defaultServerUrl || "").replace(/\/+$/, "");
   const autoStart = cfg.autoStartWithWindows ? "$true" : "$false";
   const isService = cfg.installAsService ? "$true" : "$false";
 
@@ -917,7 +919,8 @@ export function assembleAppPackage(
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  const effectiveBaseUrl = (baseUrl || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const effectiveBaseUrl = (baseUrl || envPublicBase || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
   const profileObj = buildAppProfile(cfg, effectiveBaseUrl);
   const profileJson = JSON.stringify(profileObj, null, 2);
   const profileBuffer = Buffer.from(profileJson, "utf-8");

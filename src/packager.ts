@@ -54,7 +54,7 @@ export const DEFAULT_BUILD_CONFIG: ExtensionBuildConfig = {
   supportUrl: "mailto:it-support@corp.local",
   pingTestUrl: "/healthz",
   syncIntervalMinutes: 15,
-  defaultServerUrl: "https://update.example.com",
+  defaultServerUrl: (process.env.PUBLIC_BASE_URL || "https://update.example.com").trim().replace(/\/+$/, ""),
   updateUrl: "",
   // The fleet token baked into shipped artifacts. It must always be the
   // low-privilege EXT_SHARED_TOKEN, never ADMIN_TOKEN (which stays server-side).
@@ -834,7 +834,14 @@ export function generateExtensionFiles(
 }
 
 export async function buildExtensionFiles(cfg: ExtensionBuildConfig): Promise<Record<string, string>> {
-  const effectiveBaseUrl = (cfg.serverUrl || cfg.defaultServerUrl || currentBuildConfig.defaultServerUrl || "http://localhost:3000").trim().replace(/\/+$/, "");
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const effectiveBaseUrl = (
+    cfg.serverUrl ||
+    (cfg.defaultServerUrl && !cfg.defaultServerUrl.includes("update.example.com") ? cfg.defaultServerUrl : "") ||
+    envPublicBase ||
+    (currentBuildConfig.defaultServerUrl && !currentBuildConfig.defaultServerUrl.includes("update.example.com") ? currentBuildConfig.defaultServerUrl : "") ||
+    "http://localhost:3000"
+  ).trim().replace(/\/+$/, "");
   const effectiveToken = cfg.token || cfg.defaultToken || currentBuildConfig.defaultToken;
 
   const mergedCfg: ExtensionBuildConfig = {

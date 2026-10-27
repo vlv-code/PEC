@@ -4,6 +4,31 @@ import assert from "node:assert";
 import dns from "node:dns";
 import { validateSafeEndpointUrlAsync } from "../src/rotate.js";
 
+// Ensure tests do not rely on flaky external DNS / third-party nip.io availability
+const originalLookup = dns.promises.lookup;
+dns.promises.lookup = (async (hostname: string, options?: any) => {
+  const nipMatch = hostname.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\.nip\.io$/i);
+  if (nipMatch) {
+    const ip = nipMatch[1];
+    if (options?.all) {
+      return [{ address: ip, family: 4 }] as any;
+    }
+    return { address: ip, family: 4 } as any;
+  }
+  if (hostname === "one.one.one.one") {
+    if (options?.all) {
+      return [{ address: "1.1.1.1", family: 4 }] as any;
+    }
+    return { address: "1.1.1.1", family: 4 } as any;
+  }
+  if (hostname.includes("non-existent-domain-pec-test")) {
+    const err: any = new Error(`getaddrinfo ENOTFOUND ${hostname}`);
+    err.code = "ENOTFOUND";
+    throw err;
+  }
+  return originalLookup(hostname, options);
+}) as any;
+
 test("SSRF DNS Guard (H-5): rejects DNS rebinding and nip.io domains resolving to private/loopback IPs", async () => {
   const oldVal = process.env.ALLOW_INTERNAL_PANEL;
   try {

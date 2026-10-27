@@ -108,11 +108,18 @@ echo -e "${YELLOW}[*] Для безопасного просмотра выпо�
 echo -e "${GREEN}[*] Сборка и запуск контейнеров...${NC}"
 docker compose up -d --build
 
+if [ -f "$INSTALL_DIR/.env" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$INSTALL_DIR/.env"
+    set +a
+fi
+
 echo -e "${BLUE}================================================================${NC}"
 echo -e "${GREEN}✔ PEC - Proxy Extension Corp успешно запущен в Docker!${NC}"
-echo -e "Локальный доступ: http://127.0.0.1:${PORT:-3000}"
-echo -e "Healthcheck:      http://127.0.0.1:${PORT:-3000}/healthz"
-echo -e "PAC Скрипт:       http://127.0.0.1:${PORT:-3000}/proxy.pac"
+echo -e "Локальный доступ: http://${HOST:-127.0.0.1}:${PORT:-3000}"
+echo -e "Healthcheck:      http://${HOST:-127.0.0.1}:${PORT:-3000}/healthz"
+echo -e "PAC Скрипт:       http://${HOST:-127.0.0.1}:${PORT:-3000}/proxy.pac"
 echo -e "${YELLOW}[!] ВНИМАНИЕ: Порт привязывается к интерфейсу согласно переменной HOST в .env (по умолчанию 0.0.0.0).${NC}"
 echo -e "${YELLOW}[!] Доступ к панели по открытому протоколу HTTP без TLS небезопасен!${NC}"
 echo -e "${YELLOW}[!] Для продуктивной среды настройте обратный прокси с HTTPS (см. deploy/nginx-proxy.conf).${NC}"
