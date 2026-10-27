@@ -18,11 +18,35 @@ import { createRateLimiter } from "../middleware/security.js";
 import { getAppBuildInfoPath, getReleasesDir } from "../storage.js";
 import type { AppProcessRule } from "../types.js";
 import { getCertificateStatus, saveCertificate, deleteCertificate } from "../codeSigner.js";
+import { SEMVER_REGEX } from "../packager.js";
 
 const VALID_PROTOCOLS = new Set(["tcp", "udp", "both"]);
 const VALID_ACTIONS = new Set(["proxy", "direct", "block"]);
 
-function validateProcessRules(rules: unknown): AppProcessRule[] {
+export function isValidDomainPattern(tok: string): boolean {
+  if (tok === "*") return true;
+  let s = tok;
+  if (s.startsWith("*.")) s = s.slice(2);
+  else if (s.startsWith(".")) s = s.slice(1);
+  if (!s || s.includes("*")) return false;
+
+  const portMatch = s.match(/:([0-9]+)$/);
+  if (portMatch) {
+    const port = Number(portMatch[1]);
+    if (port < 1 || port > 65535) return false;
+    s = s.slice(0, portMatch.index);
+  }
+
+  if (!s || s.length > 253) return false;
+  const labels = s.split(".");
+  for (const label of labels) {
+    if (!label || label.length > 63) return false;
+    if (!/^[\p{L}\p{N}_](?:[\p{L}\p{N}_-]*[\p{L}\p{N}_])?$/u.test(label)) return false;
+  }
+  return true;
+}
+
+export function validateProcessRules(rules: unknown): AppProcessRule[] {
   if (!Array.isArray(rules)) {
     throw new Error("processRules must be an array");
   }
@@ -42,7 +66,7 @@ function validateProcessRules(rules: unknown): AppProcessRule[] {
       throw new Error(`Invalid action '${action}' in rule ${i}. Allowed: proxy, direct, block`);
     }
 
-    return {
+    const ruleObj: AppProcessRule = {
       id: String((r as any).id || `rule_${i + 1}`),
       processName: String((r as any).processName || "*"),
       targetHosts: String((r as any).targetHosts || "*"),
@@ -50,10 +74,36 @@ function validateProcessRules(rules: unknown): AppProcessRule[] {
       protocol: proto as "tcp" | "udp" | "both",
       action: action as "proxy" | "direct" | "block",
     };
+
+    if ((r as any).targetDomains !== undefined) {
+      const td = (r as any).targetDomains;
+      if (td === null || typeof td !== "string") {
+        throw new Error(`Invalid targetDomains in rule ${i}: must be a string`);
+      }
+      const rawDomains = td.trim();
+      if (rawDomains.length > 2048) {
+        throw new Error(`Invalid targetDomains in rule ${i}: exceeds maximum length of 2048 characters`);
+      }
+      if (/[\r\n\0]/.test(rawDomains)) {
+        throw new Error(`Invalid targetDomains in rule ${i}: contains forbidden control characters`);
+      }
+      if (rawDomains && rawDomains !== "*") {
+        const tokens = rawDomains.split(/[;,]/).map((t: string) => t.trim()).filter(Boolean);
+        if (tokens.length === 0) {
+          throw new Error(`Invalid targetDomains in rule ${i}: contains no valid domain entries`);
+        }
+        for (const tok of tokens) {
+          if (!isValidDomainPattern(tok)) {
+            throw new Error(`Invalid domain pattern '${tok}' in rule ${i} targetDomains`);
+          }
+        }
+      }
+      ruleObj.targetDomains = rawDomains;
+    }
+
+    return ruleObj;
   });
 }
-
-const SEMVER_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$/;
 
 export function createAppBuilderRouter(
   _getFleetToken: () => string,

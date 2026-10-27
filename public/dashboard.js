@@ -460,43 +460,7 @@
       });
     }
 
-    // ----------------- GitHub Releases & Version Control -----------------
-    let cachedReleases = null;
-    async function checkGitHubReleases(forceRefresh = false) {
-      const container = document.getElementById('ghReleaseContent');
-      const badge = document.getElementById('versionReleaseBadge');
-      if (!container) return;
-
-      if (!forceRefresh && cachedReleases) {
-        renderGitHubReleases(cachedReleases);
-        return;
-      }
-
-      container.innerHTML = `<span style="color: var(--text-muted);">${currentLang === 'ru' ? 'Запрос к GitHub Releases API...' : 'Fetching GitHub Releases API...'}</span>`;
-
-      try {
-        const res = await adminFetch('/api/github/releases');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        cachedReleases = data;
-        renderGitHubReleases(data);
-        const isUpdate = Boolean(data.updateAvailable || data.hasUpdate);
-        const latestVer = data.latestRelease ? (data.latestRelease.cleanVersion || data.latestRelease.version || data.latestRelease.tag_name || '') : '';
-        if (badge && data.currentVersion) {
-          badge.textContent = 'v' + data.currentVersion;
-          if (isUpdate) {
-            badge.className = 'badge badge-action-direct';
-            badge.title = (currentLang === 'ru' ? 'Доступна новая версия: v' : 'New version available: v') + latestVer;
-          } else {
-            badge.className = 'badge badge-online';
-            badge.title = currentLang === 'ru' ? 'Актуальная версия' : 'Latest version installed';
-          }
-        }
-      } catch (err) {
-        container.innerHTML = `<div style="color: var(--danger); font-size: 11.5px;">${currentLang === 'ru' ? 'Не удалось загрузить данные релизов GitHub (автономный режим).' : 'Unable to query GitHub releases (offline mode).'}<br><code style="color: var(--text-muted); font-size: 11px;">${err.message}</code></div>`;
-      }
-    }
-
+    // ----------------- Releases Version Display (Cleaned up per D-08) -----------------
     function renderGitHubReleases(data) {
       const container = document.getElementById('ghReleaseContent');
       if (!container || !data) return;
@@ -757,6 +721,9 @@
         thInstProxy: 'Proxy Server',
         thInstActions: 'Actions',
         txtNoFleet: 'No registered fleet connected yet.',
+        titleDesktopClients: 'PEC-App Desktop Clients',
+        subDesktopClients: 'Centralized management of Windows clients, version monitoring, and proxy node assignment',
+        txtNoDesktopClients: 'No desktop clients connected yet. Launch PEC-App.exe on a workstation.',
         tabBtnReleases: '<img src="/icons/package.png" class="icon-inline" alt="releases"> Releases & Rollback',
         titleReleasesBanner: 'Release Management & Rollback Engine',
         descReleasesBanner: 'Versioned archive of extensions (.crx) and desktop apps (.zip). One-click rollback for safe operations.',
@@ -1141,6 +1108,9 @@
         thInstProxy: 'Прокси-сервер',
         thInstActions: 'Действия',
         txtNoFleet: 'Зарегистрированный флот отсутствует',
+        titleDesktopClients: 'Десктопные клиенты PEC-App',
+        subDesktopClients: 'Централизованное управление клиентами Windows, мониторинг версий и назначение прокси-нод',
+        txtNoDesktopClients: 'Десктопные клиенты еще не подключались. Запустите PEC-App.exe на рабочей станции.',
         tabBtnReleases: '<img src="/icons/package.png" class="icon-inline" alt="releases"> Релизы и откат',
         titleReleasesBanner: 'Управление релизами и откат версий',
         descReleasesBanner: 'Версионированный архив расширений (.crx) и десктоп-клиентов (.zip). Мгновенный откат в случае сбоев.',
@@ -4259,6 +4229,11 @@
     window.onCodeSignTypeChange = onCodeSignTypeChange;
     window.uploadCodeSignCertAction = uploadCodeSignCertAction;
     window.deleteCodeSignCertAction = deleteCodeSignCertAction;
+    window.loadDesktopInstances = loadDesktopInstances;
+    window.renderDesktopInstancesTable = renderDesktopInstancesTable;
+    window.initFleetListeners = initFleetListeners;
+    window.testCredsEndpoint = testCredsEndpoint;
+    window.testSyncEndpoint = testSyncEndpoint;
 
     // ----------------- Devices & Instances -----------------
     let lastLoadedInstances = [];
@@ -4285,10 +4260,7 @@
         lastLoadedInstances = data.instances || [];
         renderInstancesTable(lastLoadedInstances);
         loadDesktopInstances();
-        if (!fleetListenersInitialized) {
-          initFleetListeners();
-          fleetListenersInitialized = true;
-        }
+        initFleetListeners();
       } catch (e) {
         console.error(e);
       }
@@ -4315,7 +4287,7 @@
         ? (defaultProxy.name || defaultHostPort)
         : (isRu ? 'Серверный по умолчанию' : 'Server Default');
 
-      const profileOptions = allProfiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+      const profileOptions = (allProfiles || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
 
       // Sort instances
       const sortedInstances = [...instances].sort((a, b) => {
@@ -4671,6 +4643,9 @@
     }
 
     function initFleetListeners() {
+      if (fleetListenersInitialized) return;
+      fleetListenersInitialized = true;
+
       const selectAll = document.getElementById('fleetSelectAll');
       if (selectAll) {
         selectAll.addEventListener('change', () => {
@@ -4747,10 +4722,10 @@
               toast(currentLang === 'ru' ? 'Прокси успешно назначен клиенту' : 'Proxy assigned to client', 'success');
               loadDesktopInstances();
             } else {
-              toast('Failed to assign proxy', 'error');
+              toast(currentLang === 'ru' ? 'Не удалось назначить прокси' : 'Failed to assign proxy', 'error');
             }
           } catch (err) {
-            toast('Error: ' + err.message, 'error');
+            toast((currentLang === 'ru' ? 'Ошибка: ' : 'Error: ') + err.message, 'error');
           }
         });
 
@@ -4771,7 +4746,7 @@
               toast(isRu ? 'Не удалось удалить клиента' : 'Failed to delete client', 'error');
             }
           } catch (err) {
-            toast('Error: ' + err.message, 'error');
+            toast((isRu ? 'Ошибка: ' : 'Error: ') + err.message, 'error');
           }
         });
       }

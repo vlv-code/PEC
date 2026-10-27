@@ -12,6 +12,7 @@ import {
   generateGpoConfig,
   generateGpoDeploymentPack,
   isPackageStale,
+  SEMVER_REGEX,
 } from "../packager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter } from "../middleware/security.js";
@@ -87,9 +88,21 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
     const adminToken = getAdminToken?.();
     if (adminToken && req.body?.defaultToken && req.body.defaultToken === adminToken) {
       return res.status(400).json({
+        ok: false,
         error: "defaultToken must never equal ADMIN_TOKEN - artifacts (CRX/GPO) ship the fleet token publicly.",
       });
     }
+
+    if (req.body?.version !== undefined) {
+      if (typeof req.body.version !== "string" || !SEMVER_REGEX.test(req.body.version.trim())) {
+        return res.status(400).json({
+          ok: false,
+          error: "Invalid version format: must follow semver (e.g. 1.0.0)",
+        });
+      }
+      req.body.version = req.body.version.trim();
+    }
+
     const cleanConfig = filterBuildConfig(req.body);
     const updated = saveBuildConfig(cleanConfig);
     generateExtensionFiles(updated);
@@ -123,6 +136,15 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
   router.post("/api/builder/build", (req: Request, res: Response) => {
     try {
       if (req.body && Object.keys(req.body).length > 0) {
+        if (req.body.version !== undefined) {
+          if (typeof req.body.version !== "string" || !SEMVER_REGEX.test(req.body.version.trim())) {
+            return res.status(400).json({
+              ok: false,
+              error: "Invalid version format: must follow semver (e.g. 1.0.0)",
+            });
+          }
+          req.body.version = req.body.version.trim();
+        }
         const cleanConfig = filterBuildConfig(req.body);
         const saved = saveBuildConfig(cleanConfig);
         warnIfAdminTokenInArtifact(saved.defaultToken);

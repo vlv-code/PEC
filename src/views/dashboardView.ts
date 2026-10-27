@@ -31,8 +31,8 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         <p id="appSubtitle" style="font-size: 14px; color: var(--text-muted);" data-i18n="appSubtitle">Enterprise Proxy Synchronization</p>
       </div>
       <div class="header-controls">
-        <!-- GitHub Version Release Badge -->
-        <span id="versionReleaseBadge" data-server-version="${currentVersion}" class="header-badge" onclick="toggleCustomizationPopover(event)" title="GitHub Releases & Version Control">v${currentVersion}</span>
+        <!-- Version Badge -->
+        <span id="versionReleaseBadge" data-server-version="${currentVersion}" class="header-badge" onclick="toggleCustomizationPopover(event)" title="PEC Server v${currentVersion} &amp; Appearance">v${currentVersion}</span>
 
         <!-- GitHub Repository Link -->
         <a href="https://github.com/vlv-code/PEC" target="_blank" rel="noopener noreferrer" id="btnGithubLink" class="btn-icon" data-i18n-title="btnGithubTitle" title="GitHub: vlv-code/PEC">
@@ -1412,7 +1412,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <div class="grid-2">
         <div class="card">
           <h2 data-i18n="titleCredsTester">Interactive /creds Tester</h2>
-          <label data-i18n="lblTestToken">X-Admin-Token Header Value</label>
+          <label data-i18n="lblTestToken">X-Ext-Token Header Value</label>
           <input type="password" id="testTokenInput" value="" placeholder="paste token to test" autocomplete="off" />
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
             <button onclick="testCredsEndpoint()" data-i18n="btnSendCreds">Send GET /creds</button>
