@@ -236,9 +236,8 @@
             const r = loginPendingRetry;
             loginPendingRetry = null;
             adminFetch(r.url, r.opts).catch(function (e) { console.warn('Retry after login failed:', e); });
-          } else {
-            bootDashboard();
           }
+          bootDashboard();
         } else {
           const data = await res.json().catch(() => ({}));
           setLoginError(data.error || 'Ошибка входа (HTTP ' + res.status + ')');
@@ -1412,7 +1411,6 @@
         loadInstances();
       } else if (name === 'proxy-settings' || name === 'rotation') {
         fetchProxies();
-        checkAllProxies();
       } else if (name === 'app-studio') {
         loadAppStudioConfig();
       } else if (name === 'releases') {

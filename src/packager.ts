@@ -16,7 +16,7 @@ import {
   renderVerifyGpoScript,
   renderGpoReadme,
 } from "./templates/gpoTemplates.js";
-import { writeJsonAtomic } from "./jsonStore.js";
+import { writeJsonAtomic, writeFileAtomic } from "./jsonStore.js";
 import { getBuilderConfigPath, getReleasesDir } from "./storage.js";
 import { recordRelease } from "./releases.js";
 import type { ExtensionBuildConfig, ExtensionBuildInfo } from "./types.js";
@@ -1002,21 +1002,21 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
 
   const zipBuffer = zip.toBuffer();
   const zipPath = path.join(UPDATES_DIR, "extension.zip");
-  fs.writeFileSync(zipPath, zipBuffer);
+  writeFileAtomic(zipPath, zipBuffer);
 
   log("Packing extension files into ZIP archive (" + Math.round(zipBuffer.length / 1024) + " KB)");
   log("Signing CRX package with RSA private key...");
   const crxBuffer = packCrxBuffer(zipBuffer, privKey);
   log("CRX package generated (" + Math.round(crxBuffer.length / 1024) + " KB)");
   const crxPath = path.join(UPDATES_DIR, "extension.crx");
-  fs.writeFileSync(crxPath, crxBuffer);
+  writeFileAtomic(crxPath, crxBuffer);
   const pecCrxPath = path.join(UPDATES_DIR, "pec-extension.crx");
-  fs.writeFileSync(pecCrxPath, crxBuffer);
+  writeFileAtomic(pecCrxPath, crxBuffer);
 
   const codebaseUrl = `${effectiveBaseUrl}/updates/extension.crx`;
   const xmlContent = buildUpdatesXml(extensionId, version, codebaseUrl);
   const xmlPath = path.join(UPDATES_DIR, "updates.xml");
-  fs.writeFileSync(xmlPath, xmlContent, "utf-8");
+  writeFileAtomic(xmlPath, xmlContent, { encoding: "utf-8" });
 
   // Validate version format to prevent path traversal
   const safeVersion = typeof version === "string" ? version.trim() : "";
@@ -1029,9 +1029,9 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     const releasesDir = path.join(getReleasesDir(), "extensions", safeVersion);
     fs.mkdirSync(releasesDir, { recursive: true });
     const versionedCrx = path.join(releasesDir, "pec-extension.crx");
-    fs.writeFileSync(versionedCrx, crxBuffer);
-    fs.writeFileSync(path.join(releasesDir, "extension.crx"), crxBuffer);
-    fs.writeFileSync(path.join(releasesDir, "updates.xml"), xmlContent, "utf-8");
+    writeFileAtomic(versionedCrx, crxBuffer);
+    writeFileAtomic(path.join(releasesDir, "extension.crx"), crxBuffer);
+    writeFileAtomic(path.join(releasesDir, "updates.xml"), xmlContent, { encoding: "utf-8" });
     if (fs.existsSync(path.join(UNPACKED_DIR, "manifest.json"))) {
       fs.copyFileSync(path.join(UNPACKED_DIR, "manifest.json"), path.join(releasesDir, "manifest.json"));
     }
@@ -1111,8 +1111,10 @@ export function generateGpoDeploymentPack(
   });
 
   const zip = new AdmZip();
-  zip.addFile("pec-policy-user-hkcu.reg", Buffer.from(gpo.regContentUser, "utf-8"));
-  zip.addFile("pec-policy-machine-hklm.reg", Buffer.from(gpo.regContentMachine, "utf-8"));
+  const regUserWithBom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(gpo.regContentUser, "utf-8")]);
+  const regMachineWithBom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(gpo.regContentMachine, "utf-8")]);
+  zip.addFile("pec-policy-user-hkcu.reg", regUserWithBom);
+  zip.addFile("pec-policy-machine-hklm.reg", regMachineWithBom);
   zip.addFile("deploy-pec-gpo.ps1", Buffer.from(gpo.deployScript, "utf-8"));
   zip.addFile("verify-pec-gpo.ps1", Buffer.from(gpo.verifyScript, "utf-8"));
   zip.addFile(
@@ -1140,7 +1142,7 @@ export function generateGpoDeploymentPack(
   const zipBuffer = zip.toBuffer();
   const zipPath = path.join(UPDATES_DIR, "pec-gpo-deployment-pack.zip");
   try {
-    fs.writeFileSync(zipPath, zipBuffer);
+    writeFileAtomic(zipPath, zipBuffer);
   } catch (e) {
     console.warn("[packager] Could not write gpo pack to disk:", e);
   }

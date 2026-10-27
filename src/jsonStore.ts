@@ -18,7 +18,43 @@ export function writeJsonAtomic(filePath: string, data: unknown): void {
   }
   const tempFile = path.join(dir, `${path.basename(filePath)}.tmp.${crypto.randomBytes(4).toString("hex")}`);
   fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), { encoding: "utf-8", mode: 0o600 });
-  fs.renameSync(tempFile, filePath);
+  try {
+    fs.renameSync(tempFile, filePath);
+  } catch (err: any) {
+    if (process.platform === "win32" && (err?.code === "EPERM" || err?.code === "EBUSY")) {
+      try { fs.unlinkSync(filePath); } catch {}
+      fs.renameSync(tempFile, filePath);
+    } else {
+      throw err;
+    }
+  }
+}
+
+/**
+ * Atomic file persistence for raw buffers or strings (CRX, ZIP, XML, etc.).
+ * Writes to a unique temp file in the same directory, then atomically renames.
+ */
+export function writeFileAtomic(
+  filePath: string,
+  data: Buffer | string,
+  options?: { encoding?: BufferEncoding; mode?: number }
+): void {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const tempFile = path.join(dir, `${path.basename(filePath)}.tmp.${crypto.randomBytes(4).toString("hex")}`);
+  fs.writeFileSync(tempFile, data, options);
+  try {
+    fs.renameSync(tempFile, filePath);
+  } catch (err: any) {
+    if (process.platform === "win32" && (err?.code === "EPERM" || err?.code === "EBUSY")) {
+      try { fs.unlinkSync(filePath); } catch {}
+      fs.renameSync(tempFile, filePath);
+    } else {
+      throw err;
+    }
+  }
 }
 
 /**

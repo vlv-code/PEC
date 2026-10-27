@@ -518,3 +518,86 @@ test("D-04: buildAppProfile correctly populates TargetDomains from preserved pro
   assert.equal(rule.Protocol, "TCP");
   assert.equal(rule.Action, "PROXY");
 });
+
+// =============================================================================
+// Operational Audit Additions: P-03, P-04, P-06, D-05, D-06
+// =============================================================================
+
+import { writeFileAtomic } from "../src/jsonStore.js";
+import { generateGpoDeploymentPack, packageExtension } from "../src/packager.js";
+import { packageApp } from "../src/appPackager.js";
+import AdmZip from "adm-zip";
+import fs from "node:fs";
+import path from "node:path";
+
+test("P-06: GPO .reg files in deployment pack include UTF-8 BOM for Windows regedit compatibility", () => {
+  const { zipBuffer } = generateGpoDeploymentPack("http://127.0.0.1:3000", "test-token");
+  const zip = new AdmZip(zipBuffer);
+
+  const userReg = zip.getEntry("pec-policy-user-hkcu.reg");
+  assert.ok(userReg, "pec-policy-user-hkcu.reg must exist in GPO zip");
+  const userBuf = userReg.getData();
+  assert.equal(userBuf[0], 0xef, "User reg first byte must be 0xEF (BOM)");
+  assert.equal(userBuf[1], 0xbb, "User reg second byte must be 0xBB (BOM)");
+  assert.equal(userBuf[2], 0xbf, "User reg third byte must be 0xBF (BOM)");
+  assert.ok(userBuf.toString("utf-8").includes("Windows Registry Editor Version 5.00"));
+
+  const machineReg = zip.getEntry("pec-policy-machine-hklm.reg");
+  assert.ok(machineReg, "pec-policy-machine-hklm.reg must exist in GPO zip");
+  const machineBuf = machineReg.getData();
+  assert.equal(machineBuf[0], 0xef, "Machine reg first byte must be 0xEF (BOM)");
+  assert.equal(machineBuf[1], 0xbb, "Machine reg second byte must be 0xBB (BOM)");
+  assert.equal(machineBuf[2], 0xbf, "Machine reg third byte must be 0xBF (BOM)");
+  assert.ok(machineBuf.toString("utf-8").includes("Windows Registry Editor Version 5.00"));
+});
+
+test("P-04: app_build_info.json package URLs point to working API download routes", () => {
+  const buildInfo = packageApp("http://127.0.0.1:3000");
+  assert.equal(buildInfo.windowsPackageUrl, "/api/app-builder/download/windows");
+  assert.equal(buildInfo.linuxPackageUrl, "/api/app-builder/download/linux");
+  if (buildInfo.windowsInstallerUrl) {
+    assert.equal(buildInfo.windowsInstallerUrl, "/api/app-builder/download/installer");
+  }
+});
+
+test("P-03: writeFileAtomic atomically persists files without leaving temporary remnants", () => {
+  const testDir = path.resolve("./data/test_atomic");
+  fs.mkdirSync(testDir, { recursive: true });
+  const testFile = path.join(testDir, "atomic_test.dat");
+
+  try {
+    writeFileAtomic(testFile, Buffer.from("initial content", "utf-8"));
+    assert.equal(fs.readFileSync(testFile, "utf-8"), "initial content");
+
+    writeFileAtomic(testFile, Buffer.from("updated atomic content", "utf-8"));
+    assert.equal(fs.readFileSync(testFile, "utf-8"), "updated atomic content");
+
+    const tmpRemnants = fs.readdirSync(testDir).filter((f) => f.includes(".tmp."));
+    assert.equal(tmpRemnants.length, 0, "No temporary files should be left on disk");
+  } finally {
+    try {
+      if (fs.existsSync(testFile)) fs.unlinkSync(testFile);
+      if (fs.existsSync(testDir)) fs.rmdirSync(testDir);
+    } catch {}
+  }
+});
+
+test("D-05 & D-06: dashboard.js cleans up checkAllProxies from tab navigation and calls bootDashboard on retry login", () => {
+  const js = fs.readFileSync(path.resolve("public/dashboard.js"), "utf8");
+
+  // D-06: checkAllProxies must NOT be invoked inside tab navigation
+  const tabSectionMatch = js.match(/name === 'proxy-settings' \|\| name === 'rotation'[\s\S]+?name === 'app-studio'/);
+  assert.ok(tabSectionMatch, "Tab navigation section must exist in dashboard.js");
+  assert.strictEqual(
+    tabSectionMatch[0].includes("checkAllProxies()"),
+    false,
+    "checkAllProxies() must not be called when opening proxy-settings/rotation tab"
+  );
+
+  // D-05: bootDashboard must be called after loginPendingRetry
+  assert.ok(
+    js.includes("if (loginPendingRetry) {\n            const r = loginPendingRetry;\n            loginPendingRetry = null;\n            adminFetch(r.url, r.opts).catch(function (e) { console.warn('Retry after login failed:', e); });\n          }\n          bootDashboard();") ||
+    js.includes("if (loginPendingRetry) {\r\n            const r = loginPendingRetry;\r\n            loginPendingRetry = null;\r\n            adminFetch(r.url, r.opts).catch(function (e) { console.warn('Retry after login failed:', e); });\r\n          }\r\n          bootDashboard();"),
+    "bootDashboard must be called unconditionally after login retry"
+  );
+});

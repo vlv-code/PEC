@@ -135,8 +135,8 @@ test("packageApp generates valid Windows zip and Linux tar.gz bundles with SHA-2
 
   assert.ok(info.version);
   assert.ok(info.builtAt);
-  assert.strictEqual(info.windowsPackageUrl, "/updates/pec-client-windows-x64.zip");
-  assert.strictEqual(info.linuxPackageUrl, "/updates/pec-client-linux-x64.tar.gz");
+  assert.strictEqual(info.windowsPackageUrl, "/api/app-builder/download/windows");
+  assert.strictEqual(info.linuxPackageUrl, "/api/app-builder/download/linux");
   assert.ok(info.windowsPackageSize > 0, "Windows zip size must be > 0");
   assert.ok(info.linuxPackageSize > 0, "Linux tar.gz size must be > 0");
   assert.match(info.windowsPackageSha256, /^[a-f0-9]{64}$/);

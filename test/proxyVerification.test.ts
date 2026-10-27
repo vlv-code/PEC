@@ -171,19 +171,21 @@ test("probeProxyEgress connects to responsive SOCKS5 proxy and parses egress IP"
   }
 });
 
-test("dashboard.js: switchTab triggers checkAllProxies upon switching to proxy-settings or rotation tab", async () => {
+test("D-06: dashboard.js does not trigger checkAllProxies automatically on tab switch", async () => {
   const fs = await import("node:fs");
   const path = await import("node:path");
   const js = fs.readFileSync(path.resolve("public/dashboard.js"), "utf8");
 
   assert.ok(
-    js.includes("checkAllProxies();"),
-    "dashboard.js must call checkAllProxies"
+    js.includes("function checkAllProxies()"),
+    "dashboard.js must define checkAllProxies function for manual invocation"
   );
-  assert.match(
-    js,
-    /if\s*\([^)]*name\s*===\s*['"]proxy-settings['"][^)]*\)[\s\S]*?checkAllProxies\(\)/,
-    "switchTab must trigger checkAllProxies when switching to proxy-settings"
+  const switchTabMatch = js.match(/function switchTab\(name\) \{([\s\S]*?)\n    \}/);
+  assert.ok(switchTabMatch, "switchTab function must exist in dashboard.js");
+  assert.strictEqual(
+    switchTabMatch[1].includes("checkAllProxies"),
+    false,
+    "switchTab must not trigger checkAllProxies automatically when switching to proxy-settings"
   );
 });
 
