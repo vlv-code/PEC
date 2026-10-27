@@ -80,8 +80,8 @@ PROXYBRIDGE_API void ProxyBridge_UnregisterSession(DWORD session_id)
                 rule = rule->next;
             }
         }
-        update_has_active_rules();
         ReleaseSRWLockExclusive(&g_rules_lock);
+        update_has_active_rules();
     }
 }
 

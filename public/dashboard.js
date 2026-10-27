@@ -511,7 +511,7 @@
       let html = `<div style="display: flex; gap: 16px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
         <div>
           <span style="color: var(--text-muted); font-size: 11px;">${isRu ? 'Установленная версия:' : 'Installed version:'}</span>
-          <strong style="color: var(--primary); font-family: var(--mono); font-size: 13px; margin-left: 6px;">v${data.currentVersion || (document.getElementById('versionReleaseBadge') && document.getElementById('versionReleaseBadge').getAttribute('data-server-version')) || '1.0.0'}</strong>
+          <strong style="color: var(--primary); font-family: var(--mono); font-size: 13px; margin-left: 6px;">v${esc(data.currentVersion || (document.getElementById('versionReleaseBadge') && document.getElementById('versionReleaseBadge').getAttribute('data-server-version')) || '1.0.0')}</strong>
         </div>`;
 
       if (data.latestRelease) {
@@ -1501,7 +1501,7 @@
             const actLabel = isRu
               ? (act === 'proxy' ? 'ПРОКСИ' : act === 'direct' ? 'НАПРЯМУЮ' : 'БЛОК')
               : act.toUpperCase();
-            badgeHtml = `<span class="preset-in-profile-badge action-${act}">${isRu ? 'В профиле: ' : 'In Profile: '}${actLabel}</span>`;
+            badgeHtml = `<span class="preset-in-profile-badge action-${esc(act)}">${isRu ? 'В профиле: ' : 'In Profile: '}${esc(actLabel)}</span>`;
           }
 
           return `
@@ -4591,6 +4591,85 @@
       }
     }
 
+    let lastLoadedDesktopInstances = [];
+
+    async function loadDesktopInstances() {
+      try {
+        if (!currentProxiesList || !currentProxiesList.length) {
+          try {
+            const pRes = await adminFetch('/api/proxies');
+            if (pRes.ok) currentProxiesList = (await pRes.json()) || [];
+          } catch (_) {}
+        }
+        const res = await adminFetch('/api/app/instances');
+        if (!res.ok) return;
+        const data = await res.json();
+        lastLoadedDesktopInstances = data.instances || [];
+        renderDesktopInstancesTable(lastLoadedDesktopInstances);
+      } catch (err) {
+        console.warn('Failed to load desktop instances:', err);
+      }
+    }
+
+    function renderDesktopInstancesTable(instances) {
+      const isRu = currentLang === 'ru';
+      const tbody = document.getElementById('desktopFleetTableBody');
+      const badge = document.getElementById('badgeDesktopOnline');
+      if (!tbody) return;
+
+      const onlineCount = (instances || []).filter(i => i.status === 'ONLINE').length;
+      if (badge) {
+        badge.textContent = onlineCount + (isRu ? ' онлайн' : ' online');
+        badge.className = 'badge ' + (onlineCount > 0 ? 'badge-online' : 'badge-offline');
+      }
+
+      if (!instances || !instances.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">' +
+          (isRu ? 'Десктопные клиенты еще не подключались. Запустите PEC-App.exe на рабочей станции.' : 'No desktop clients connected yet. Launch PEC-App.exe on a workstation.') +
+          '</td></tr>';
+        return;
+      }
+
+      const proxies = currentProxiesList || [];
+      tbody.innerHTML = instances.map(inst => {
+        let badgeClass = 'badge-online';
+        if (inst.status === 'STALE') badgeClass = 'badge-stale';
+        else if (inst.status === 'OFFLINE') badgeClass = 'badge-offline';
+
+        const pairedBadge = inst.pairedExtension?.instanceId
+          ? `<span class="badge badge-success" title="ID: ${esc(inst.pairedExtension.instanceId)}">🔗 ${esc(inst.pairedExtension.instanceId.slice(0, 14))}... (${esc(inst.pairedExtension.browser || 'ext')})</span>`
+          : `<span style="color: var(--text-muted); font-size: 11px;">${isRu ? 'Не привязано' : 'Not paired'}</span>`;
+
+        let proxyOptions = `<option value="default">${isRu ? 'По умолчанию' : 'Default'}</option>`;
+        proxies.forEach(p => {
+          const pHostPort = (p.host || '') + ':' + (p.port || '');
+          const pName = p.name || pHostPort;
+          const isSel = (inst.assignedProxyId === p.id);
+          proxyOptions += `<option value="${esc(p.id)}" ${isSel ? 'selected' : ''}>${esc(pName)}</option>`;
+        });
+
+        const syncTime = inst.lastSync ? (typeof formatRelativeTime === 'function' ? formatRelativeTime(inst.lastSync) : new Date(inst.lastSync).toLocaleTimeString()) : '-';
+
+        return `<tr>
+          <td><span class="badge ${badgeClass}">${esc(inst.status || 'ONLINE')}</span></td>
+          <td><strong>${esc(inst.hostname || '-')}</strong></td>
+          <td><span class="badge badge-subtle">👤 ${esc(inst.username || '-')}</span></td>
+          <td><code>${esc(inst.ip || '-')}</code></td>
+          <td><span class="badge badge-version">v${esc(inst.version || '2.1.0')}</span></td>
+          <td>${pairedBadge}</td>
+          <td>
+            <select class="form-select form-select-sm desktop-proxy-select" data-app-id="${esc(inst.appInstanceId)}" style="font-size: 12px; max-width: 170px; margin-bottom: 0;">
+              ${proxyOptions}
+            </select>
+          </td>
+          <td style="font-size: 11px; color: var(--text-muted);">${esc(syncTime)}</td>
+          <td style="text-align: center;">
+            <button type="button" class="btn btn-sm btn-icon btn-danger btn-delete-desktop" data-app-id="${esc(inst.appInstanceId)}" title="${isRu ? 'Удалить из реестра' : 'Delete'}">🗑️</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
     function initFleetListeners() {
       const selectAll = document.getElementById('fleetSelectAll');
       if (selectAll) {
@@ -4651,85 +4730,6 @@
         btnRefreshDesktop.addEventListener('click', () => loadDesktopInstances());
       }
 
-    let lastLoadedDesktopInstances = [];
-
-    async function loadDesktopInstances() {
-      try {
-        if (!currentProxiesList || !currentProxiesList.length) {
-          try {
-            const pRes = await adminFetch('/api/proxies');
-            if (pRes.ok) currentProxiesList = (await pRes.json()) || [];
-          } catch (_) {}
-        }
-        const res = await adminFetch('/api/app/instances');
-        if (!res.ok) return;
-        const data = await res.json();
-        lastLoadedDesktopInstances = data.instances || [];
-        renderDesktopInstancesTable(lastLoadedDesktopInstances);
-      } catch (err) {
-        console.warn('Failed to load desktop instances:', err);
-      }
-    }
-
-    function renderDesktopInstancesTable(instances) {
-      const isRu = currentLang === 'ru';
-      const tbody = document.getElementById('desktopFleetTableBody');
-      const badge = document.getElementById('badgeDesktopOnline');
-      if (!tbody) return;
-
-      const onlineCount = (instances || []).filter(i => i.status === 'ONLINE').length;
-      if (badge) {
-        badge.textContent = onlineCount + (isRu ? ' онлайн' : ' online');
-        badge.className = 'badge ' + (onlineCount > 0 ? 'badge-online' : 'badge-offline');
-      }
-
-      if (!instances || !instances.length) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">' +
-          (isRu ? 'Десктопные клиенты еще не подключались. Запустите PEC-App.exe на рабочей станции.' : 'No desktop clients connected yet. Launch PEC-App.exe on a workstation.') +
-          '</td></tr>';
-        return;
-      }
-
-      const proxies = currentProxiesList || [];
-      tbody.innerHTML = instances.map(inst => {
-        let badgeClass = 'badge-online';
-        if (inst.status === 'STALE') badgeClass = 'badge-stale';
-        else if (inst.status === 'OFFLINE') badgeClass = 'badge-offline';
-
-        const pairedBadge = inst.pairedExtension?.instanceId
-          ? `<span class="badge badge-success" title="ID: ${esc(inst.pairedExtension.instanceId)}">🔗 ${esc(inst.pairedExtension.instanceId.slice(0, 14))}... (${esc(inst.pairedExtension.browser || 'ext')})</span>`
-          : `<span style="color: var(--text-muted); font-size: 11px;">${isRu ? 'Не привязано' : 'Not paired'}</span>`;
-
-        let proxyOptions = `<option value="default">${isRu ? 'По умолчанию' : 'Default'}</option>`;
-        proxies.forEach(p => {
-          const pHostPort = (p.host || '') + ':' + (p.port || '');
-          const pName = p.name || pHostPort;
-          const isSel = (inst.assignedProxyId === p.id);
-          proxyOptions += `<option value="${esc(p.id)}" ${isSel ? 'selected' : ''}>${esc(pName)}</option>`;
-        });
-
-        const syncTime = inst.lastSync ? (formatRelativeTime ? formatRelativeTime(inst.lastSync) : new Date(inst.lastSync).toLocaleTimeString()) : '-';
-
-        return `<tr>
-          <td><span class="badge ${badgeClass}">${esc(inst.status || 'ONLINE')}</span></td>
-          <td><strong>${esc(inst.hostname || '-')}</strong></td>
-          <td><span class="badge badge-subtle">👤 ${esc(inst.username || '-')}</span></td>
-          <td><code>${esc(inst.ip || '-')}</code></td>
-          <td><span class="badge badge-version">v${esc(inst.version || '2.1.0')}</span></td>
-          <td>${pairedBadge}</td>
-          <td>
-            <select class="form-select form-select-sm desktop-proxy-select" data-app-id="${esc(inst.appInstanceId)}" style="font-size: 12px; max-width: 170px; margin-bottom: 0;">
-              ${proxyOptions}
-            </select>
-          </td>
-          <td style="font-size: 11px; color: var(--text-muted);">${esc(syncTime)}</td>
-          <td style="text-align: center;">
-            <button type="button" class="btn btn-sm btn-icon btn-danger btn-delete-desktop" data-app-id="${esc(inst.appInstanceId)}" title="${isRu ? 'Удалить из реестра' : 'Delete'}">🗑️</button>
-          </td>
-        </tr>`;
-      }).join('');
-    }
-
       const desktopTbody = document.getElementById('desktopFleetTableBody');
       if (desktopTbody) {
         desktopTbody.addEventListener('change', async (e) => {
@@ -4744,13 +4744,13 @@
               body: JSON.stringify({ proxyId }),
             });
             if (res.ok) {
-              showToast(currentLang === 'ru' ? 'Прокси успешно назначен клиенту' : 'Proxy assigned to client', 'success');
+              toast(currentLang === 'ru' ? 'Прокси успешно назначен клиенту' : 'Proxy assigned to client', 'success');
               loadDesktopInstances();
             } else {
-              showToast('Failed to assign proxy', 'error');
+              toast('Failed to assign proxy', 'error');
             }
           } catch (err) {
-            showToast('Error: ' + err.message, 'error');
+            toast('Error: ' + err.message, 'error');
           }
         });
 
@@ -4765,11 +4765,13 @@
               method: 'DELETE',
             });
             if (res.ok) {
-              showToast(isRu ? 'Клиент удален' : 'Client deleted', 'success');
+              toast(isRu ? 'Клиент удален' : 'Client deleted', 'success');
               loadDesktopInstances();
+            } else {
+              toast(isRu ? 'Не удалось удалить клиента' : 'Failed to delete client', 'error');
             }
           } catch (err) {
-            showToast('Error: ' + err.message, 'error');
+            toast('Error: ' + err.message, 'error');
           }
         });
       }

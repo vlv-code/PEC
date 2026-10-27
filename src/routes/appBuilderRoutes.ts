@@ -81,10 +81,16 @@ export function createAppBuilderRouter(
       }
 
       const updates: any = { ...req.body };
+      if (updates.name !== undefined) {
+        if (typeof updates.name !== "string" || !/^[A-Za-z0-9 ._-]{1,64}$/.test(updates.name)) {
+          return res.status(400).json({ ok: false, error: "Invalid app name: must be 1-64 alphanumeric characters, spaces, dots, dashes, or underscores" });
+        }
+      }
       if (updates.version !== undefined) {
         if (typeof updates.version !== "string" || !SEMVER_REGEX.test(updates.version.trim())) {
           return res.status(400).json({ ok: false, error: "Invalid version format: must follow semver (e.g. 1.0.4)" });
         }
+        updates.version = updates.version.trim();
       }
       if (updates.processRules !== undefined) {
         updates.processRules = validateProcessRules(updates.processRules);

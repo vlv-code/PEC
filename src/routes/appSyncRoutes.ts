@@ -10,11 +10,14 @@ import {
   deleteDesktopInstance,
   getInstanceMeta,
   enrollInstanceToken,
+  acquireInstanceMutex,
 } from "../instances.js";
 import { getActiveProxy, getProxyById, getAllProxies } from "../proxies.js";
 import { ProxyNode } from "../types.js";
 import { getActiveRelease } from "../releases.js";
 import { resolveProfileForInstance, expandRuleDomains } from "../routing.js";
+import { getBuildConfig as getExtensionBuildConfig } from "../packager.js";
+import { isNewerVersion } from "../utils/semver.js";
 
 export function createAppSyncRouter(
   getFleetToken: () => string,
@@ -29,14 +32,20 @@ export function createAppSyncRouter(
     message: "Too many desktop app sync requests.",
   });
 
-  router.post("/api/app/sync", limiter, (req: Request, res: Response) => {
-    try {
-      const rawAppInstanceId = (req.body?.appInstanceId || req.headers["x-instance-id"] || "") as string;
-      const cleanAppId = typeof rawAppInstanceId === "string" ? rawAppInstanceId.trim() : "";
+  router.post("/api/app/sync", limiter, async (req: Request, res: Response) => {
+    const getHeaderString = (val: string | string[] | undefined): string => {
+      if (Array.isArray(val)) return typeof val[0] === "string" ? val[0].trim() : "";
+      return typeof val === "string" ? val.trim() : "";
+    };
 
-      const rawInstanceToken = (req.headers["x-instance-token"] || "") as string;
-      const rawFleetToken = (req.headers["x-fleet-token"] || req.headers["x-ext-token"] || "") as string;
-      const rawAdminToken = (req.headers["x-admin-token"] || "") as string;
+    const rawAppInstanceId = (req.body?.appInstanceId || getHeaderString(req.headers["x-instance-id"]) || "") as string;
+    const cleanAppId = typeof rawAppInstanceId === "string" ? rawAppInstanceId.trim() : "";
+
+    const releaseLock = cleanAppId ? await acquireInstanceMutex(cleanAppId) : () => {};
+    try {
+      const rawInstanceToken = getHeaderString(req.headers["x-instance-token"]);
+      const rawFleetToken = getHeaderString(req.headers["x-fleet-token"] || req.headers["x-ext-token"]);
+      const rawAdminToken = getHeaderString(req.headers["x-admin-token"]);
 
       const fleetExpected = getFleetToken();
       const adminExpected = getAdminToken?.();
@@ -91,7 +100,8 @@ export function createAppSyncRouter(
         pairedExtension,
       } = req.body || {};
 
-      if (!appInstanceId || typeof appInstanceId !== "string" || !appInstanceId.trim()) {
+      const effectiveAppId = appInstanceId || cleanAppId;
+      if (!effectiveAppId || typeof effectiveAppId !== "string" || !effectiveAppId.trim()) {
         return res.status(400).json({ ok: false, error: "appInstanceId is required and must be non-empty" });
       }
 
@@ -107,7 +117,7 @@ export function createAppSyncRouter(
       }
 
       const clientIp = getClientIp(req);
-      registerDesktopHeartbeat({
+      const desktopRecord = registerDesktopHeartbeat({
         appInstanceId: cleanAppId,
         hostname: hostname || "unknown-host",
         username: username || "unknown-user",
@@ -122,38 +132,53 @@ export function createAppSyncRouter(
       if (shouldEnroll && cleanAppId) {
         issuedInstanceToken = crypto.randomBytes(24).toString("hex");
         const tokenHash = crypto.createHash("sha256").update(issuedInstanceToken).digest("hex");
-        enrollInstanceToken(cleanAppId, tokenHash);
+        const enrolled = enrollInstanceToken(cleanAppId, tokenHash);
+        if (!enrolled) {
+          return res.status(409).json({ ok: false, error: "Conflict: Instance already enrolled" });
+        }
       }
 
-      // If client requests a specific proxy assignment (e.g. user chose active proxy in UI)
-      const reqSelectedId = req.body.selectedProxyId ? String(req.body.selectedProxyId).trim() : "";
-      const reqSelectedHost = req.body.selectedProxyHost ? String(req.body.selectedProxyHost).trim() : "";
-      const reqSelectedPort = req.body.selectedProxyPort ? Number(req.body.selectedProxyPort) : 0;
+      // Check allowUserProxySwitch from getExtensionBuildConfig()
+      const bldCfg = getExtensionBuildConfig();
+      const allowUserSwitch = bldCfg.allowUserProxySwitch !== false;
 
-      if (reqSelectedId) {
-        const found = getProxyById(reqSelectedId);
-        if (found) {
-          setDesktopInstanceProxy(cleanAppId, found.id);
-        }
-      } else if (reqSelectedHost && reqSelectedPort > 0) {
-        const match = getAllProxies().find(
-          (p) => p.host.toLowerCase() === reqSelectedHost.toLowerCase() && Number(p.port) === reqSelectedPort
-        );
-        if (match) {
-          setDesktopInstanceProxy(cleanAppId, match.id);
+      // If client requests a specific proxy assignment (e.g. user chose active proxy in UI)
+      const reqSelectedId = req.body?.selectedProxyId ? String(req.body.selectedProxyId).trim() : "";
+      const reqSelectedHost = req.body?.selectedProxyHost ? String(req.body.selectedProxyHost).trim() : "";
+      const reqSelectedPort = req.body?.selectedProxyPort ? Number(req.body.selectedProxyPort) : 0;
+
+      if (allowUserSwitch) {
+        if (reqSelectedId === "default" || (req.body && req.body.selectedProxyId === "")) {
+          setDesktopInstanceProxy(cleanAppId, null);
+        } else if (reqSelectedId) {
+          const found = getProxyById(reqSelectedId);
+          if (found && (found as any).enabled !== false) {
+            setDesktopInstanceProxy(cleanAppId, found.id);
+          }
+        } else if (reqSelectedHost && reqSelectedPort > 0) {
+          const match = getAllProxies().find(
+            (p) => p.host.toLowerCase() === reqSelectedHost.toLowerCase() && Number(p.port) === reqSelectedPort && (p as any).enabled !== false
+          );
+          if (match) {
+            setDesktopInstanceProxy(cleanAppId, match.id);
+          }
         }
       }
 
       // Determine active proxy for this desktop instance
       let effectiveNode: ProxyNode | undefined;
       const appMeta = getInstanceMeta(cleanAppId);
+      const effectivePairedExtId = desktopRecord.pairedExtension?.instanceId;
       if (appMeta?.assignedProxyId) {
         effectiveNode = getProxyById(appMeta.assignedProxyId);
-      } else if (pairedExtension?.instanceId) {
-        const extMeta = getInstanceMeta(String(pairedExtension.instanceId).trim());
+      } else if (effectivePairedExtId) {
+        const extMeta = getInstanceMeta(effectivePairedExtId);
         if (extMeta?.assignedProxyId) {
           effectiveNode = getProxyById(extMeta.assignedProxyId);
         }
+      }
+      if (effectiveNode && (effectiveNode as any).enabled === false) {
+        effectiveNode = undefined;
       }
       if (!effectiveNode) {
         effectiveNode = getActiveProxy();
@@ -180,7 +205,7 @@ export function createAppSyncRouter(
             pass: "",
           };
 
-      const allProxiesList = getAllProxies(false).filter((p) => p.host && p.port);
+      const allProxiesList = getAllProxies(true).filter((p) => p.host && p.port && (p as any).enabled !== false);
       const availableProxies = allProxiesList.map((p) => ({
         id: p.id,
         name: p.name || `${p.host}:${p.port}`,
@@ -192,7 +217,7 @@ export function createAppSyncRouter(
       const activeRelease = getActiveRelease("app");
       const clientVersion = String(version || "").trim();
       const latestVersion = activeRelease?.version || "2.1.0";
-      const hasUpdate = Boolean(activeRelease && activeRelease.version !== clientVersion);
+      const hasUpdate = Boolean(activeRelease && isNewerVersion(activeRelease.version, clientVersion));
 
       const downloadUrl = activeRelease
         ? `/api/releases/download/app/${encodeURIComponent(activeRelease.version)}`
@@ -200,11 +225,11 @@ export function createAppSyncRouter(
 
       console.log(
         `[APP-SYNC] Client '${username || "unknown"}' on '${hostname || "unknown"}' (v${version || "?"}, IP: ${clientIp}) sync OK` +
-          (pairedExtension?.instanceId ? ` [Paired: ${pairedExtension.instanceId} / ${pairedExtension.browser || "?"}]` : "") +
+          (effectivePairedExtId ? ` [Paired: ${effectivePairedExtId} / ${desktopRecord.pairedExtension?.browser || "?"}]` : "") +
           (hasUpdate ? ` [Update -> v${latestVersion}]` : "")
       );
 
-      const assignedProfile = resolveProfileForInstance(pairedExtension?.instanceId);
+      const assignedProfile = resolveProfileForInstance(effectivePairedExtId);
       const serverRules: Array<{
         id: string;
         process: string;
@@ -237,6 +262,7 @@ export function createAppSyncRouter(
       res.json({
         ok: true,
         ...(issuedInstanceToken ? { instanceToken: issuedInstanceToken } : {}),
+        allowUserProxySwitch: allowUserSwitch,
         activeProxy: proxyPayload,
         availableProxies,
         serverRules,
@@ -250,6 +276,8 @@ export function createAppSyncRouter(
       });
     } catch (err: any) {
       res.status(400).json({ ok: false, error: err.message || "Failed to process app sync" });
+    } finally {
+      releaseLock();
     }
   });
 

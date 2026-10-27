@@ -74,6 +74,9 @@ try {
   }
 } catch {}
 
+export const SEMVER_REGEX = /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$/;
+export { renderBackgroundJs };
+
 export function getBuildConfig(): ExtensionBuildConfig {
   return { ...currentBuildConfig };
 }
@@ -1014,9 +1017,15 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   const xmlPath = path.join(UPDATES_DIR, "updates.xml");
   fs.writeFileSync(xmlPath, xmlContent, "utf-8");
 
+  // Validate version format to prevent path traversal
+  const safeVersion = typeof version === "string" ? version.trim() : "";
+  if (!safeVersion || !SEMVER_REGEX.test(safeVersion)) {
+    throw new Error(`Invalid version format '${version}': must follow semver (e.g. 1.0.0)`);
+  }
+
   // Archive versioned release and record in releases store
   try {
-    const releasesDir = path.join(getReleasesDir(), "extensions", version);
+    const releasesDir = path.join(getReleasesDir(), "extensions", safeVersion);
     fs.mkdirSync(releasesDir, { recursive: true });
     const versionedCrx = path.join(releasesDir, "pec-extension.crx");
     fs.writeFileSync(versionedCrx, crxBuffer);
@@ -1026,10 +1035,10 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
       fs.copyFileSync(path.join(UNPACKED_DIR, "manifest.json"), path.join(releasesDir, "manifest.json"));
     }
     const crxSha256 = crypto.createHash("sha256").update(crxBuffer).digest("hex");
-    log("Archiving release v" + version + " to store (SHA-256: " + crxSha256 + ")");
+    log("Archiving release v" + safeVersion + " to store (SHA-256: " + crxSha256 + ")");
     recordRelease({
       type: "extension",
-      version,
+      version: safeVersion,
       builtAt: new Date().toISOString(),
       sha256: crxSha256,
       fileName: "pec-extension.crx",
@@ -1043,7 +1052,7 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
 
   const result = {
     extensionId,
-    version,
+    version: safeVersion,
     name,
     hasPrivateKey: true,
     crxExists: true,

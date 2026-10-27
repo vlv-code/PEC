@@ -23,7 +23,7 @@ const SYNC_INTERVAL_MIN = /* __PEC_SYNC_INTERVAL_MIN__ */ 5;
 const BYPASS_TIMEOUT_MIN = /* __PEC_BYPASS_TIMEOUT_MIN__ */ 15;
 const BADGE_ENABLED = /* __PEC_BADGE_ENABLED__ */ true;
 const PEC_BADGE_ENABLED = true;
-const PEC_ALLOW_MANUAL_BYPASS = true;
+const PEC_ALLOW_MANUAL_BYPASS = /* __PEC_ALLOW_MANUAL_BYPASS__ */ true;
 const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
 const DEFAULT_PROXY_ID = "__PEC_DEFAULT_PROXY_ID__";
 const ALLOW_USER_PROXY_SWITCH = /* __PEC_ALLOW_USER_PROXY_SWITCH__ */ true;
@@ -1495,7 +1495,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     if (action === "SET_ENABLED") {
-      const enabled = msg.enabled !== undefined ? Boolean(msg.enabled) : !currentProxyState.enabled;
+      const enabled = msg.enabled !== undefined
+        ? (msg.enabled === false || msg.enabled === "false" || msg.enabled === 0 || msg.enabled === "0" ? false : Boolean(msg.enabled))
+        : !currentProxyState.enabled;
+      if (!PEC_ALLOW_MANUAL_BYPASS && !enabled) {
+        logEvent("warn", "Manual proxy bypass is disabled by policy");
+        sendResponse({ ok: false, error: "Manual proxy bypass is disabled by policy" });
+        return false;
+      }
       currentProxyState.enabled = enabled;
       persistProxyState();
       (async () => {

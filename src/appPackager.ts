@@ -499,8 +499,15 @@ Write-Host "[PEC-Deploy] Deployment completed successfully." -ForegroundColor Gr
 `;
 }
 
+export function escapeCmdArg(value: string): string {
+  return String(value ?? "")
+    .replace(/[%&<>|^"`!()]/g, "")
+    .replace(/[\r\n]/g, "")
+    .trim();
+}
+
 export function renderInstallCmd(cfg: AppBuildConfig): string {
-  const appName = cfg.name || "PEC-App";
+  const appName = escapeCmdArg(cfg?.name || "PEC-App") || "PEC-App";
   return `@echo off
 setlocal
 cd /d "%~dp0"
@@ -528,7 +535,7 @@ pause
 }
 
 export function renderUninstallCmd(cfg: AppBuildConfig): string {
-  const appName = cfg.name || "PEC-App";
+  const appName = escapeCmdArg(cfg?.name || "PEC-App") || "PEC-App";
   return `@echo off
 setlocal
 cd /d "%~dp0"

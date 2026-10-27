@@ -291,7 +291,7 @@ export function createProxiesRouter(): Router {
   });
 
   // POST /api/proxies/check-all - probe all proxies
-  router.post(["/api/proxies/check-all", "/proxies/check-all"], async (_req: Request, res: Response) => {
+  router.post("/api/proxies/check-all", async (_req: Request, res: Response) => {
     try {
       const results = await probeAllProxies();
       return res.json({ ok: true, results });
@@ -302,7 +302,7 @@ export function createProxiesRouter(): Router {
   });
 
   // POST /api/proxies/:id/check - probe single proxy egress & connectivity
-  router.post(["/api/proxies/:id/check", "/proxies/:id/check"], async (req: Request, res: Response) => {
+  router.post("/api/proxies/:id/check", async (req: Request, res: Response) => {
     try {
       const id = req.params.id;
       const proxy = getProxyById(id);

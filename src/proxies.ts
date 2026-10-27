@@ -508,27 +508,65 @@ function probeSocks5Proxy(
             const isTargetHttps = parsedUrl.protocol === "https:";
 
             const sendHttpOverStream = (stream: net.Socket | tls.TLSSocket) => {
+              stream.setEncoding("utf8");
               const httpReq = `GET ${parsedUrl.pathname || "/"}${parsedUrl.search || ""} HTTP/1.1\r\nHost: ${parsedUrl.host}\r\nUser-Agent: PEC-Proxy-Probe/1.0\r\nConnection: close\r\n\r\n`;
               stream.write(httpReq);
 
               let httpResData = "";
-              stream.on("data", (chunk) => {
-                httpResData += chunk.toString("utf8");
-              });
+              const MAX_RES_BYTES = 64 * 1024;
+              let ended = false;
 
-              stream.once("end", () => {
+              const onEnd = () => {
+                if (ended) return;
+                ended = true;
+
                 let egressIp: string | undefined;
                 let geoCountry: string | undefined;
+
+                let body = httpResData;
+                const doubleCrlf = httpResData.indexOf("\r\n\r\n");
+                if (doubleCrlf !== -1) {
+                  body = httpResData.slice(doubleCrlf + 4);
+                } else {
+                  const doubleLf = httpResData.indexOf("\n\n");
+                  if (doubleLf !== -1) {
+                    body = httpResData.slice(doubleLf + 2);
+                  }
+                }
+
                 try {
-                  const body = httpResData.split("\r\n\r\n")[1] || "";
                   const parsed = JSON.parse(body);
                   egressIp = parsed.ip || parsed.clientIp || parsed.query || parsed.origin;
                   geoCountry = parsed.country || parsed.countryCode || parsed.country_code || parsed.geoCountry;
                 } catch {
-                  // Ignore parse errors
+                  const ipMatch = body.match(/"(?:ip|clientIp|query|origin)"\s*:\s*"([^"]+)"/);
+                  if (ipMatch) egressIp = ipMatch[1];
+                  const countryMatch = body.match(/"(?:country|countryCode|country_code|geoCountry)"\s*:\s*"([^"]+)"/);
+                  if (countryMatch) geoCountry = countryMatch[1];
+                  if (!egressIp) {
+                    const trimmed = body.trim();
+                    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(trimmed)) {
+                      egressIp = trimmed;
+                    }
+                  }
                 }
                 cleanup(undefined, { latencyMs, egressIp, geoCountry });
+              };
+
+              stream.on("data", (chunk) => {
+                const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+                if (httpResData.length < MAX_RES_BYTES) {
+                  const remaining = MAX_RES_BYTES - httpResData.length;
+                  httpResData += text.slice(0, remaining);
+                }
+                if (httpResData.length >= MAX_RES_BYTES) {
+                  stream.removeAllListeners("data");
+                  stream.destroy();
+                  onEnd();
+                }
               });
+
+              stream.once("end", onEnd);
             };
 
             if (isTargetHttps) {

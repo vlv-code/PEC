@@ -4,7 +4,7 @@ import { GEO_PRESETS, getAllProfiles, saveProfile, deleteProfile } from "../rout
 import { getRoutingPresets, saveRoutingPresets } from "../storage.js";
 import { RoutingPresetItem } from "../types.js";
 import { parseGeoSite, parseGeoIp, parsePlaintextList } from "../geodata/datParser.js";
-import { validateSafeEndpointUrl } from "../rotate.js";
+import { validateSafeEndpointUrlAsync } from "../rotate.js";
 import { recordAudit, getClientIp } from "../audit.js";
 
 async function downloadBodyWithLimit(response: globalThis.Response, maxSize: number): Promise<Buffer> {
@@ -255,7 +255,7 @@ export function createRoutingRouter(): Router {
         return res.status(400).json({ error: "url is required" });
       }
 
-      const safeCheck = validateSafeEndpointUrl(url.trim());
+      const safeCheck = await validateSafeEndpointUrlAsync(url.trim());
       if (!safeCheck.valid) {
         return res.status(400).json({ error: "SSRF validation failed: target is forbidden" });
       }
@@ -419,7 +419,7 @@ export function createRoutingRouter(): Router {
         return res.status(400).json({ error: "Preset has no sourceUrl to refresh" });
       }
 
-      const safeCheck = validateSafeEndpointUrl(preset.sourceUrl);
+      const safeCheck = await validateSafeEndpointUrlAsync(preset.sourceUrl);
       if (!safeCheck.valid) {
         return res.status(400).json({ error: "SSRF validation failed: target is forbidden" });
       }

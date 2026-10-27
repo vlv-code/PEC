@@ -354,6 +354,38 @@ export function getActiveInstances(): ExtensionInstance[] {
   return list;
 }
 
+const instanceLocks = new Map<string, Promise<void>>();
+
+export async function acquireInstanceMutex(id: string): Promise<() => void> {
+  const cleanId = String(id || "").trim();
+  if (!cleanId) {
+    return () => {};
+  }
+  const prev = instanceLocks.get(cleanId) || Promise.resolve();
+  let releaseLock!: () => void;
+  const current = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  instanceLocks.set(cleanId, current);
+
+  try {
+    await prev;
+  } catch {
+    // Ignore error from previous lock holder to prevent deadlock in the queue
+  }
+
+  let released = false;
+  return () => {
+    if (!released) {
+      released = true;
+      if (instanceLocks.get(cleanId) === current) {
+        instanceLocks.delete(cleanId);
+      }
+      releaseLock();
+    }
+  };
+}
+
 const desktopInstancesMap = new Map<string, DesktopInstance>();
 const MAX_DESKTOP_INSTANCES = 2000;
 
@@ -377,6 +409,14 @@ export function registerDesktopHeartbeat(data: {
     }
   }
 
+  const existingDesktop = desktopInstancesMap.get(cleanAppId);
+
+  // Preserve existing pairing if not explicitly provided or cleared in incoming payload
+  let incomingPairing = data.pairedExtension;
+  if (incomingPairing === undefined && existingDesktop?.pairedExtension) {
+    incomingPairing = existingDesktop.pairedExtension;
+  }
+
   const record: DesktopInstance = {
     appInstanceId: cleanAppId,
     hostname: String(data.hostname || "").slice(0, 128),
@@ -391,10 +431,10 @@ export function registerDesktopHeartbeat(data: {
     appliedProxyName: persistentMeta[cleanAppId]?.assignedProxyId
       ? (getProxyById(persistentMeta[cleanAppId].assignedProxyId!)?.name || "Назначен")
       : "По умолчанию",
-    pairedExtension: data.pairedExtension?.instanceId
+    pairedExtension: incomingPairing?.instanceId
       ? {
-          instanceId: assertSafeInstanceId(data.pairedExtension.instanceId),
-          browser: data.pairedExtension.browser ? String(data.pairedExtension.browser).slice(0, 64) : undefined,
+          instanceId: assertSafeInstanceId(incomingPairing.instanceId),
+          browser: incomingPairing.browser ? String(incomingPairing.browser).slice(0, 64) : undefined,
         }
       : undefined,
   };
@@ -402,24 +442,55 @@ export function registerDesktopHeartbeat(data: {
   desktopInstancesMap.delete(cleanAppId);
   desktopInstancesMap.set(cleanAppId, record);
 
-  // Cross-link pairing with extension instance if present
+  // Cross-link pairing with extension instance if present and valid
   if (record.pairedExtension?.instanceId) {
     const cleanExtId = record.pairedExtension.instanceId;
-    if (!persistentMeta[cleanExtId]) {
-      persistentMeta[cleanExtId] = {};
-    }
-    persistentMeta[cleanExtId].username = record.username;
-    persistentMeta[cleanExtId].pairedAppId = record.appInstanceId;
-    persistentMeta[cleanExtId].pairedHostname = record.hostname;
-    persistentMeta[cleanExtId].verifiedByApp = true;
-    saveInstancesMeta();
-
     const existingExt = instancesMap.get(cleanExtId);
-    if (existingExt) {
-      existingExt.username = record.username;
-      existingExt.pairedAppId = record.appInstanceId;
-      existingExt.pairedHostname = record.hostname;
-      existingExt.verifiedByApp = true;
+    const existingMeta = persistentMeta[cleanExtId];
+
+    // Validate that the target extension is known (exists in memory or persistent meta),
+    // is not revoked, and is not already paired to a different desktop app (prevent hijacking)
+    if (!existingExt && !existingMeta) {
+      record.pairedExtension = undefined;
+    } else if (existingMeta?.revoked || existingExt?.revoked) {
+      record.pairedExtension = undefined;
+    } else if (existingMeta?.pairedAppId && existingMeta.pairedAppId !== record.appInstanceId) {
+      record.pairedExtension = undefined;
+    } else if (existingExt?.pairedAppId && existingExt.pairedAppId !== record.appInstanceId) {
+      record.pairedExtension = undefined;
+    } else {
+      // If desktop app was previously paired with a different extension, unpair the old one
+      const prevExtId = existingDesktop?.pairedExtension?.instanceId;
+      if (prevExtId && prevExtId !== cleanExtId) {
+        if (persistentMeta[prevExtId] && persistentMeta[prevExtId].pairedAppId === record.appInstanceId) {
+          delete persistentMeta[prevExtId].pairedAppId;
+          delete persistentMeta[prevExtId].pairedHostname;
+          delete persistentMeta[prevExtId].verifiedByApp;
+          saveInstancesMeta();
+        }
+        const prevExt = instancesMap.get(prevExtId);
+        if (prevExt && prevExt.pairedAppId === record.appInstanceId) {
+          prevExt.pairedAppId = undefined;
+          prevExt.pairedHostname = undefined;
+          prevExt.verifiedByApp = false;
+        }
+      }
+
+      if (!persistentMeta[cleanExtId]) {
+        persistentMeta[cleanExtId] = {};
+      }
+      persistentMeta[cleanExtId].username = record.username;
+      persistentMeta[cleanExtId].pairedAppId = record.appInstanceId;
+      persistentMeta[cleanExtId].pairedHostname = record.hostname;
+      persistentMeta[cleanExtId].verifiedByApp = true;
+      saveInstancesMeta();
+
+      if (existingExt) {
+        existingExt.username = record.username;
+        existingExt.pairedAppId = record.appInstanceId;
+        existingExt.pairedHostname = record.hostname;
+        existingExt.verifiedByApp = true;
+      }
     }
   }
 
@@ -478,10 +549,32 @@ export function setDesktopInstanceProxy(appInstanceId: string, proxyId: string |
 
 export function deleteDesktopInstance(appInstanceId: string): boolean {
   if (isUnsafeObjectId(appInstanceId)) return false;
+
+  // Clear any paired extension cross-links pointing to this desktop instance
+  let metaChanged = false;
+  for (const [, val] of Object.entries(persistentMeta)) {
+    if (val.pairedAppId === appInstanceId) {
+      delete val.pairedAppId;
+      delete val.pairedHostname;
+      delete val.verifiedByApp;
+      metaChanged = true;
+    }
+  }
+  for (const inst of instancesMap.values()) {
+    if (inst.pairedAppId === appInstanceId) {
+      inst.pairedAppId = undefined;
+      inst.pairedHostname = undefined;
+      inst.verifiedByApp = false;
+    }
+  }
+
   const existedInMap = desktopInstancesMap.delete(appInstanceId);
   const existedInMeta = appInstanceId in persistentMeta;
   if (existedInMeta) {
     delete persistentMeta[appInstanceId];
+    metaChanged = true;
+  }
+  if (metaChanged) {
     saveInstancesMeta();
   }
   return existedInMap || existedInMeta;
@@ -490,15 +583,20 @@ export function deleteDesktopInstance(appInstanceId: string): boolean {
 export function clearInstances() {
   instancesMap.clear();
   desktopInstancesMap.clear();
+  instanceLocks.clear();
 }
 
 /**
  * Enroll a newly generated per-instance token hash.
  */
-export function enrollInstanceToken(instanceId: string, tokenHash: string): void {
+export function enrollInstanceToken(instanceId: string, tokenHash: string): boolean {
   const cleanId = assertSafeInstanceId(instanceId);
   if (!persistentMeta[cleanId]) {
     persistentMeta[cleanId] = {};
+  }
+  // Prevent hijacking if already enrolled and not revoked
+  if (persistentMeta[cleanId].tokenHash && !persistentMeta[cleanId].revoked) {
+    return false;
   }
   const now = new Date().toISOString();
   persistentMeta[cleanId].tokenHash = tokenHash;
@@ -513,6 +611,7 @@ export function enrollInstanceToken(instanceId: string, tokenHash: string): void
     existing.enrolledAt = now;
     existing.revoked = false;
   }
+  return true;
 }
 
 /**
@@ -541,7 +640,7 @@ export function revokeInstanceToken(instanceId: string): boolean {
 /**
  * Retrieve persistent metadata (tokenHash, enrolledAt, revoked) for an instance.
  */
-export function getInstanceMeta(instanceId: string): { group?: string; assignedProfileId?: string; assignedProxyId?: string; tokenHash?: string; enrolledAt?: string; revoked?: boolean } | undefined {
+export function getInstanceMeta(instanceId: string): { group?: string; assignedProfileId?: string; assignedProxyId?: string; tokenHash?: string; enrolledAt?: string; revoked?: boolean; pairedAppId?: string; pairedHostname?: string; verifiedByApp?: boolean } | undefined {
   if (isUnsafeObjectId(instanceId)) return undefined;
   return persistentMeta[instanceId];
 }

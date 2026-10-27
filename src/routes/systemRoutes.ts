@@ -6,6 +6,7 @@ import { getAllProfiles } from "../routing.js";
 import { recordAudit, getClientIp, getAuditLogs } from "../audit.js";
 import { getActiveProxy } from "../proxies.js";
 import { getAppVersion } from "../version.js";
+import { isNewerVersion } from "../utils/semver.js";
 
 export function createSystemRouter(options: {
   port: number;
@@ -148,15 +149,7 @@ export function createSystemRouter(options: {
         .filter((r) => !r.draft);
 
       const latestRelease = releases[0] || null;
-      let hasUpdate = false;
-      if (latestRelease) {
-        const latestVer = latestRelease.cleanVersion;
-        const [lMaj = 0, lMin = 0, lPat = 0] = latestVer.split(".").map((n: string) => parseInt(n, 10) || 0);
-        const [cMaj = 0, cMin = 0, cPat = 0] = currentVersion.split(".").map((n: string) => parseInt(n, 10) || 0);
-        if (lMaj > cMaj || (lMaj === cMaj && lMin > cMin) || (lMaj === cMaj && lMin === cMin && lPat > cPat)) {
-          hasUpdate = true;
-        }
-      }
+      const hasUpdate = Boolean(latestRelease && isNewerVersion(latestRelease.cleanVersion, currentVersion));
 
       res.json({
         ok: true,

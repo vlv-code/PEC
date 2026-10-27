@@ -25,7 +25,7 @@ const SYNC_INTERVAL_MIN = /* __PEC_SYNC_INTERVAL_MIN__ */ 5;
 const BYPASS_TIMEOUT_MIN = /* __PEC_BYPASS_TIMEOUT_MIN__ */ 15;
 const BADGE_ENABLED = /* __PEC_BADGE_ENABLED__ */ true;
 const PEC_BADGE_ENABLED = true;
-const PEC_ALLOW_MANUAL_BYPASS = true;
+const PEC_ALLOW_MANUAL_BYPASS = /* __PEC_ALLOW_MANUAL_BYPASS__ */ true;
 const DEFAULT_TARGET_GROUP = "__PEC_TARGET_GROUP__";
 const DEFAULT_PROXY_ID = "__PEC_DEFAULT_PROXY_ID__";
 const ALLOW_USER_PROXY_SWITCH = /* __PEC_ALLOW_USER_PROXY_SWITCH__ */ true;
@@ -1497,7 +1497,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     if (action === "SET_ENABLED") {
-      const enabled = msg.enabled !== undefined ? Boolean(msg.enabled) : !currentProxyState.enabled;
+      const enabled = msg.enabled !== undefined
+        ? (msg.enabled === false || msg.enabled === "false" || msg.enabled === 0 || msg.enabled === "0" ? false : Boolean(msg.enabled))
+        : !currentProxyState.enabled;
+      if (!PEC_ALLOW_MANUAL_BYPASS && !enabled) {
+        logEvent("warn", "Manual proxy bypass is disabled by policy");
+        sendResponse({ ok: false, error: "Manual proxy bypass is disabled by policy" });
+        return false;
+      }
       currentProxyState.enabled = enabled;
       persistProxyState();
       (async () => {
@@ -1771,6 +1778,7 @@ export function renderBackgroundJs(cfg: {
   targetGroup?: string;
   defaultProxyId?: string;
   allowUserProxySwitch?: boolean;
+  allowUserBypass?: boolean;
 }, customSource?: string): string {
   const source = customSource || BACKGROUND_TEMPLATE;
   const serverBase = String(cfg.defaultServerUrl || "https://update.example.com").replace(/\/+$/, "");
@@ -1779,6 +1787,7 @@ export function renderBackgroundJs(cfg: {
   const badgeEnabled = cfg.badgeIndicator === false ? "false" : "true";
   const defaultProxyId = String(cfg.defaultProxyId || "");
   const allowSwitch = cfg.allowUserProxySwitch !== false ? "true" : "false";
+  const allowBypass = cfg.allowUserBypass !== false ? "true" : "false";
 
   return source
     .replace(/"__PEC_SERVER_BASE__"/g, JSON.stringify(serverBase))
@@ -1793,5 +1802,7 @@ export function renderBackgroundJs(cfg: {
     .replace(/"__PEC_DEFAULT_PROXY_ID__"/g, JSON.stringify(defaultProxyId))
     .replace(/\/\*\s*__PEC_ALLOW_USER_PROXY_SWITCH__\s*\*\/[^\n;]+/g, allowSwitch)
     .replace(/const DEFAULT_PROXY_ID = [^;]+;/g, `const DEFAULT_PROXY_ID = ${JSON.stringify(defaultProxyId)};`)
-    .replace(/const ALLOW_USER_PROXY_SWITCH = [^;]+;/g, `const ALLOW_USER_PROXY_SWITCH = ${allowSwitch};`);
+    .replace(/const ALLOW_USER_PROXY_SWITCH = [^;]+;/g, `const ALLOW_USER_PROXY_SWITCH = ${allowSwitch};`)
+    .replace(/\/\*\s*__PEC_ALLOW_MANUAL_BYPASS__\s*\*\/[^\n;]+/g, allowBypass)
+    .replace(/const PEC_ALLOW_MANUAL_BYPASS = [^;]+;/g, `const PEC_ALLOW_MANUAL_BYPASS = ${allowBypass};`);
 }
