@@ -952,10 +952,6 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
         <span class="val success-val" id="webrtcVal">${safeCfg.webRtcProtection !== false ? t.webrtcStatus : "Disabled"}</span>
       </div>
       <div class="row">
-        <span class="label">${t.dnsGuard}</span>
-        <span class="val success-val" id="dnsVal">${safeCfg.dnsLeakProtection !== false ? t.dnsStatus : "Off"}</span>
-      </div>
-      <div class="row">
         <span class="label">${t.latency}</span>
         <div class="row-action">
           <span class="val" id="pingVal">—</span>

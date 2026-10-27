@@ -106,7 +106,25 @@ const instancesMap = new Map<string, ExtensionInstance>();
  * Blocks prototype-pollution vectors (__proto__/constructor/prototype) and
  * caps the length; anything invalid is rejected loudly.
  */
-function assertSafeInstanceId(instanceId: string): string {
+export function isSafeInstanceId(instanceId: unknown): boolean {
+  if (typeof instanceId !== "string") return false;
+  const clean = instanceId.trim();
+  if (!clean || !/^[a-zA-Z0-9_\-\.]{1,128}$/.test(clean) || clean === "." || clean === "..") {
+    return false;
+  }
+
+  if (
+    clean === "__proto__" ||
+    clean === "constructor" ||
+    clean === "prototype" ||
+    clean in Object.prototype
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function assertSafeInstanceId(instanceId: string): string {
   const clean = String(instanceId || "").trim();
   if (!clean || !/^[a-zA-Z0-9_\-\.]{1,128}$/.test(clean) || clean === "." || clean === "..") {
     throw new Error("Invalid instanceId");

@@ -375,10 +375,23 @@ test("Fleet sync: /creds and readCurrentCreds return active proxy credentials", 
   assert.strictEqual(creds?.user, "active_user_abc");
   assert.strictEqual(creds?.pass, "active_password_xyz");
 
-  // Verify /creds endpoint
+  // Verify /creds endpoint (requires enrolled instance per CHAIN-1)
   await withServer(async (base) => {
-    const res = await fetch(`${base}/creds`, {
+    const unauthRes = await fetch(`${base}/creds`, {
       headers: { "x-ext-token": TEST_TOKEN },
+    });
+    assert.strictEqual(unauthRes.status, 403);
+
+    const syncRes = await (
+      await fetch(`${base}/api/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Ext-Token": TEST_TOKEN },
+        body: JSON.stringify({ instanceId: "pac-test-instance", version: "1.3.1" }),
+      })
+    ).json();
+
+    const res = await fetch(`${base}/creds`, {
+      headers: { "x-ext-token": syncRes.instanceToken, "x-instance-id": "pac-test-instance" },
     });
     assert.strictEqual(res.status, 200);
     const body = await res.json();

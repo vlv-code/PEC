@@ -1,6 +1,7 @@
 import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { generateGpoConfig } from "../src/packager.js";
 
 test("generateGpoConfig generates multi-browser policies for HKCU and HKLM", () => {
@@ -118,4 +119,41 @@ test("generateGpoDeploymentPack creates valid zip with all deployment artifacts"
   // Verify secret hygiene
   const regUser = zip.readAsText("pec-policy-user-hkcu.reg");
   assert.ok(!regUser.includes(process.env.ADMIN_TOKEN || "test-root-admin-token"));
+});
+
+test("X-02: deploy-pec-gpo.ps1 merges ExtensionSettings and preserves other extensions on install and uninstall", () => {
+  const extId = "abcdefghijklmnopabcdefghijklmnop";
+  const serverUrl = "https://pec.corp.local";
+  const token = "corp-token-xyz";
+
+  const gpo = generateGpoConfig(extId, serverUrl, token, { targetGroup: "Default" });
+
+  // 1. Must use ConvertFrom-Json when reading existing ExtensionSettings
+  assert.ok(
+    gpo.deployScript.includes("ConvertFrom-Json"),
+    "deployScript must parse existing ExtensionSettings with ConvertFrom-Json"
+  );
+  assert.ok(
+    gpo.deployScript.includes("ConvertTo-Json -Compress -Depth 10"),
+    "deployScript must serialize back with ConvertTo-Json -Compress -Depth 10"
+  );
+
+  // 2. Must NOT blindly overwrite ExtensionSettings or delete the whole property on uninstall
+  assert.ok(
+    !gpo.deployScript.includes('Remove-ItemProperty -Path $browserBase -Name "ExtensionSettings"'),
+    "deployScript must not remove entire ExtensionSettings on uninstall"
+  );
+  assert.ok(
+    gpo.deployScript.includes(".PSObject.Properties.Remove($ExtensionId)"),
+    "deployScript uninstall branch must remove only the PEC extension id property from ExtensionSettings"
+  );
+
+  // 3. PowerShell AST parse verification if powershell is available on Windows
+  if (process.platform === "win32") {
+    const b64 = Buffer.from(gpo.deployScript, "utf-8").toString("base64");
+    const testParseCmd = `$errors = $null; $tokens = $null; [System.Management.Automation.Language.Parser]::ParseInput([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64}')), [ref]$tokens, [ref]$errors); if ($errors.Count -gt 0) { throw ($errors | Out-String) }`;
+    assert.doesNotThrow(() => {
+      execFileSync("powershell", ["-NoProfile", "-Command", testParseCmd], { stdio: "pipe" });
+    }, "deployScript must parse without PowerShell syntax errors");
+  }
 });

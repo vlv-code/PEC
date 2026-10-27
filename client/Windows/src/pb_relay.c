@@ -19,6 +19,100 @@ static BOOL relay_peer_ok_v6(const struct in6_addr *peer, const UINT8 orig_dest6
     return memcmp(peer, lb6, 16) == 0 || memcmp(peer, orig_dest6, 16) == 0;
 }
 
+// Establish UDP ASSOCIATE on a local copy without holding g_proxy_lock during blocking network calls (N-4).
+// Updates g_proxy_configs under exclusive lock on completion.
+static BOOL establish_udp_associate_for_snapshot(PROXY_CONFIG *local_copy)
+{
+    if (!local_copy || local_copy->config_id == 0) return FALSE;
+
+    // Call blocking connect outside all locks
+    BOOL ok = establish_udp_associate_for_config(local_copy);
+
+    AcquireSRWLockExclusive(&g_proxy_lock);
+    PROXY_CONFIG *target = NULL;
+    for (int i = 0; i < g_proxy_config_count; i++)
+    {
+        if (g_proxy_configs[i].config_id == local_copy->config_id &&
+            g_proxy_configs[i].type == PROXY_TYPE_SOCKS5)
+        {
+            target = &g_proxy_configs[i];
+            break;
+        }
+    }
+
+    if (target != NULL)
+    {
+        if (ok)
+        {
+            if (target->udp_tcp_ctrl != INVALID_SOCKET)
+            {
+                closesocket(target->udp_tcp_ctrl);
+                target->udp_tcp_ctrl = INVALID_SOCKET;
+            }
+            if (target->udp_send_sock != INVALID_SOCKET)
+            {
+                closesocket(target->udp_send_sock);
+                target->udp_send_sock = INVALID_SOCKET;
+            }
+            target->last_udp_attempt = local_copy->last_udp_attempt;
+            target->udp_tcp_ctrl = local_copy->udp_tcp_ctrl;
+            target->udp_send_sock = local_copy->udp_send_sock;
+            target->udp_relay_addr = local_copy->udp_relay_addr;
+            target->udp_connected = local_copy->udp_connected;
+        }
+        else
+        {
+            target->last_udp_attempt = local_copy->last_udp_attempt;
+        }
+    }
+    else
+    {
+        // Config was removed or changed to non-SOCKS5 while associate was being established
+        if (ok)
+        {
+            if (local_copy->udp_tcp_ctrl != INVALID_SOCKET)
+            {
+                closesocket(local_copy->udp_tcp_ctrl);
+                local_copy->udp_tcp_ctrl = INVALID_SOCKET;
+            }
+            if (local_copy->udp_send_sock != INVALID_SOCKET)
+            {
+                closesocket(local_copy->udp_send_sock);
+                local_copy->udp_send_sock = INVALID_SOCKET;
+            }
+        }
+    }
+    ReleaseSRWLockExclusive(&g_proxy_lock);
+
+    return ok;
+}
+
+static BOOL establish_udp_associate_safe(UINT32 config_id)
+{
+    PROXY_CONFIG local_copy;
+    BOOL found = FALSE;
+
+    AcquireSRWLockShared(&g_proxy_lock);
+    for (int i = 0; i < g_proxy_config_count; i++)
+    {
+        if (g_proxy_configs[i].config_id == config_id &&
+            g_proxy_configs[i].type == PROXY_TYPE_SOCKS5)
+        {
+            local_copy = g_proxy_configs[i];
+            local_copy.udp_tcp_ctrl = INVALID_SOCKET;
+            local_copy.udp_send_sock = INVALID_SOCKET;
+            found = TRUE;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_proxy_lock);
+
+    if (!found)
+        return FALSE;
+
+    return establish_udp_associate_for_snapshot(&local_copy);
+}
+
 DWORD WINAPI udp_relay_server(LPVOID arg)
 {
     WSADATA wsa_data;
@@ -77,16 +171,28 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
 
     // Try initial UDP ASSOCIATE only for SOCKS5 configs that an enabled rule actually uses.
     // Skipping unreferenced configs avoids stalling the relay on dead/unused proxies.
+    // Take snapshots under shared lock, then establish associations outside lock (N-4).
+    PROXY_CONFIG init_candidates[MAX_PROXY_CONFIGS];
+    int init_candidate_count = 0;
+
     AcquireSRWLockShared(&g_proxy_lock);
-    for (int i = 0; i < g_proxy_config_count; i++)
+    for (int i = 0; i < g_proxy_config_count && init_candidate_count < MAX_PROXY_CONFIGS; i++)
     {
         if (g_proxy_configs[i].type == PROXY_TYPE_SOCKS5 &&
             is_proxy_config_referenced(g_proxy_configs[i].config_id))
         {
-            establish_udp_associate_for_config(&g_proxy_configs[i]);
+            init_candidates[init_candidate_count] = g_proxy_configs[i];
+            init_candidates[init_candidate_count].udp_tcp_ctrl = INVALID_SOCKET;
+            init_candidates[init_candidate_count].udp_send_sock = INVALID_SOCKET;
+            init_candidate_count++;
         }
     }
     ReleaseSRWLockShared(&g_proxy_lock);
+
+    for (int i = 0; i < init_candidate_count; i++)
+    {
+        establish_udp_associate_for_snapshot(&init_candidates[i]);
+    }
 
     log_message("UDP relay listening on port %d", LOCAL_UDP_RELAY_PORT);
 
@@ -125,20 +231,36 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
             // the connection is ready before the next client packet arrives.
             // Real time communication need real time packet transfer, a single UDP Associate connction can take 1 to 2 seconds and it break the UDP steam for client app
             // fuck you udp this cause slight increase in performance but needed for udp
+            PROXY_CONFIG timeout_candidates[MAX_PROXY_CONFIGS];
+            int timeout_candidate_count = 0;
+
             AcquireSRWLockShared(&g_proxy_lock);
-            for (int i = 0; i < g_proxy_config_count; i++)
+            for (int i = 0; i < g_proxy_config_count && timeout_candidate_count < MAX_PROXY_CONFIGS; i++)
             {
                 PROXY_CONFIG *rc = &g_proxy_configs[i];
                 if (rc->type == PROXY_TYPE_SOCKS5 && !rc->udp_connected &&
                     is_proxy_config_referenced(rc->config_id))
-                    establish_udp_associate_for_config(rc);
+                {
+                    timeout_candidates[timeout_candidate_count] = *rc;
+                    timeout_candidates[timeout_candidate_count].udp_tcp_ctrl = INVALID_SOCKET;
+                    timeout_candidates[timeout_candidate_count].udp_send_sock = INVALID_SOCKET;
+                    timeout_candidate_count++;
+                }
             }
             ReleaseSRWLockShared(&g_proxy_lock);
+
+            for (int i = 0; i < timeout_candidate_count; i++)
+            {
+                establish_udp_associate_for_snapshot(&timeout_candidates[i]);
+            }
             continue;
         }
 
         // Check if any SOCKS5 proxy TCP control socket disconnected
-        AcquireSRWLockShared(&g_proxy_lock);
+        PROXY_CONFIG disconn_candidates[MAX_PROXY_CONFIGS];
+        int disconn_count = 0;
+
+        AcquireSRWLockExclusive(&g_proxy_lock);
         for (int i = 0; i < g_proxy_config_count; i++)
         {
             PROXY_CONFIG *cfg = &g_proxy_configs[i];
@@ -158,13 +280,27 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
                         cfg->udp_send_sock = INVALID_SOCKET;
                     }
                     cfg->udp_connected = FALSE;
-                    // Reconnect immediately so the next client packet is not dropped.
-                    establish_udp_associate_for_config(cfg);
-                    assoc_replaced = 1;   // sockets replaced - read_fds is now stale
+
+                    if (disconn_count < MAX_PROXY_CONFIGS)
+                    {
+                        disconn_candidates[disconn_count] = *cfg;
+                        disconn_candidates[disconn_count].udp_tcp_ctrl = INVALID_SOCKET;
+                        disconn_candidates[disconn_count].udp_send_sock = INVALID_SOCKET;
+                        disconn_count++;
+                    }
                 }
             }
         }
-        ReleaseSRWLockShared(&g_proxy_lock);
+        ReleaseSRWLockExclusive(&g_proxy_lock);
+
+        for (int i = 0; i < disconn_count; i++)
+        {
+            // Reconnect immediately outside lock so the next client packet is not dropped.
+            if (establish_udp_associate_for_snapshot(&disconn_candidates[i]))
+            {
+                assoc_replaced = 1;   // sockets replaced - read_fds is now stale
+            }
+        }
         if (assoc_replaced) continue;   // rebuild read_fds before touching new sockets
 
         // Check if packet is from local application
@@ -198,6 +334,11 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
                         continue;
                     }
                     UINT32 proxy_config_id = get_connection_proxy_id(from_port, TRUE);
+                    UINT32 target_config_id = 0;
+                    char proxy_host_dbg[256] = {0};
+                    UINT16 proxy_port_dbg = 0;
+                    BOOL need_reconnect = FALSE;
+
                     AcquireSRWLockShared(&g_proxy_lock);
                     PROXY_CONFIG *cfg = NULL;
                     for (int i = 0; i < g_proxy_config_count; i++)
@@ -218,15 +359,23 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
                         continue;
                     }
 
-                    // UDP ASSOCIATE is established (reconnect if dropped).
-                    // If reconnect succeeds, fall through and send the current packet
-                    // immediately so real-time streams lose at most one packet.
+                    target_config_id = cfg->config_id;
+                    strncpy_s(proxy_host_dbg, sizeof(proxy_host_dbg), cfg->host, _TRUNCATE);
+                    proxy_port_dbg = cfg->port;
                     if (!cfg->udp_connected)
                     {
-                        if (!establish_udp_associate_for_config(cfg))
+                        need_reconnect = TRUE;
+                    }
+                    ReleaseSRWLockShared(&g_proxy_lock);
+
+                    // UDP ASSOCIATE is established (reconnect without holding lock if dropped).
+                    // If reconnect succeeds, fall through and send the current packet
+                    // immediately so real-time streams lose at most one packet.
+                    if (need_reconnect)
+                    {
+                        if (!establish_udp_associate_safe(target_config_id))
                         {
-                            ReleaseSRWLockShared(&g_proxy_lock);
-                            log_message("[UDP RELAY] UDP ASSOCIATE unavailable for %s:%d - dropping packet", cfg->host, cfg->port);
+                            log_message("[UDP RELAY] UDP ASSOCIATE unavailable for %s:%d - dropping packet", proxy_host_dbg, proxy_port_dbg);
                             continue;
                         }
                         assoc_replaced = 1;   // new sockets created - read_fds is stale
@@ -244,25 +393,68 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
                     send_buf[9] = (dest_port >> 0) & 0xFF;
                     memcpy(&send_buf[10], recv_buf, recv_len);
 
-                    int sent = sendto(cfg->udp_send_sock, (char*)send_buf, 10 + recv_len, 0,
-                          (struct sockaddr *)&cfg->udp_relay_addr, sizeof(cfg->udp_relay_addr));
+                    SOCKET send_sock = INVALID_SOCKET;
+                    struct sockaddr_in relay_addr = {0};
 
-                    if (sent == SOCKET_ERROR) {
-                        int err = WSAGetLastError();
-                        log_message("[UDP RELAY ERROR] sendto proxy %s:%d failed: %d - reconnecting and retrying", cfg->host, cfg->port, err);
-                        if (cfg->udp_tcp_ctrl != INVALID_SOCKET) { closesocket(cfg->udp_tcp_ctrl); cfg->udp_tcp_ctrl = INVALID_SOCKET; }
-                        if (cfg->udp_send_sock != INVALID_SOCKET) { closesocket(cfg->udp_send_sock); cfg->udp_send_sock = INVALID_SOCKET; }
-                        cfg->udp_connected = FALSE;
-                        // Reconnect and retry the current packet so real-time streams
-                        // lose at most one packet during a proxy reconnect event.
-                        if (establish_udp_associate_for_config(cfg))
+                    AcquireSRWLockShared(&g_proxy_lock);
+                    cfg = NULL;
+                    for (int i = 0; i < g_proxy_config_count; i++)
+                    {
+                        if (g_proxy_configs[i].config_id == target_config_id)
                         {
-                            sendto(cfg->udp_send_sock, (char*)send_buf, 10 + recv_len, 0,
-                                   (struct sockaddr *)&cfg->udp_relay_addr, sizeof(cfg->udp_relay_addr));
+                            cfg = &g_proxy_configs[i];
+                            break;
                         }
-                        assoc_replaced = 1;   // sockets replaced - read_fds is stale
+                    }
+                    if (cfg != NULL && cfg->type == PROXY_TYPE_SOCKS5 && cfg->udp_connected)
+                    {
+                        send_sock = cfg->udp_send_sock;
+                        relay_addr = cfg->udp_relay_addr;
                     }
                     ReleaseSRWLockShared(&g_proxy_lock);
+
+                    if (send_sock != INVALID_SOCKET)
+                    {
+                        int sent = sendto(send_sock, (char*)send_buf, 10 + recv_len, 0,
+                                          (struct sockaddr *)&relay_addr, sizeof(relay_addr));
+
+                        if (sent == SOCKET_ERROR) {
+                            int err = WSAGetLastError();
+                            log_message("[UDP RELAY ERROR] sendto proxy %s:%d failed: %d - reconnecting and retrying", proxy_host_dbg, proxy_port_dbg, err);
+                            AcquireSRWLockExclusive(&g_proxy_lock);
+                            for (int i = 0; i < g_proxy_config_count; i++)
+                            {
+                                if (g_proxy_configs[i].config_id == target_config_id)
+                                {
+                                    if (g_proxy_configs[i].udp_tcp_ctrl != INVALID_SOCKET) { closesocket(g_proxy_configs[i].udp_tcp_ctrl); g_proxy_configs[i].udp_tcp_ctrl = INVALID_SOCKET; }
+                                    if (g_proxy_configs[i].udp_send_sock != INVALID_SOCKET) { closesocket(g_proxy_configs[i].udp_send_sock); g_proxy_configs[i].udp_send_sock = INVALID_SOCKET; }
+                                    g_proxy_configs[i].udp_connected = FALSE;
+                                    break;
+                                }
+                            }
+                            ReleaseSRWLockExclusive(&g_proxy_lock);
+
+                            // Reconnect without holding lock and retry the current packet so real-time streams
+                            // lose at most one packet during a proxy reconnect event.
+                            if (establish_udp_associate_safe(target_config_id))
+                            {
+                                assoc_replaced = 1;   // sockets replaced - read_fds is stale
+                                AcquireSRWLockShared(&g_proxy_lock);
+                                for (int i = 0; i < g_proxy_config_count; i++)
+                                {
+                                    if (g_proxy_configs[i].config_id == target_config_id &&
+                                        g_proxy_configs[i].type == PROXY_TYPE_SOCKS5 &&
+                                        g_proxy_configs[i].udp_connected)
+                                    {
+                                        sendto(g_proxy_configs[i].udp_send_sock, (char*)send_buf, 10 + recv_len, 0,
+                                               (struct sockaddr *)&g_proxy_configs[i].udp_relay_addr, sizeof(g_proxy_configs[i].udp_relay_addr));
+                                        break;
+                                    }
+                                }
+                                ReleaseSRWLockShared(&g_proxy_lock);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -408,6 +600,9 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
                     {
                         continue;
                     }
+                    UINT32 target_id = 0;
+                    BOOL need_reconnect = FALSE;
+
                     AcquireSRWLockShared(&g_proxy_lock);
                     PROXY_CONFIG *cfg = NULL;
                     for (int i = 0; i < g_proxy_config_count; i++)
@@ -423,8 +618,31 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
 
                     if (cfg != NULL && cfg->type == PROXY_TYPE_SOCKS5)
                     {
-                        if (!cfg->udp_connected) establish_udp_associate_for_config(cfg);
-                        if (cfg->udp_connected)
+                        target_id = cfg->config_id;
+                        if (!cfg->udp_connected)
+                            need_reconnect = TRUE;
+                    }
+                    ReleaseSRWLockShared(&g_proxy_lock);
+
+                    if (need_reconnect && target_id != 0)
+                    {
+                        if (establish_udp_associate_safe(target_id))
+                            assoc_replaced = 1;   // sockets replaced - read_fds is stale
+                    }
+
+                    if (target_id != 0)
+                    {
+                        AcquireSRWLockShared(&g_proxy_lock);
+                        cfg = NULL;
+                        for (int i = 0; i < g_proxy_config_count; i++)
+                        {
+                            if (g_proxy_configs[i].config_id == target_id)
+                            {
+                                cfg = &g_proxy_configs[i];
+                                break;
+                            }
+                        }
+                        if (cfg != NULL && cfg->type == PROXY_TYPE_SOCKS5 && cfg->udp_connected)
                         {
                             send_buf[0] = 0; send_buf[1] = 0; send_buf[2] = 0;
                             send_buf[3] = SOCKS5_ATYP_IPV6;
@@ -435,8 +653,8 @@ DWORD WINAPI udp_relay_server(LPVOID arg)
                             sendto(cfg->udp_send_sock, (char*)send_buf, 22+recv_len, 0,
                                    (struct sockaddr*)&cfg->udp_relay_addr, sizeof(cfg->udp_relay_addr));
                         }
+                        ReleaseSRWLockShared(&g_proxy_lock);
                     }
-                    ReleaseSRWLockShared(&g_proxy_lock);
                 }
             }
         }

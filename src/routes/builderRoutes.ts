@@ -59,6 +59,21 @@ const ALLOWED_BUILD_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "overriddenFiles",
 ]);
 
+function isValidExtensionVersion(version: string): boolean {
+  const trimmed = version.trim();
+  const match = /^(0|[1-9]\d{0,4})(\.(0|[1-9]\d{0,4})){0,3}$/.test(trimmed);
+  if (!match) return false;
+  const parts = trimmed.split(".");
+  return (
+    parts.length >= 1 &&
+    parts.length <= 4 &&
+    parts.every((p) => {
+      const n = parseInt(p, 10);
+      return !isNaN(n) && n >= 0 && n <= 65535;
+    })
+  );
+}
+
 function filterBuildConfig(input: any): Partial<ExtensionBuildConfig> {
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
   const filtered: Record<string, any> = {};
@@ -100,17 +115,22 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
     }
 
     if (req.body?.version !== undefined) {
-      if (typeof req.body.version !== "string" || !SEMVER_REGEX.test(req.body.version.trim())) {
+      if (typeof req.body.version !== "string" || !isValidExtensionVersion(req.body.version)) {
         return res.status(400).json({
           ok: false,
-          error: "Invalid version format: must follow semver (e.g. 1.0.0)",
+          error: "Invalid version format: must follow semver / 1-4 dot-separated integers (0-65535)",
         });
       }
       req.body.version = req.body.version.trim();
     }
 
     const cleanConfig = filterBuildConfig(req.body);
-    const updated = saveBuildConfig(cleanConfig);
+    let updated: ExtensionBuildConfig;
+    try {
+      updated = saveBuildConfig(cleanConfig);
+    } catch (e: any) {
+      return res.status(400).json({ ok: false, error: e?.message || "Invalid build config" });
+    }
     generateExtensionFiles(updated);
     res.json(updated);
   });
@@ -143,10 +163,10 @@ export function createBuilderRouter(getFleetToken: () => string, getAdminToken?:
     try {
       if (req.body && Object.keys(req.body).length > 0) {
         if (req.body.version !== undefined) {
-          if (typeof req.body.version !== "string" || !SEMVER_REGEX.test(req.body.version.trim())) {
+          if (typeof req.body.version !== "string" || !isValidExtensionVersion(req.body.version)) {
             return res.status(400).json({
               ok: false,
-              error: "Invalid version format: must follow semver (e.g. 1.0.0)",
+              error: "Invalid version format: must follow semver / 1-4 dot-separated integers (0-65535)",
             });
           }
           req.body.version = req.body.version.trim();

@@ -20,7 +20,7 @@ export const MANAGED_SCHEMA_TEMPLATE = `{
     },
     "autoConfigureProxy": {
       "type": "boolean",
-      "description": "If true, extension manages chrome.proxy.settings dynamically according to the mini-server config."
+      "description": "If true (or DWORD 1 via GPO), extension manages chrome.proxy.settings dynamically according to the mini-server config."
     },
     "targetGroup": {
       "type": "string",

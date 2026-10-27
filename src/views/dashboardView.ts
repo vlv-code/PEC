@@ -213,6 +213,13 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <input type="text" id="profTargetGroup" placeholder="e.g. SEC-Proxy-VPN-VIP or Dev-Team" data-i18n-ph="phTargetGroup" style="margin-bottom: 0;" />
           </div>
 
+          <div id="instancesTargetRow" style="display: none; margin-bottom: 10px;">
+            <label data-i18n="lblTargetInstances">Target Instances</label>
+            <div id="profTargetInstancesList" style="max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; background: var(--bg-card-subtle);">
+              <!-- Checkboxes for available instances rendered dynamically -->
+            </div>
+          </div>
+
           <div style="margin-bottom: 12px;">
             <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;">
               <input type="checkbox" id="profFailClosed" style="margin: 0; width: 16px; height: 16px;" />

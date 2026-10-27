@@ -1,6 +1,9 @@
 import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import http from "node:http";
 import crypto from "node:crypto";
 import express from "express";
@@ -8,6 +11,7 @@ import { createCredsRouter, getFallbackPacSecret, resetFallbackPacSecretForTest,
 import { signPacUrlParams } from "../src/pacSigner.js";
 import { enrollInstanceToken, revokeInstanceToken, deleteInstance, _clearPersistentMetaForTesting } from "../src/instances.js";
 import { atomicWriteCreds, getCredsStorePath } from "../src/rotate.js";
+import { loadDockerSecrets } from "../src/loadEnv.js";
 
 test("M-1 & M-2: credsRoutes payload limit and enrolled token exclusivity", async (t) => {
   atomicWriteCreds(getCredsStorePath(), { user: "test-user", pass: "test-pass" });
@@ -190,5 +194,152 @@ test("S-1: in-memory random PAC secret retained across calls and rejects hardcod
     else delete process.env.PAC_REQUIRE_SIGNATURE;
     resetFallbackPacSecretForTest();
   }
+});
+
+test("CHAIN-1 & S-03: credsRoutes authentication chain, instanceId input validation, and fail-closed security", async (t) => {
+  atomicWriteCreds(getCredsStorePath(), { user: "wave2-user", pass: "wave2-pass" });
+  const SHARED_TOKEN = "shared-fleet-token-wave2-test";
+
+  const app = express();
+  app.use(express.json());
+  app.use(createCredsRouter(() => SHARED_TOKEN));
+
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const port = (server.address() as any).port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  t.after(async () => {
+    _clearPersistentMetaForTesting();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  await t.test("CHAIN-1: GET /creds with sharedToken and no instanceId returns 403 Forbidden", async () => {
+    const res = await fetch(`${baseUrl}/creds`, {
+      headers: {
+        "X-Ext-Token": SHARED_TOKEN,
+      },
+    });
+    assert.strictEqual(res.status, 403);
+    const body = await res.json();
+    assert.strictEqual(body.detail, "Forbidden");
+  });
+
+  await t.test("S-03: GET /creds with invalid instanceId (e.g. bad!id) returns 400 Bad Request", async () => {
+    const res = await fetch(`${baseUrl}/creds?instanceId=${encodeURIComponent("bad!id")}`, {
+      headers: {
+        "X-Ext-Token": SHARED_TOKEN,
+      },
+    });
+    assert.strictEqual(res.status, 400);
+    const body = await res.json();
+    assert.strictEqual(body.error, "Invalid instanceId");
+  });
+
+  await t.test("S-03: POST /api/sync with invalid instanceId returns 400 immediately without hanging", async () => {
+    const res = await fetch(`${baseUrl}/api/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Ext-Token": SHARED_TOKEN,
+      },
+      body: JSON.stringify({
+        instanceId: "invalid/id!@#",
+        version: "1.0.0",
+      }),
+    });
+    assert.strictEqual(res.status, 400);
+    const body = await res.json();
+    assert.strictEqual(body.error, "Invalid instanceId");
+  });
+
+  await t.test("CHAIN-1: GET /creds with un-enrolled valid instanceId and sharedToken returns 403", async () => {
+    const freshId = "inst-unenrolled-valid";
+    deleteInstance(freshId);
+
+    const res = await fetch(`${baseUrl}/creds?instanceId=${encodeURIComponent(freshId)}`, {
+      headers: {
+        "X-Ext-Token": SHARED_TOKEN,
+      },
+    });
+    assert.strictEqual(res.status, 403);
+    const body = await res.json();
+    assert.strictEqual(body.detail, "Forbidden");
+  });
+
+  await t.test("CHAIN-1: GET /creds with revoked instance returns 403 Forbidden regardless of token", async () => {
+    const instId = "inst-wave2-revoked";
+    deleteInstance(instId);
+
+    const dedicatedToken = "dedicated-token-revoked-test-999";
+    const tokenHash = crypto.createHash("sha256").update(dedicatedToken).digest("hex");
+    enrollInstanceToken(instId, tokenHash);
+    revokeInstanceToken(instId);
+
+    // With dedicated token
+    const resDedicated = await fetch(`${baseUrl}/creds?instanceId=${encodeURIComponent(instId)}`, {
+      headers: { "X-Ext-Token": dedicatedToken },
+    });
+    assert.strictEqual(resDedicated.status, 403);
+
+    // With shared token
+    const resShared = await fetch(`${baseUrl}/creds?instanceId=${encodeURIComponent(instId)}`, {
+      headers: { "X-Ext-Token": SHARED_TOKEN },
+    });
+    assert.strictEqual(resShared.status, 403);
+
+    deleteInstance(instId);
+  });
+
+  await t.test("CHAIN-1: GET /creds with valid enrolled instance and matching instanceToken returns 200", async () => {
+    const instId = "inst-wave2-enrolled-ok";
+    deleteInstance(instId);
+
+    const dedicatedToken = "dedicated-token-ok-test-1234567";
+    const tokenHash = crypto.createHash("sha256").update(dedicatedToken).digest("hex");
+    enrollInstanceToken(instId, tokenHash);
+
+    const res = await fetch(`${baseUrl}/creds?instanceId=${encodeURIComponent(instId)}`, {
+      headers: { "X-Ext-Token": dedicatedToken },
+    });
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.user, "wave2-user");
+    assert.strictEqual(body.pass, "wave2-pass");
+
+    deleteInstance(instId);
+  });
+});
+
+test("N-5: loadDockerSecrets reads secrets from *_FILE suffix paths into process.env", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pec-docker-secrets-"));
+  const adminTokenFile = path.join(tmpDir, "admin_token.txt");
+  const extSharedTokenFile = path.join(tmpDir, "ext_shared.txt");
+  const pacSecretFile = path.join(tmpDir, "pac_secret.txt");
+
+  fs.writeFileSync(adminTokenFile, "  super-secret-admin-token-from-file \n");
+  fs.writeFileSync(extSharedTokenFile, "shared-token-from-file\r\n");
+  fs.writeFileSync(pacSecretFile, "pac-secret-from-file\n");
+
+  const mockEnv: NodeJS.ProcessEnv = {
+    ADMIN_TOKEN_FILE: adminTokenFile,
+    EXT_SHARED_TOKEN_FILE: extSharedTokenFile,
+    PAC_SIGNING_SECRET_FILE: pacSecretFile,
+  };
+
+  loadDockerSecrets(mockEnv);
+
+  assert.strictEqual(mockEnv.ADMIN_TOKEN, "super-secret-admin-token-from-file");
+  assert.strictEqual(mockEnv.EXT_SHARED_TOKEN, "shared-token-from-file");
+  assert.strictEqual(mockEnv.PAC_SIGNING_SECRET, "pac-secret-from-file");
+
+  // Non-existent file does not crash and leaves variable undefined
+  const badEnv: NodeJS.ProcessEnv = {
+    CODE_SIGN_MASTER_KEY_FILE: path.join(tmpDir, "non_existent_file.txt"),
+  };
+  loadDockerSecrets(badEnv);
+  assert.strictEqual(badEnv.CODE_SIGN_MASTER_KEY, undefined);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

@@ -83,6 +83,23 @@ export function getBuildConfig(): ExtensionBuildConfig {
 }
 
 export function saveBuildConfig(cfg: Partial<ExtensionBuildConfig>): ExtensionBuildConfig {
+  if (cfg.version !== undefined) {
+    const rawVersion = typeof cfg.version === "string" ? cfg.version.trim() : "";
+    const match = /^(0|[1-9]\d{0,4})(\.(0|[1-9]\d{0,4})){0,3}$/.test(rawVersion);
+    const parts = rawVersion ? rawVersion.split(".") : [];
+    const validRange =
+      match &&
+      parts.length >= 1 &&
+      parts.length <= 4 &&
+      parts.every((p) => {
+        const n = parseInt(p, 10);
+        return !isNaN(n) && n >= 0 && n <= 65535;
+      });
+    if (!match || !validRange) {
+      throw new Error("Invalid extension version: must be 1-4 dot-separated integers (0-65535)");
+    }
+    cfg.version = rawVersion;
+  }
   currentBuildConfig = { ...currentBuildConfig, ...cfg };
   try {
     writeJsonAtomic(BUILD_CONFIG_PATH, currentBuildConfig);
@@ -767,7 +784,7 @@ export function createManifestObject(
 
 export function generateExtensionFiles(
   cfg: ExtensionBuildConfig,
-  opts?: { force?: boolean }
+  opts?: { force?: boolean; forceResetOverrides?: boolean; resetOverrides?: boolean }
 ): Record<string, string | Buffer> {
   if (!fs.existsSync(EXTENSION_DIR)) {
     fs.mkdirSync(EXTENSION_DIR, { recursive: true });
@@ -779,7 +796,8 @@ export function generateExtensionFiles(
   };
 
   const force = Boolean(opts?.force);
-  if (force) {
+  const shouldResetOverrides = Boolean(opts?.forceResetOverrides || opts?.resetOverrides);
+  if (shouldResetOverrides) {
     mergedCfg.overriddenFiles = [];
     saveBuildConfig({ overriddenFiles: [] });
   }

@@ -303,7 +303,8 @@ async function getManagedConfig() {
     const token = managed.extToken || memoryInstanceToken || FALLBACK_TOKEN || null;
     const credsUrl = isValidUrl(managed.credsUrl) ? managed.credsUrl : DEFAULT_CREDS_URL;
     const syncUrl = isValidUrl(managed.syncUrl) ? managed.syncUrl : DEFAULT_SYNC_URL;
-    const autoConfigureProxy = managed.autoConfigureProxy !== false;
+    const rawAuto = managed.autoConfigureProxy;
+    const autoConfigureProxy = rawAuto === undefined ? true : (rawAuto !== false && rawAuto !== 0 && rawAuto !== "0" && rawAuto !== "false");
     const targetGroup = managed.targetGroup || DEFAULT_TARGET_GROUP || "Default Fleet";
 
     return { token, credsUrl, syncUrl, autoConfigureProxy, targetGroup };

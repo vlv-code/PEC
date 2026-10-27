@@ -8,6 +8,7 @@ import express, { Request, Response, NextFunction } from "express";
 import {
   normalizeMsiVersion,
   renderWxsManifest,
+  generateUpgradeCode,
   buildMsiPackage,
   getAppBuildConfig,
 } from "../src/appPackager.js";
@@ -74,7 +75,9 @@ test("renderWxsManifest produces well-formed WiX XML with service and registry p
   assert.ok(xml.includes('<?xml version="1.0" encoding="utf-8"?>'));
   assert.ok(xml.includes("<Wix"));
   assert.ok(xml.includes('<Product Id="*"'));
-  assert.ok(xml.includes('UpgradeCode="A4B7D265-42E1-4D99-A785-30BF2A3C2F19"'));
+  const expectedUpgradeCode = generateUpgradeCode(baseUrl);
+  assert.ok(xml.includes(`UpgradeCode="${expectedUpgradeCode}"`));
+  assert.notEqual(expectedUpgradeCode, "A4B7D265-42E1-4D99-A785-30BF2A3C2F19");
 
   // Properties
   assert.ok(xml.includes(`<Property Id="SERVER_URL" Value="${baseUrl}" />`));

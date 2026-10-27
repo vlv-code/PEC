@@ -2,6 +2,10 @@
 #ifndef PB_UI_PEC_SYNC_H
 #define PB_UI_PEC_SYNC_H
 
+#ifndef _CRT_RAND_S
+#define _CRT_RAND_S
+#endif
+
 #ifndef APP_VERSION_STR
 #define APP_VERSION_STR "2.2.0"
 #endif
@@ -128,7 +132,13 @@ static void PecGetOrGenInstanceId(wchar_t* out, int cch)
     // Generate pseudo-random instance ID
     DWORD t = GetTickCount();
     DWORD p = GetCurrentProcessId();
-    unsigned int r1 = (unsigned int)rand(), r2 = (unsigned int)rand();
+    unsigned int r1 = 0, r2 = 0;
+    if (rand_s(&r1) != 0) {
+        r1 = (unsigned int)GetTickCount() ^ (unsigned int)GetCurrentProcessId();
+    }
+    if (rand_s(&r2) != 0) {
+        r2 = (unsigned int)GetCurrentThreadId() ^ 0x5A5A5A5A;
+    }
     _snwprintf_s(out, cch, _TRUNCATE, L"pec-win-%08x%04x%04x", t, (p & 0xFFFF), (r1 ^ r2) & 0xFFFF);
 
     wchar_t dir[MAX_PATH];

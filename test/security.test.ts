@@ -193,18 +193,27 @@ test("HTTP: two-token access matrix - fleet token on admin routes, admin token o
     });
     assert.strictEqual(adminOnSync.status, 403, "admin token must not be accepted on /api/sync");
 
-    // 4. fleet token on fleet routes -> 200 (unchanged extension protocol)
-    const fleetOnCreds = await fetch(`${base}/creds`, { headers: { "X-Ext-Token": TEST_TOKEN } });
-    assert.strictEqual(fleetOnCreds.status, 200);
-    const creds = await fleetOnCreds.json();
-    assert.strictEqual(typeof creds.pass, "string");
+    // 4. fleet token without instanceId on /creds -> 403 (CHAIN-1 mitigated)
+    const fleetOnCredsNoId = await fetch(`${base}/creds`, { headers: { "X-Ext-Token": TEST_TOKEN } });
+    assert.strictEqual(fleetOnCredsNoId.status, 403, "shared fleet token without instanceId must be rejected on /creds");
+
+    // Extension enrolls via /api/sync
     const fleetOnSync = await fetch(`${base}/api/sync`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Ext-Token": TEST_TOKEN },
       body: JSON.stringify({ instanceId: "http-test-worker", version: "1.3.1", group: "QA" }),
     });
     assert.strictEqual(fleetOnSync.status, 200);
-    assert.strictEqual((await fleetOnSync.json()).ok, true);
+    const syncRes = await fleetOnSync.json();
+    assert.strictEqual(syncRes.ok, true);
+
+    // Enrolled extension queries /creds with its instanceToken -> 200
+    const enrolledOnCreds = await fetch(`${base}/creds`, {
+      headers: { "X-Ext-Token": syncRes.instanceToken, "X-Instance-Id": "http-test-worker" },
+    });
+    assert.strictEqual(enrolledOnCreds.status, 200);
+    const creds = await enrolledOnCreds.json();
+    assert.strictEqual(typeof creds.pass, "string");
 
     // admin-only fleet listing stays gated behind the admin token
     const fleetNoAuth = await fetch(`${base}/api/instances`);

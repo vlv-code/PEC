@@ -74,9 +74,9 @@ test("P-01: SEMVER_REGEX strictly matches SemVer 2.0.0 specification", () => {
   assert.equal(SEMVER_REGEX.test("1.0.0.0"), false);
 });
 
-test("P-01: POST /api/builder/config accepts valid SemVer versions and trims whitespace", async () => {
+test("P-01 / X-01: POST /api/builder/config accepts valid Chrome extension versions and trims whitespace", async () => {
   await withServer(setupBuilderServer(), async (baseUrl) => {
-    // 1. Standard semver
+    // 1. Standard 3-part version
     const res1 = await fetch(`${baseUrl}/api/builder/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,37 +87,27 @@ test("P-01: POST /api/builder/config accepts valid SemVer versions and trims whi
     assert.equal(body1.version, "1.2.3");
     assert.equal(getBuildConfig().version, "1.2.3");
 
-    // 2. Semver with pre-release tag
+    // 2. 4-part Chrome version
     const res2 = await fetch(`${baseUrl}/api/builder/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ version: "2.0.0-rc.1" }),
+      body: JSON.stringify({ version: "2.0.0.1" }),
     });
     assert.equal(res2.status, 200);
     const body2 = await res2.json();
-    assert.equal(body2.version, "2.0.0-rc.1");
+    assert.equal(body2.version, "2.0.0.1");
 
-    // 3. Semver with pre-release containing hyphen
+    // 3. 2-part Chrome version
     const res3 = await fetch(`${baseUrl}/api/builder/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ version: "1.0.0-beta-1" }),
+      body: JSON.stringify({ version: "1.5" }),
     });
     assert.equal(res3.status, 200);
     const body3 = await res3.json();
-    assert.equal(body3.version, "1.0.0-beta-1");
+    assert.equal(body3.version, "1.5");
 
-    // 4. Semver with build metadata
-    const res4 = await fetch(`${baseUrl}/api/builder/config`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ version: "1.0.0+build.1" }),
-    });
-    assert.equal(res4.status, 200);
-    const body4 = await res4.json();
-    assert.equal(body4.version, "1.0.0+build.1");
-
-    // 5. Semver with surrounding whitespace is trimmed
+    // 4. Version with surrounding whitespace is trimmed
     const res5 = await fetch(`${baseUrl}/api/builder/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -130,15 +120,17 @@ test("P-01: POST /api/builder/config accepts valid SemVer versions and trims whi
   });
 });
 
-test("P-01: POST /api/builder/config rejects invalid version formats with 400 Bad Request", async () => {
+test("P-01 / X-01: POST /api/builder/config rejects invalid version formats with 400 Bad Request", async () => {
   await withServer(setupBuilderServer(), async (baseUrl) => {
     const invalidVersions = [
       "../../etc/passwd",        // Path traversal
       "..\\..\\windows\\system",  // Windows path traversal
-      "1.0",                     // Missing patch
-      "1",                       // Single number
+      "2.0.0-rc.1",              // Chrome rejects SemVer prerelease tags
+      "1.0.0-beta-1",            // Chrome rejects SemVer prerelease tags
+      "1.0.0+build.1",           // Chrome rejects build metadata
       "v1.0.0",                  // Leading 'v'
-      "1.0.0.0",                 // Four segments
+      "1.0.0.0.0",               // More than 4 segments
+      "70000.1.1",               // Number exceeds 65535
       "",                        // Empty string
       "   ",                     // Whitespace only
       "1.0.0; rm -rf /",         // Command injection

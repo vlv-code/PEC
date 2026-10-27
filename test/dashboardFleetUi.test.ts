@@ -328,3 +328,240 @@ test("D-08: dead checkGitHubReleases function is removed from dashboard.js", () 
     "checkGitHubReleases must be removed as dead code"
   );
 });
+
+test("UI-01: onConfigChangeLive does not automatically call /api/builder/regenerate", () => {
+  const js = fs.readFileSync(path.resolve("public/dashboard.js"), "utf8");
+  const match = js.match(/function onConfigChangeLive\(\)\s*\{[\s\S]*?\}/);
+  assert.ok(match, "onConfigChangeLive must exist");
+  assert.strictEqual(
+    match[0].includes("regenerateTemplatesFromConfig"),
+    false,
+    "onConfigChangeLive must not call regenerateTemplatesFromConfig"
+  );
+});
+
+test("UI-02: Fleet table renders assignedProfileId as selected in profile dropdown per instance", async () => {
+  const env = setupDashboardDom({
+    customResponses: {
+      "/api/instances": {
+        online: 2,
+        instances: [
+          {
+            instanceId: "inst-profile-1",
+            username: "user1@corp.local",
+            ip: "10.0.1.10",
+            version: "1.0.0",
+            assignedProfileId: "prof-a",
+            status: "ONLINE",
+          },
+          {
+            instanceId: "inst-profile-2",
+            username: "user2@corp.local",
+            ip: "10.0.1.20",
+            version: "1.0.0",
+            assignedProfileId: "prof-b",
+            status: "ONLINE",
+          },
+        ],
+      },
+      "/api/routing/profiles": [
+        { id: "prof-a", name: "Profile A", defaultPolicy: "direct" },
+        { id: "prof-b", name: "Profile B", defaultPolicy: "direct" },
+      ],
+    },
+  });
+
+  try {
+    await env.window.loadProfiles();
+    await env.window.loadInstances();
+
+    const tbody = env.document.getElementById("fleetTableBody");
+    assert.ok(tbody);
+
+    const selects = tbody.querySelectorAll(".select-instance-profile");
+    assert.strictEqual(selects.length, 2);
+
+    const sel1 = selects[0] as HTMLSelectElement;
+    assert.strictEqual(sel1.value, "prof-a", "First instance must have prof-a selected");
+    const optA1 = sel1.querySelector('option[value="prof-a"]');
+    assert.ok(optA1?.hasAttribute("selected"), "option prof-a must have selected attribute");
+
+    const sel2 = selects[1] as HTMLSelectElement;
+    assert.strictEqual(sel2.value, "prof-b", "Second instance must have prof-b selected");
+    const optB2 = sel2.querySelector('option[value="prof-b"]');
+    assert.ok(optB2?.hasAttribute("selected"), "option prof-b must have selected attribute");
+  } finally {
+    env.teardown();
+  }
+});
+
+test("UI-04: assignProfileToInstance handles HTTP errors cleanly and displays toast", async () => {
+  const env = setupDashboardDom({
+    customResponses: {
+      "/api/instances/assign-profile": { error: "Profile not found or revoked" },
+      "/api/instances/assign-profile:status": 400,
+    },
+  });
+
+  try {
+    const toastCalls: string[] = [];
+    env.window.toast = (msg: string, type: string) => {
+      toastCalls.push(type + ":" + msg);
+    };
+
+    await env.window.assignProfileToInstance("inst-err-1", "invalid-profile");
+
+    assert.ok(
+      toastCalls.some((t) => t.includes("error") && t.includes("Profile not found or revoked")),
+      "toast must display error message from failed assign-profile response: " + JSON.stringify(toastCalls)
+    );
+  } finally {
+    env.teardown();
+  }
+});
+
+test("UI-03: importRoutingRulesToApp expands presets into real domain hostnames", async () => {
+  const env = setupDashboardDom({
+    customResponses: {
+      "/api/routing/profiles": [
+        {
+          id: "prof-presets",
+          name: "Geo Profile",
+          defaultPolicy: "direct",
+          rules: [
+            { id: "r1", targetType: "preset", pattern: "preset:ai_services", action: "proxy" },
+            { id: "r2", targetType: "domain", pattern: "corp.internal, vpn.internal", action: "direct" },
+          ],
+        },
+      ],
+      "/api/routing/presets": [
+        {
+          id: "preset:ai_services",
+          name: "AI Services",
+          entries: ["openai.com", "*.openai.com", "claude.ai"],
+        },
+      ],
+    },
+  });
+
+  try {
+    const select = env.document.getElementById("appRoutingProfileSelect") as HTMLSelectElement;
+    assert.ok(select, "appRoutingProfileSelect must exist in dashboard HTML");
+    const opt = env.document.createElement("option");
+    opt.value = "prof-presets";
+    opt.selected = true;
+    select.appendChild(opt);
+    select.value = "prof-presets";
+
+    assert.strictEqual(typeof env.window.importRoutingRulesToApp, "function");
+    await env.window.importRoutingRulesToApp();
+
+    const rules = env.window.currentAppRules;
+    assert.ok(Array.isArray(rules) && rules.length === 2, "2 rules must be imported");
+
+    const presetRule = rules[0];
+    assert.strictEqual(presetRule.action, "proxy");
+    assert.ok(
+      presetRule.targetHosts.includes("openai.com") && presetRule.targetHosts.includes("claude.ai"),
+      "preset rule must expand entries into real hostnames"
+    );
+    assert.strictEqual(
+      presetRule.targetHosts.includes("preset:ai_services"),
+      false,
+      "preset rule must NOT contain raw preset: identifier"
+    );
+
+    const domainRule = rules[1];
+    assert.strictEqual(domainRule.action, "direct");
+    assert.strictEqual(domainRule.targetHosts, "corp.internal; vpn.internal");
+  } finally {
+    env.teardown();
+  }
+});
+
+test("UI-05: dashboardView contains instancesTargetRow and saveCurrentProfile collects targetInstanceIds", async () => {
+  const html = renderDashboardHtml();
+  assert.ok(html.includes('id="instancesTargetRow"'), "dashboard HTML must contain instancesTargetRow container");
+  assert.ok(html.includes('id="profTargetInstancesList"'), "dashboard HTML must contain profTargetInstancesList container");
+
+  const env = setupDashboardDom({
+    customResponses: {
+      "/api/instances": {
+        online: 2,
+        instances: [
+          { instanceId: "inst-101", username: "alice", status: "ONLINE" },
+          { instanceId: "inst-102", username: "bob", status: "ONLINE" },
+        ],
+      },
+      "/api/routing/profiles": { ok: true },
+    },
+  });
+
+  try {
+    env.window.currentProfile = {
+      id: "prof-test-inst",
+      name: "Inst Profile",
+      defaultPolicy: "direct",
+      targetScope: "instances",
+      targetInstanceIds: ["inst-101"],
+      rules: [],
+    };
+
+    env.window.renderProfile(env.window.currentProfile);
+    await new Promise((r) => setTimeout(r, 60));
+
+    const instRow = env.document.getElementById("instancesTargetRow");
+    assert.strictEqual(instRow?.style.display, "block", "instancesTargetRow must be displayed when targetScope is instances");
+
+    // Check inst-102 checkbox as well
+    const cb102 = env.document.querySelector('input.prof-instance-checkbox[value="inst-102"]') as HTMLInputElement;
+    if (cb102) cb102.checked = true;
+
+    await env.window.saveCurrentProfile();
+
+    const saveCall = env.fetchCalls.find((c) => c.url === "/api/routing/profiles" && c.method === "POST");
+    assert.ok(saveCall, "saveCurrentProfile must POST to /api/routing/profiles");
+    const saved = JSON.parse(saveCall.body);
+    assert.strictEqual(saved.targetScope, "instances");
+    assert.ok(saved.targetInstanceIds.includes("inst-101"), "must include inst-101");
+    assert.ok(saved.targetInstanceIds.includes("inst-102"), "must include inst-102");
+  } finally {
+    env.teardown();
+  }
+});
+
+test("UI-06: switchTab('app-studio') preserves modified state when isAppStudioDirty is true", async () => {
+  let loadCount = 0;
+  const env = setupDashboardDom({
+    customResponses: {
+      "/api/app-builder/config": () => {
+        loadCount++;
+        return { name: "Loaded App Config " + loadCount };
+      },
+      "/api/app-builder/info": { info: {} },
+    },
+  });
+
+  try {
+    // Initial load
+    await env.window.loadAppStudioConfig();
+    assert.strictEqual(loadCount, 1);
+    assert.strictEqual(env.window.isAppStudioDirty, false);
+
+    // Modify a field
+    env.window.onAppConfigChangeLive();
+    assert.strictEqual(env.window.isAppStudioDirty, true, "live change must set isAppStudioDirty = true");
+
+    // Switching to app-studio must NOT re-fetch if dirty
+    env.window.switchTab("app-studio");
+    assert.strictEqual(loadCount, 1, "switchTab must not reload config when dirty");
+
+    // Clear dirty flag and switchTab again
+    env.window.isAppStudioDirty = false;
+    env.window.switchTab("app-studio");
+    await new Promise((res) => setTimeout(res, 80));
+    assert.strictEqual(loadCount, 2, "switchTab reloads config when clean");
+  } finally {
+    env.teardown();
+  }
+});

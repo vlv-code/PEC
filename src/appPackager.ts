@@ -687,6 +687,12 @@ export function normalizeMsiVersion(rawVersion: string): string {
   return parts.slice(0, 4).join(".");
 }
 
+export function generateUpgradeCode(serverUrlOrSeed?: string): string {
+  const seed = (serverUrlOrSeed || "").trim() || "default";
+  const hex = crypto.createHash("sha1").update(`pec-app:${seed}`).digest("hex");
+  return `${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}`.toUpperCase();
+}
+
 export function renderWxsManifest(cfg: AppBuildConfig, baseUrl: string, sourceDir: string): string {
   const appName = cfg.name || "PEC-App";
   const publisher = cfg.shortName || "PEC Corp";
@@ -712,7 +718,7 @@ export function renderWxsManifest(cfg: AppBuildConfig, baseUrl: string, sourceDi
   if (!templateContent) {
     templateContent = `<?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="{{APP_NAME}}" Language="1033" Version="{{VERSION}}" Manufacturer="{{PUBLISHER}}" UpgradeCode="A4B7D265-42E1-4D99-A785-30BF2A3C2F19">
+  <Product Id="*" Name="{{APP_NAME}}" Language="1033" Version="{{VERSION}}" Manufacturer="{{PUBLISHER}}" UpgradeCode="{{UPGRADE_CODE}}">
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64" Comments="PEC-App Windows Enterprise Client" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of {{APP_NAME}} is already installed." />
     <MediaTemplate EmbedCab="yes" />
@@ -790,13 +796,17 @@ export function renderWxsManifest(cfg: AppBuildConfig, baseUrl: string, sourceDi
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&apos;");
 
+  const serverSeed = (cfg as any).serverBaseUrl || baseUrl || cfg.defaultServerUrl || "default";
+  const upgradeCode = generateUpgradeCode(serverSeed);
+
   return templateContent
     .replace(/\{\{APP_NAME\}\}/g, xmlEscape(appName))
     .replace(/\{\{VERSION\}\}/g, xmlEscape(msiVer))
     .replace(/\{\{PUBLISHER\}\}/g, xmlEscape(publisher))
     .replace(/\{\{SERVER_URL\}\}/g, xmlEscape(baseUrl))
     .replace(/\{\{FLEET_TOKEN\}\}/g, xmlEscape(fleetToken))
-    .replace(/\{\{SOURCE_DIR\}\}/g, normalizedSourceDir);
+    .replace(/\{\{SOURCE_DIR\}\}/g, normalizedSourceDir)
+    .replace(/\{\{UPGRADE_CODE\}\}/g, xmlEscape(upgradeCode));
 }
 
 export function buildMsiPackage(

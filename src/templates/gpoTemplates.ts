@@ -153,8 +153,23 @@ foreach ($b in $browsers) {
             Write-PecLog "[$($b.Name)] Removed managed policy keys." "SUCCESS"
         }
 
-        # Remove ExtensionSettings
-        Remove-ItemProperty -Path $browserBase -Name "ExtensionSettings" -ErrorAction SilentlyContinue
+        # Remove PEC from ExtensionSettings (preserve other corporate extensions)
+        if (Test-Path $browserBase) {
+            $extSettingsRaw = (Get-ItemProperty -Path $browserBase -Name "ExtensionSettings" -ErrorAction SilentlyContinue).ExtensionSettings
+            if (-not [string]::IsNullOrWhiteSpace($extSettingsRaw)) {
+                try {
+                    $extSettingsObj = $extSettingsRaw | ConvertFrom-Json
+                    if ($extSettingsObj.PSObject.Properties[$ExtensionId]) {
+                        $extSettingsObj.PSObject.Properties.Remove($ExtensionId)
+                        $cleanedJson = $extSettingsObj | ConvertTo-Json -Compress -Depth 10
+                        Set-ItemProperty -Path $browserBase -Name "ExtensionSettings" -Value $cleanedJson -Type String
+                        Write-PecLog "[$($b.Name)] Removed PEC from ExtensionSettings (other extensions preserved)." "SUCCESS"
+                    }
+                } catch {
+                    Write-PecLog "[$($b.Name)] Could not update ExtensionSettings: $_" "WARN"
+                }
+            }
+        }
         continue
     }
 
@@ -203,10 +218,64 @@ foreach ($b in $browsers) {
     Set-ItemProperty -Path $allowlistPath -Name $targetAllow -Value $ExtensionId -Type String
     Write-PecLog "[$($b.Name)] Allowlist entry set at index '$targetAllow'." "SUCCESS"
 
-    # Modern ExtensionSettings (REG_SZ) with browser-specific installation mode
+    # Modern ExtensionSettings (REG_SZ) with browser-specific installation mode and safe merge
     # Note: Unmanaged Yandex Browser requires normal_installed; force_installed is blocked by Yandex security layer.
     $installMode = if ($b.Key -like "*Yandex*") { "normal_installed" } else { "force_installed" }
-    $extSettingsVal = '{"*":{"install_sources":["' + $ServerUrl.TrimEnd('/') + '/*"]},"' + $ExtensionId + '":{"installation_mode":"' + $installMode + '","update_url":"' + $UpdateUrl + '","override_update_url":true}}'
+    $sourcePattern = $ServerUrl.TrimEnd('/') + '/*'
+    $pecSettings = [PSCustomObject]@{
+        installation_mode   = $installMode
+        update_url          = $UpdateUrl
+        override_update_url = $true
+    }
+
+    $existingSettingsRaw = $null
+    if (Test-Path $browserBase) {
+        $existingSettingsRaw = (Get-ItemProperty -Path $browserBase -Name "ExtensionSettings" -ErrorAction SilentlyContinue).ExtensionSettings
+    }
+
+    $settingsObj = $null
+    if (-not [string]::IsNullOrWhiteSpace($existingSettingsRaw)) {
+        try {
+            $settingsObj = $existingSettingsRaw | ConvertFrom-Json
+        } catch {
+            Write-PecLog "[$($b.Name)] Could not parse existing ExtensionSettings JSON, creating new." "WARN"
+            $settingsObj = $null
+        }
+    }
+
+    if ($null -eq $settingsObj) {
+        $settingsObj = [PSCustomObject]@{
+            '*' = [PSCustomObject]@{
+                install_sources = @($sourcePattern)
+            }
+        }
+    } else {
+        if ($null -eq $settingsObj.PSObject.Properties['*']) {
+            $starObj = [PSCustomObject]@{
+                install_sources = @($sourcePattern)
+            }
+            $settingsObj | Add-Member -MemberType NoteProperty -Name '*' -Value $starObj -Force
+        } else {
+            if ($null -eq $settingsObj.'*'.PSObject.Properties['install_sources']) {
+                $settingsObj.'*' | Add-Member -MemberType NoteProperty -Name 'install_sources' -Value @($sourcePattern) -Force
+            } else {
+                $currentSources = @($settingsObj.'*'.install_sources)
+                if ($currentSources -notcontains $sourcePattern) {
+                    $currentSources += $sourcePattern
+                    $settingsObj.'*'.install_sources = $currentSources
+                }
+            }
+        }
+    }
+
+    # Add or update $ExtensionId
+    if ($settingsObj.PSObject.Properties[$ExtensionId]) {
+        $settingsObj.PSObject.Properties[$ExtensionId].Value = $pecSettings
+    } else {
+        $settingsObj | Add-Member -MemberType NoteProperty -Name $ExtensionId -Value $pecSettings -Force
+    }
+
+    $extSettingsVal = $settingsObj | ConvertTo-Json -Compress -Depth 10
     Set-ItemProperty -Path $browserBase -Name "ExtensionSettings" -Value $extSettingsVal -Type String
     Write-PecLog "[$($b.Name)] ExtensionSettings applied (mode: $installMode, override_update_url: true)." "SUCCESS"
 

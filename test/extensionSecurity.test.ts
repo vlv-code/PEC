@@ -129,3 +129,30 @@ test("syncWithServer clears sessionStore creds cache on forceRefresh (M-14)", ()
     "BACKGROUND_TEMPLATE must remove pecCredsCache from sessionStore on forceRefresh"
   );
 });
+
+test("X-04: autoConfigureProxy evaluates to false for 0, '0', 'false', false and true for 1, true, undefined", () => {
+  // Test that both background.js and BACKGROUND_TEMPLATE use the normalized autoConfigureProxy expression
+  assert.ok(
+    backgroundJs.includes('rawAuto !== false && rawAuto !== 0 && rawAuto !== "0" && rawAuto !== "false"'),
+    "extension/background.js must normalize autoConfigureProxy to handle DWORD 0/1, strings and booleans"
+  );
+  assert.ok(
+    BACKGROUND_TEMPLATE.includes('rawAuto !== false && rawAuto !== 0 && rawAuto !== "0" && rawAuto !== "false"'),
+    "src/templates/backgroundTemplate.ts must normalize autoConfigureProxy to handle DWORD 0/1, strings and booleans"
+  );
+
+  // Evaluate the normalization logic across all permutations
+  const normalizeAuto = (rawAuto: any) =>
+    rawAuto === undefined ? true : (rawAuto !== false && rawAuto !== 0 && rawAuto !== "0" && rawAuto !== "false");
+
+  assert.equal(normalizeAuto(0), false);
+  assert.equal(normalizeAuto("0"), false);
+  assert.equal(normalizeAuto(false), false);
+  assert.equal(normalizeAuto("false"), false);
+
+  assert.equal(normalizeAuto(1), true);
+  assert.equal(normalizeAuto("1"), true);
+  assert.equal(normalizeAuto(true), true);
+  assert.equal(normalizeAuto("true"), true);
+  assert.equal(normalizeAuto(undefined), true);
+});

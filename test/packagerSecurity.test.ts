@@ -3,9 +3,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express, { Request, Response } from "express";
-import { renderInstallCmd, renderUninstallCmd, escapeCmdArg } from "../src/appPackager.js";
+import { renderInstallCmd, renderUninstallCmd, escapeCmdArg, renderWxsManifest, generateUpgradeCode } from "../src/appPackager.js";
 import { createAppBuilderRouter } from "../src/routes/appBuilderRoutes.js";
-import { packageExtension, renderBackgroundJs, saveBuildConfig, SEMVER_REGEX } from "../src/packager.js";
+import {
+  packageExtension,
+  renderBackgroundJs,
+  saveBuildConfig,
+  getBuildConfig,
+  generateExtensionFiles,
+  SEMVER_REGEX,
+} from "../src/packager.js";
 import { BACKGROUND_TEMPLATE } from "../src/templates/backgroundTemplate.js";
 import { getReleasesDir } from "../src/storage.js";
 import fs from "node:fs";
@@ -250,14 +257,13 @@ test("M-10: SEMVER_REGEX is exported and validates semver format correctly", () 
 });
 
 test("M-10: packageExtension rejects path traversal in version and sanitizes whitespace", () => {
-  // Test directory traversal in version
-  saveBuildConfig({ version: "../../evil_dir" });
+  // Test directory traversal in version via saveBuildConfig (X-01)
   assert.throws(
     () => {
-      packageExtension();
+      saveBuildConfig({ version: "../../evil_dir" });
     },
     (err: any) => {
-      return /invalid version format/i.test(err?.message || "");
+      return /invalid extension version/i.test(err?.message || "");
     }
   );
 
@@ -278,4 +284,94 @@ test("M-10: packageExtension rejects path traversal in version and sanitizes whi
 
   // Restore valid default version
   saveBuildConfig({ version: "1.0.0" });
+});
+
+// -----------------------------------------------------------------------------
+// UI-01: overriddenFiles Preservation
+// -----------------------------------------------------------------------------
+
+test("UI-01: generateExtensionFiles preserves overriddenFiles unless forceResetOverrides is true", () => {
+  const origCfg = getBuildConfig();
+  try {
+    saveBuildConfig({ overriddenFiles: ["manifest.json", "background.js"] });
+    const cfg = getBuildConfig();
+    assert.deepEqual(cfg.overriddenFiles, ["manifest.json", "background.js"]);
+
+    // Normal generation: overriddenFiles must be preserved
+    generateExtensionFiles(cfg);
+    assert.deepEqual(getBuildConfig().overriddenFiles, ["manifest.json", "background.js"]);
+
+    // Force regeneration without forceResetOverrides: overriddenFiles must still be preserved
+    generateExtensionFiles(cfg, { force: true });
+    assert.deepEqual(getBuildConfig().overriddenFiles, ["manifest.json", "background.js"]);
+
+    // Regeneration with forceResetOverrides: true: overriddenFiles should be reset
+    generateExtensionFiles(cfg, { forceResetOverrides: true } as any);
+    assert.deepEqual(getBuildConfig().overriddenFiles, []);
+  } finally {
+    saveBuildConfig({ overriddenFiles: origCfg.overriddenFiles || [] });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// X-01: Chrome Extension Version Validation
+// -----------------------------------------------------------------------------
+
+test("X-01: saveBuildConfig validates version against Chrome manifest format (1-4 dot-separated integers 0-65535)", () => {
+  const origCfg = getBuildConfig();
+  try {
+    // Valid versions: 1-4 dot-separated integers (0-65535)
+    for (const validVer of ["1.0.0", "2.10.4", "1", "0.1", "1.2.3.4", "65535.0.0"]) {
+      const saved = saveBuildConfig({ version: validVer });
+      assert.equal(saved.version, validVer);
+      assert.equal(getBuildConfig().version, validVer);
+    }
+
+    // Invalid versions: should throw exact Error("Invalid extension version: must be 1-4 dot-separated integers (0-65535)")
+    for (const invalidVer of ["1.0.0-beta", "v2", "70000.1", "1.2.3.4.5", "1.-2.3", "abc", "", "1.0.0.0.0"]) {
+      assert.throws(
+        () => {
+          saveBuildConfig({ version: invalidVer });
+        },
+        (err: any) => {
+          return err?.message === "Invalid extension version: must be 1-4 dot-separated integers (0-65535)";
+        },
+        `Expected saveBuildConfig to throw on invalid version '${invalidVer}'`
+      );
+    }
+  } finally {
+    saveBuildConfig({ version: origCfg.version || "1.0.0" });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// X-06: WiX UpgradeCode Deterministic GUID Substitution
+// -----------------------------------------------------------------------------
+
+test("X-06: generateUpgradeCode produces deterministic GUID and renderWxsManifest substitutes {{UPGRADE_CODE}}", () => {
+  const guid1 = generateUpgradeCode("http://pec1.example.corp");
+  const guid2 = generateUpgradeCode("http://pec1.example.corp");
+  const guid3 = generateUpgradeCode("http://pec2.example.corp");
+
+  assert.equal(guid1, guid2, "Identical server base URL must produce identical UpgradeCode GUID");
+  assert.notEqual(guid1, guid3, "Different server base URLs must produce different UpgradeCode GUIDs");
+  assert.match(
+    guid1,
+    /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/,
+    "UpgradeCode must be formatted as standard 8-4-4-4-12 GUID"
+  );
+
+  const manifest = renderWxsManifest(
+    { name: "PEC-App", version: "1.0.0" } as any,
+    "http://pec1.example.corp",
+    "C:/temp/staging"
+  );
+
+  assert.equal(manifest.includes("{{UPGRADE_CODE}}"), false, "All {{UPGRADE_CODE}} placeholders must be replaced");
+  assert.match(manifest, new RegExp(`UpgradeCode="${guid1}"`), "Manifest must contain generated deterministic UpgradeCode");
+  assert.equal(
+    manifest.includes('UpgradeCode="A4B7D265-42E1-4D99-A785-30BF2A3C2F19"'),
+    false,
+    "Hardcoded legacy UpgradeCode must not be present in rendered manifest"
+  );
 });

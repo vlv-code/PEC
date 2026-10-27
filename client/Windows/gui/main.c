@@ -12,6 +12,9 @@
 #ifndef _UNICODE
 #define _UNICODE
 #endif
+#ifndef _CRT_RAND_S
+#define _CRT_RAND_S
+#endif
 
 #include <winsock2.h>
 #include <ws2tcpip.h>

@@ -2,7 +2,7 @@
 
 set -e
 
-GITHUB_REPO="PEC/PEC-App"
+GITHUB_REPO="${GITHUB_REPO:-vlv-code/PEC}"
 GITHUB_API="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 TEMP_DIR=$(mktemp -d /tmp/pec-app-install.XXXXXX)
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -66,10 +66,20 @@ download_latest_release() {
 
     # Get release info from GitHub API
     local api_response
-    api_response=$(curl -sL "$GITHUB_API")
+    local http_status
+    local curl_output
+    curl_output=$(curl -sL -w "\n%{http_code}" "$GITHUB_API")
+    http_status=$(echo "$curl_output" | tail -n1)
+    api_response=$(echo "$curl_output" | sed '$d')
 
-    if [ -z "$api_response" ]; then
-        echo "ERROR: Failed to fetch release information from GitHub"
+    if [ "$http_status" != "200" ] || [ -z "$api_response" ]; then
+        echo "ERROR: Failed to fetch release information from GitHub (HTTP status: ${http_status:-unknown})"
+        if echo "$api_response" | grep -q '"message"'; then
+            local err_msg
+            err_msg=$(echo "$api_response" | grep -o '"message": *"[^"]*"' | head -1)
+            echo "API Response: $err_msg"
+        fi
+        echo "Please check repository URL: https://github.com/$GITHUB_REPO/releases"
         exit 1
     fi
 

@@ -570,6 +570,7 @@
         optScopeGroup: 'Target AD / Device Group',
         optScopeInstances: 'Specific Selected Instances',
         lblTargetGroup: 'Target Group Name',
+        lblTargetInstances: 'Target Instances',
         phTargetGroup: 'e.g. SEC-Proxy-VPN-VIP or Dev-Team',
         lblFailClosed: 'Fail-Closed: Prevent direct fallback (DIRECT) if proxy drops (avoids IP leak)',
         profDescDefault: 'Routing policy applied to matching browser instances.',
@@ -957,6 +958,7 @@
         optScopeGroup: 'Целевая группа AD / Устройства',
         optScopeInstances: 'Отдельные выбранные устройства',
         lblTargetGroup: 'Имя целевой группы',
+        lblTargetInstances: 'Выбранные устройства',
         phTargetGroup: 'напр. SEC-Proxy-VPN-VIP или Dev-Team',
         lblFailClosed: 'Fail-Closed: запретить прямой доступ (DIRECT) при падении прокси (защита от утечки IP)',
         profDescDefault: 'Политика маршрутизации, применяемая к соответствующим браузерам.',
@@ -1412,7 +1414,9 @@
       } else if (name === 'proxy-settings' || name === 'rotation') {
         fetchProxies();
       } else if (name === 'app-studio') {
-        loadAppStudioConfig();
+        if (!currentAppConfig || !isAppStudioDirty) {
+          loadAppStudioConfig();
+        }
       } else if (name === 'releases') {
         loadReleases();
       }
@@ -1444,6 +1448,11 @@
           el._dirtyBound = true;
         }
       });
+      const instList = document.getElementById('profTargetInstancesList');
+      if (instList && !instList._dirtyBound) {
+        instList.addEventListener('change', () => setUnsavedRouting(true));
+        instList._dirtyBound = true;
+      }
     }
 
     async function loadPresets() {
@@ -1524,6 +1533,36 @@
       }
     }
 
+    async function populateProfileInstancesList(selectedIds = []) {
+      const container = document.getElementById('profTargetInstancesList');
+      if (!container) return;
+      if (!lastLoadedInstances || !lastLoadedInstances.length) {
+        try {
+          const res = await adminFetch('/api/instances');
+          if (res.ok) {
+            const data = await res.json();
+            lastLoadedInstances = data.instances || [];
+          }
+        } catch (_) {}
+      }
+      const instances = lastLoadedInstances || [];
+      const set = new Set(selectedIds || []);
+      const isRu = currentLang === 'ru';
+      if (instances.length === 0) {
+        container.innerHTML = '<span style="color: var(--text-muted); font-size: 12px;">' + (isRu ? 'Нет подключенных устройств' : 'No instances connected yet') + '</span>';
+        return;
+      }
+      container.innerHTML = instances.map(inst => {
+        const id = esc(inst.instanceId);
+        const name = esc(inst.username || inst.ip || inst.instanceId);
+        const checked = set.has(inst.instanceId) ? ' checked' : '';
+        return '<label style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; cursor: pointer;">' +
+          '<input type="checkbox" class="prof-instance-checkbox" value="' + id + '"' + checked + ' style="margin: 0; width: 14px; height: 14px;"> ' +
+          '<span><code>' + id + '</code> (' + name + ')</span>' +
+          '</label>';
+      }).join('');
+    }
+
     function renderProfile(p) {
       document.getElementById('profName').value = p.name || '';
       document.getElementById('profDefaultPolicy').value = p.defaultPolicy || 'direct';
@@ -1533,7 +1572,15 @@
       document.getElementById('profDesc').textContent = p.description || 'Configured routing rules.';
       
       const groupRow = document.getElementById('groupTargetRow');
-      groupRow.style.display = p.targetScope === 'group' ? 'block' : 'none';
+      if (groupRow) groupRow.style.display = p.targetScope === 'group' ? 'block' : 'none';
+
+      const instRow = document.getElementById('instancesTargetRow');
+      if (instRow) {
+        instRow.style.display = p.targetScope === 'instances' ? 'block' : 'none';
+        if (p.targetScope === 'instances') {
+          populateProfileInstancesList(p.targetInstanceIds || []);
+        }
+      }
 
       document.getElementById('btnPacPreview').href = '/proxy.pac?profileId=' + p.id;
       setUnsavedRouting(false);
@@ -1543,7 +1590,16 @@
     }
 
     document.getElementById('profTargetScope').addEventListener('change', (e) => {
-      document.getElementById('groupTargetRow').style.display = e.target.value === 'group' ? 'block' : 'none';
+      const scope = e.target.value;
+      const groupRow = document.getElementById('groupTargetRow');
+      if (groupRow) groupRow.style.display = scope === 'group' ? 'block' : 'none';
+      const instRow = document.getElementById('instancesTargetRow');
+      if (instRow) {
+        instRow.style.display = scope === 'instances' ? 'block' : 'none';
+        if (scope === 'instances') {
+          populateProfileInstancesList(currentProfile ? currentProfile.targetInstanceIds : []);
+        }
+      }
       setUnsavedRouting(true);
     });
 
@@ -1743,6 +1799,13 @@
       currentProfile.targetScope = document.getElementById('profTargetScope').value;
       currentProfile.targetGroup = document.getElementById('profTargetGroup').value.trim();
       currentProfile.failClosed = document.getElementById('profFailClosed').checked;
+
+      if (currentProfile.targetScope === 'instances') {
+        const checkedBoxes = document.querySelectorAll('#profTargetInstancesList .prof-instance-checkbox:checked');
+        currentProfile.targetInstanceIds = Array.from(checkedBoxes).map(cb => cb.value);
+      } else {
+        currentProfile.targetInstanceIds = [];
+      }
 
       try {
         const res = await adminFetch('/api/routing/profiles', {
@@ -2526,7 +2589,6 @@
       clearTimeout(builderDebounceTimer);
       builderDebounceTimer = setTimeout(async () => {
         await saveBuilderConfigOnly(false);
-        await regenerateTemplatesFromConfig();
       }, 500);
     }
 
@@ -3087,6 +3149,7 @@
     let currentAppConfig = null;
     let currentAppRules = [];
     let currentAppThemeMode = 'dark';
+    let isAppStudioDirty = false;
 
     const APP_THEME_PRESETS = {
       'cyber-blue': {
@@ -3264,11 +3327,38 @@
           return;
         }
 
+        // Look up presets to expand preset entries into real domain hosts
+        const presetsMap = new Map();
+        try {
+          const presRes = await adminFetch('/api/routing/presets');
+          if (presRes.ok) {
+            const presetList = await presRes.json();
+            if (Array.isArray(presetList)) {
+              presetList.forEach(p => {
+                const entries = p.entries || p.domains || [];
+                if (p.id) {
+                  presetsMap.set(p.id, entries);
+                  if (p.id.startsWith('preset:')) {
+                    presetsMap.set(p.id.replace(/^preset:/, ''), entries);
+                  } else {
+                    presetsMap.set('preset:' + p.id, entries);
+                  }
+                }
+              });
+            }
+          }
+        } catch (_) {}
+
         let addedCount = 0;
         target.rules.forEach(r => {
           let domains = [];
           if (r.targetType === 'preset' && r.pattern) {
-            domains = [r.pattern];
+            const list = presetsMap.get(r.pattern) || presetsMap.get(r.pattern.replace(/^preset:/, '')) || [];
+            if (list.length > 0) {
+              domains = list;
+            } else if (!r.pattern.startsWith('preset:')) {
+              domains = [r.pattern];
+            }
           } else if (r.pattern) {
             domains = r.pattern.split(',').map(s => s.trim()).filter(Boolean);
           }
@@ -3298,6 +3388,7 @@
         toast('Error importing routing rules: ' + e.message, 'error');
       }
     }
+    const importRoutingRulesToApp = importSelectedRoutingProfileRules;
 
     async function loadAppStudioConfig() {
       try {
@@ -3415,6 +3506,7 @@
         renderAppProcessRulesTable();
         updateAppLivePreview();
         await loadCodeSignStatus();
+        isAppStudioDirty = false;
       } catch (e) {
         console.error('Failed to load App Studio config:', e);
       }
@@ -3469,6 +3561,7 @@
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && (data.ok || data.name || data.version)) {
+          isAppStudioDirty = false;
           if (!silent) {
             toast(currentLang === 'ru' ? 'Настройки приложения успешно сохранены!' : 'App Studio settings saved successfully!', 'success');
           }
@@ -3703,6 +3796,7 @@
     }
 
     function updateAppProcessRuleField(index, field, value) {
+      isAppStudioDirty = true;
       if (currentAppRules && currentAppRules[index]) {
         currentAppRules[index][field] = value;
         if (field === 'processName' || field === 'action' || field === 'targetPorts') {
@@ -3712,6 +3806,7 @@
     }
 
     function addNewAppProcessRule() {
+      isAppStudioDirty = true;
       if (!Array.isArray(currentAppRules)) currentAppRules = [];
       const newRule = {
         id: 'rule_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -3727,6 +3822,7 @@
     }
 
     function deleteAppProcessRule(index) {
+      isAppStudioDirty = true;
       if (Array.isArray(currentAppRules) && index >= 0 && index < currentAppRules.length) {
         currentAppRules.splice(index, 1);
         renderAppProcessRulesTable();
@@ -3734,6 +3830,7 @@
     }
 
     function applyAppRulePreset(presetKey) {
+      isAppStudioDirty = true;
       if (!Array.isArray(currentAppRules)) currentAppRules = [];
       if (presetKey === 'blocked_sites') {
         currentAppRules.push({
@@ -3867,6 +3964,7 @@
     }
 
     function onAppConfigChangeLive() {
+      isAppStudioDirty = true;
       updateAppLivePreview();
     }
 
@@ -4214,6 +4312,8 @@
     window.buildAppBinariesAction = buildAppBinariesAction;
     window.buildAppPackageAction = buildAppPackageAction;
     window.updateAppLivePreview = updateAppLivePreview;
+    window.importSelectedRoutingProfileRules = importSelectedRoutingProfileRules;
+    window.importRoutingRulesToApp = importSelectedRoutingProfileRules;
     window.addNewAppProcessRule = addNewAppProcessRule;
     window.deleteAppProcessRule = deleteAppProcessRule;
     window.setAppPresetTheme = setAppPresetTheme;
@@ -4227,6 +4327,27 @@
     window.onAppConfigChangeLive = onAppConfigChangeLive;
     window.applyAppRulePreset = applyAppRulePreset;
     window.updateAppProcessRuleField = updateAppProcessRuleField;
+    window.populateProfileInstancesList = populateProfileInstancesList;
+    Object.defineProperty(window, 'isAppStudioDirty', {
+      get() { return isAppStudioDirty; },
+      set(v) { isAppStudioDirty = Boolean(v); },
+      configurable: true
+    });
+    Object.defineProperty(window, 'currentProfile', {
+      get() { return currentProfile; },
+      set(v) { currentProfile = v; },
+      configurable: true
+    });
+    Object.defineProperty(window, 'currentAppRules', {
+      get() { return currentAppRules; },
+      set(v) { currentAppRules = Array.isArray(v) ? v : []; },
+      configurable: true
+    });
+    Object.defineProperty(window, 'currentAppConfig', {
+      get() { return currentAppConfig; },
+      set(v) { currentAppConfig = v; },
+      configurable: true
+    });
     window.loadCodeSignStatus = loadCodeSignStatus;
     window.onCodeSignTypeChange = onCodeSignTypeChange;
     window.uploadCodeSignCertAction = uploadCodeSignCertAction;
@@ -4289,7 +4410,6 @@
         ? (defaultProxy.name || defaultHostPort)
         : (isRu ? 'Серверный по умолчанию' : 'Server Default');
 
-      const profileOptions = (allProfiles || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
 
       // Sort instances
       const sortedInstances = [...instances].sort((a, b) => {
@@ -4354,6 +4474,11 @@
           : '';
 
         const isChecked = selectedFleetInstances.has(inst.instanceId);
+
+        const profileOptions = (allProfiles || []).map(p => {
+          const sel = (inst.assignedProfileId === p.id) ? ' selected' : '';
+          return `<option value="${esc(p.id)}"${sel}>${esc(p.name)}</option>`;
+        }).join('');
 
         const pairedBadge = inst.pairedAppId
           ? `<span class="badge badge-success" title="${isRu ? 'Связано с десктоп-агентом (' + esc(inst.pairedHostname || '') + ')' : 'Paired with desktop app (' + esc(inst.pairedHostname || '') + ')'}">🔗 ${isRu ? 'Десктоп' : 'Desktop'}</span>`
@@ -4904,12 +5029,18 @@
 
     async function assignProfileToInstance(instanceId, profileId) {
       try {
-        await adminFetch('/api/instances/assign-profile', {
+        const res = await adminFetch('/api/instances/assign-profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ instanceId, profileId })
         });
-        loadInstances();
+        if (res.ok) {
+          toast(currentLang === 'ru' ? 'Профиль для инстанса обновлен' : 'Instance profile updated', 'success');
+          loadInstances();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          toast(err.error || ('HTTP ' + res.status), 'error');
+        }
       } catch (e) {
         toast('Assignment error: ' + e, 'error');
       }

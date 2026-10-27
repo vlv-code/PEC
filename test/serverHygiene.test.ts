@@ -17,6 +17,7 @@ import { getProxyConfig } from "../src/instances.js";
 import { updateRotationConfig } from "../src/scheduler.js";
 import { writeJsonAtomic } from "../src/jsonStore.js";
 import { getReleasesMetaPath, getReleasesDir, getRotationConfigPath } from "../src/storage.js";
+import serverApp from "../server.js";
 
 async function startTestServer(router: express.Router): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const app = express();
@@ -455,5 +456,25 @@ test("L-9: Cannot create or modify preset with source 'builtin' or overwrite bui
     assert.strictEqual(bodyImport.error, "Cannot overwrite builtin preset");
   } finally {
     await close();
+  }
+});
+
+test("S-06: Root path Content-Security-Policy header includes frame-ancestors 'none'", async () => {
+  const server = serverApp.listen(0);
+  await new Promise((resolve) => server.once("listening", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    const res = await fetch(`${baseUrl}/`);
+    assert.strictEqual(res.status, 200);
+    const csp = res.headers.get("content-security-policy");
+    assert.ok(csp, "CSP header must be present on /");
+    assert.match(csp, /frame-ancestors\s+'none'/, "CSP must contain frame-ancestors 'none'");
+  } finally {
+    if (typeof (server as any).closeAllConnections === "function") {
+      (server as any).closeAllConnections();
+    }
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });

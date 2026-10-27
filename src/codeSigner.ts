@@ -14,7 +14,7 @@ export interface CertificateMetadata {
   timestampUrl?: string;
 }
 
-interface StoredCertificateConfig extends CertificateMetadata {
+export interface StoredCertificateConfig extends CertificateMetadata {
   encryptedPassword?: string;
   iv?: string;
   tag?: string;
@@ -93,22 +93,36 @@ function encryptPassword(password: string): { encryptedPassword: string; iv: str
   };
 }
 
-function decryptPassword(config: StoredCertificateConfig): string {
+export function decryptPassword(config: StoredCertificateConfig): string {
   if (!config.encryptedPassword || !config.iv || !config.tag) {
     return "";
   }
+  const iv = Buffer.from(config.iv, "base64");
+  const tag = Buffer.from(config.tag, "base64");
+
   try {
     const key = getEncryptionKey();
-    const iv = Buffer.from(config.iv, "base64");
-    const tag = Buffer.from(config.tag, "base64");
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
     let decrypted = decipher.update(config.encryptedPassword, "base64", "utf8");
     decrypted += decipher.final("utf8");
     return decrypted;
-  } catch (err) {
-    console.warn("[CodeSign] Failed to decrypt certificate password:", err);
-    return "";
+  } catch (primaryErr) {
+    try {
+      const fallbackKey = crypto
+        .createHash("sha256")
+        .update(process.env.ADMIN_TOKEN || "pec-default-code-sign-master-key-seed")
+        .digest();
+      const decipher = crypto.createDecipheriv("aes-256-gcm", fallbackKey, iv);
+      decipher.setAuthTag(tag);
+      let decrypted = decipher.update(config.encryptedPassword, "base64", "utf8");
+      decrypted += decipher.final("utf8");
+      console.warn("[CodeSign] Successfully decrypted password using legacy master key fallback; migrating...");
+      return decrypted;
+    } catch (fallbackErr) {
+      console.warn("[CodeSign] Failed to decrypt certificate password:", primaryErr);
+      return "";
+    }
   }
 }
 
@@ -475,8 +489,9 @@ export function signBinary(targetPath: string): boolean {
       }
     } else if (hasSigntool) {
       const signArgs: string[] = ["sign", "/f", pfxFile];
-      if (tmpPassFile) {
-        signArgs.push("/pfile", tmpPassFile);
+      // AR-6 (N-1): Microsoft signtool.exe does NOT support /pfile, only /p <password> in argv
+      if (password) {
+        signArgs.push("/p", password);
       }
       signArgs.push("/fd", "sha256");
       if (tsUrl) {

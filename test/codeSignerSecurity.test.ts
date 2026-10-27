@@ -13,6 +13,8 @@ import {
   signBinary,
   extractCertificateMetadata,
   getCertsDir,
+  decryptPassword,
+  StoredCertificateConfig,
 } from "../src/codeSigner.js";
 
 const TEST_CERTS_DIR = path.resolve("./data/test_certs_security");
@@ -245,7 +247,7 @@ test("M-7: Passwords are NOT passed via CLI argv for osslsigncode, signtool, or 
   }
 });
 
-test("M-7: signtool.exe receives password via /pfile <file> and env PFX_PASS, never /p in argv", (t) => {
+test("N-1 (replaces M-7 for signtool): signtool.exe receives password via /p <password> in argv and not /pfile (AR-6)", (t) => {
   setupTestDir();
   t.after(cleanTestDir);
 
@@ -254,7 +256,6 @@ test("M-7: signtool.exe receives password via /pfile <file> and env PFX_PASS, ne
 
   const originalExecFileSync = child_process.execFileSync;
   const recordedCalls: Array<{ file: string; args?: readonly string[]; options?: any }> = [];
-  const createdPassFiles: string[] = [];
 
   child_process.execFileSync = ((file: string, args?: readonly string[], options?: any) => {
     recordedCalls.push({ file, args, options });
@@ -265,10 +266,6 @@ test("M-7: signtool.exe receives password via /pfile <file> and env PFX_PASS, ne
       return Buffer.from("signtool help");
     }
     if (file === "signtool.exe" && args && args[0] === "sign") {
-      const pfileIdx = args.indexOf("/pfile");
-      if (pfileIdx !== -1) {
-        createdPassFiles.push(args[pfileIdx + 1]);
-      }
       return Buffer.from("successfully signed with signtool");
     }
     return Buffer.from("");
@@ -297,27 +294,17 @@ test("M-7: signtool.exe receives password via /pfile <file> and env PFX_PASS, ne
   assert.ok(signtoolSignCall, "signtool.exe sign must be called");
   assert.ok(Array.isArray(signtoolSignCall.args));
 
-  // Must NOT contain password anywhere in argv
-  for (const arg of signtoolSignCall.args) {
-    assert.notEqual(arg, secretPassword, "Password must not be passed in argv");
-  }
-
-  // Must NOT have /p <password>
-  const pIdx = signtoolSignCall.args.indexOf("/p");
-  assert.equal(pIdx, -1, "Must not use /p argument");
-
-  // Must have /pfile <tmpPassFile>
+  // Must NOT have /pfile (signtool does not support /pfile)
   const pfileIdx = signtoolSignCall.args.indexOf("/pfile");
-  assert.notEqual(pfileIdx, -1, "Must use /pfile argument");
-  const passFile = signtoolSignCall.args[pfileIdx + 1];
-  assert.ok(passFile, "/pfile must specify path");
-  assert.match(path.basename(passFile), /^tmp_pass_\d+_[a-f0-9]{16}\.txt$/, "Pass file must have random suffix");
+  assert.equal(pfileIdx, -1, "Must not use invalid /pfile argument on signtool");
 
-  // Must pass password via env PFX_PASS
+  // Must have /p <password> (N-1 / AR-6)
+  const pIdx = signtoolSignCall.args.indexOf("/p");
+  assert.notEqual(pIdx, -1, "Must use /p argument for signtool.exe");
+  assert.equal(signtoolSignCall.args[pIdx + 1], secretPassword, "Password must follow /p for signtool.exe");
+
+  // Password in env PFX_PASS is also passed
   assert.equal(signtoolSignCall.options?.env?.PFX_PASS, secretPassword);
-
-  // Password temp file must be unlinked in finally
-  assert.equal(fs.existsSync(passFile), false, "Temporary password file must be deleted after signing");
 });
 
 test("M-8: Leftover .signed temporary file is cleaned up if osslsigncode fails during signing", (t) => {
@@ -426,4 +413,36 @@ test("M-7: signBinary respects PFX_PASS environment variable directly", (t) => {
   const signCall = recordedCalls.find((c) => c.file === "osslsigncode" && c.args?.[0] === "sign");
   assert.ok(signCall);
   assert.equal(signCall.options?.env?.PFX_PASS, "SecretFromPfxPassEnv123");
+});
+
+test("N-2: decryptPassword falls back to legacy master key when primary decryption fails", (t) => {
+  setupTestDir();
+  t.after(cleanTestDir);
+
+  // Set up a primary master key in .code_sign_master_key that differs from legacy key
+  const certsDir = getCertsDir();
+  fs.mkdirSync(certsDir, { recursive: true });
+  const modernKey = crypto.randomBytes(32);
+  fs.writeFileSync(path.join(certsDir, ".code_sign_master_key"), modernKey, { mode: 0o600 });
+
+  // Encrypt password using legacy master key
+  const legacySeed = process.env.ADMIN_TOKEN || "pec-default-code-sign-master-key-seed";
+  const legacyKey = crypto.createHash("sha256").update(legacySeed).digest();
+  const testPassword = "MyLegacySecretPassword2026!";
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", legacyKey, iv);
+  let encrypted = cipher.update(testPassword, "utf8", "base64");
+  encrypted += cipher.final("base64");
+  const tag = cipher.getAuthTag().toString("base64");
+
+  const legacyConfig: StoredCertificateConfig = {
+    hasCertificate: true,
+    type: "commercial",
+    encryptedPassword: encrypted,
+    iv: iv.toString("base64"),
+    tag,
+  };
+
+  const decrypted = decryptPassword(legacyConfig);
+  assert.equal(decrypted, testPassword, "Legacy encrypted password must be successfully decrypted via fallback");
 });

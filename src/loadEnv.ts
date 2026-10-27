@@ -31,3 +31,39 @@ if (fs.existsSync(".env")) {
     console.warn("[env] Notice: Could not parse .env file:", err);
   }
 }
+
+export const DOCKER_SECRET_ENV_VARS = [
+  "ADMIN_TOKEN",
+  "ADMIN_PASSWORD",
+  "EXT_SHARED_TOKEN",
+  "PAC_SIGNING_SECRET",
+  "CODE_SIGN_MASTER_KEY",
+] as const;
+
+/**
+ * Docker secrets support: for sensitive credentials, allow `<VAR>_FILE`
+ * to specify the path to a file containing the secret value (e.g. Docker secrets
+ * mounted under /run/secrets/...).
+ */
+export function loadDockerSecrets(env: NodeJS.ProcessEnv = process.env): void {
+  for (const varName of DOCKER_SECRET_ENV_VARS) {
+    const fileVar = `${varName}_FILE`;
+    const filePath = env[fileVar];
+    if (filePath && typeof filePath === "string" && filePath.trim()) {
+      const trimmedPath = filePath.trim();
+      try {
+        if (fs.existsSync(trimmedPath)) {
+          const stat = fs.statSync(trimmedPath);
+          if (stat.isFile()) {
+            const secretContent = fs.readFileSync(trimmedPath, "utf-8").trim();
+            env[varName] = secretContent;
+          }
+        }
+      } catch (err) {
+        console.warn(`[env] Warning: Could not read secret file from ${fileVar}=${trimmedPath}:`, err);
+      }
+    }
+  }
+}
+
+loadDockerSecrets();
