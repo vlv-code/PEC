@@ -812,6 +812,14 @@ async function applyPacScript(pacUrl, config, forcePacFetch = false) {
   }
 
 
+  if (currentProxyState.bypassActive) {
+    logEvent("info", "Skipping PAC installation because bypass is active");
+    return;
+  }
+
+  // Keep unmodified clean base PAC text before user overrides are injected (E-02)
+  const basePacText = pacText;
+
   // Inject active user overrides ahead of corporate rules
   if (pacText !== null) {
     try {
@@ -911,6 +919,12 @@ async function applyPacScript(pacUrl, config, forcePacFetch = false) {
     : "(URL mode fallback)") + " from " + pacUrl);
 
   try {
+    // E-03: Race check before applying PAC settings
+    if (currentProxyState.bypassActive) {
+      logEvent("info", "Aborting PAC installation: bypass is active");
+      return;
+    }
+
     await chrome.proxy.settings.set({
       value: {
         mode: "pac_script",
@@ -920,11 +934,11 @@ async function applyPacScript(pacUrl, config, forcePacFetch = false) {
       },
       scope: "regular",
     });
-    // Cache last successful PAC text in local storage
-    if (!isFallback && pacText) {
+    // E-02: Cache last successful clean BASE PAC text in local storage
+    if (!isFallback && basePacText) {
       try {
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-          await chrome.storage.local.set({ lastKnownGoodPacText: pacText });
+          await chrome.storage.local.set({ lastKnownGoodPacText: basePacText });
         }
       } catch (e) {}
     }

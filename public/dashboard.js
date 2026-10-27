@@ -2378,8 +2378,10 @@
         if (document.getElementById('bldBadge')) document.getElementById('bldBadge').checked = cfg.badgeIndicator !== false;
         document.getElementById('bldAutoProxy').checked = cfg.autoConfigureProxy !== false;
         if (document.getElementById('bldAllowBypass')) document.getElementById('bldAllowBypass').checked = cfg.allowUserBypass !== false;
-        if (document.getElementById('bldIpGeo')) document.getElementById('bldIpGeo').checked = cfg.showIpGeoCheck !== false;
-        document.getElementById('bldBypassTimeout').value = cfg.bypassTimeoutMinutes || 15;
+        if (document.getElementById('bldIpGeo')) {
+          document.getElementById('bldIpGeo').checked = (cfg.showIpGeoChecker !== false && cfg.showIpGeoCheck !== false);
+        }
+        document.getElementById('bldBypassTimeout').value = cfg.bypassAutoTimeoutMinutes || cfg.bypassTimeoutMinutes || 15;
         document.getElementById('bldSupportUrl').value = cfg.supportUrl || 'mailto:it-support@corp.local';
 
         const defProxyEl = document.getElementById('builderDefaultProxyId');
@@ -2978,7 +2980,9 @@
         badgeIndicator: document.getElementById('bldBadge') ? document.getElementById('bldBadge').checked : true,
         autoConfigureProxy: document.getElementById('bldAutoProxy') ? document.getElementById('bldAutoProxy').checked : true,
         allowUserBypass: document.getElementById('bldAllowBypass') ? document.getElementById('bldAllowBypass').checked : true,
+        showIpGeoChecker: document.getElementById('bldIpGeo') ? document.getElementById('bldIpGeo').checked : true,
         showIpGeoCheck: document.getElementById('bldIpGeo') ? document.getElementById('bldIpGeo').checked : true,
+        bypassAutoTimeoutMinutes: parseInt(document.getElementById('bldBypassTimeout').value, 10) || 15,
         bypassTimeoutMinutes: parseInt(document.getElementById('bldBypassTimeout').value, 10) || 15,
         supportUrl: document.getElementById('bldSupportUrl').value.trim(),
         defaultProxyId: document.getElementById('builderDefaultProxyId') ? document.getElementById('builderDefaultProxyId').value.trim() : undefined,

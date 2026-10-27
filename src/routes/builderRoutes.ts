@@ -67,6 +67,12 @@ function filterBuildConfig(input: any): Partial<ExtensionBuildConfig> {
       filtered[key] = input[key];
     }
   }
+  if (input.bypassTimeoutMinutes !== undefined && filtered.bypassAutoTimeoutMinutes === undefined) {
+    filtered.bypassAutoTimeoutMinutes = input.bypassTimeoutMinutes;
+  }
+  if (input.showIpGeoCheck !== undefined && filtered.showIpGeoChecker === undefined) {
+    filtered.showIpGeoChecker = input.showIpGeoCheck;
+  }
   return filtered;
 }
 
