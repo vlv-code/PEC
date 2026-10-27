@@ -367,14 +367,18 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 if (process.env.NODE_ENV !== "test" && process.env.PEC_DISABLE_LISTEN !== "true") {
   app.listen(PORT, HOST, () => {
+    const publicUrl = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+    const displayHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
+    const baseDisplayUrl = publicUrl || `http://${displayHost}:${PORT}`;
+
     console.log("==================================================================");
     console.log(`[pec-server] PEC Proxy Server & Client Studio v${getAppVersion()}`);
     console.log(`[pec-server] Active listening on: http://${HOST}:${PORT}`);
-    console.log(`[pec-server] Public Base URL:     ${process.env.PUBLIC_BASE_URL || "(dynamic / derived from Host header)"}`);
-    console.log(`[pec-server] Web Dashboard:       http://${HOST}:${PORT}/`);
-    console.log(`[pec-server] PAC Script:          http://${HOST}:${PORT}/proxy.pac`);
-    console.log(`[pec-server] Extension Sync:      POST http://${HOST}:${PORT}/api/sync`);
-    console.log(`[pec-server] Desktop App Sync:    POST http://${HOST}:${PORT}/api/app/sync`);
+    console.log(`[pec-server] Public Base URL:     ${publicUrl || "(dynamic / derived from Host header)"}`);
+    console.log(`[pec-server] Web Dashboard:       ${baseDisplayUrl}/`);
+    console.log(`[pec-server] PAC Script:          ${baseDisplayUrl}/proxy.pac`);
+    console.log(`[pec-server] Extension Sync:      POST ${baseDisplayUrl}/api/sync`);
+    console.log(`[pec-server] Desktop App Sync:    POST ${baseDisplayUrl}/api/app/sync`);
     console.log("==================================================================");
     if (isDefaultTokenInUse) {
       console.warn(`[SECURITY WARNING] The default authentication token is in use! Please configure EXT_SHARED_TOKEN in .env for production safety.`);
