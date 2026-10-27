@@ -265,7 +265,7 @@ sudo nginx -t && sudo systemctl reload nginx
 # Проверка типов TypeScript
 npm run lint
 
-# Запуск автоматизированного тестового набора (585+ тестов)
+# Запуск автоматизированного тестового набора (600+ тестов)
 npm test
 
 # Сборка production бандла

@@ -1,4 +1,4 @@
-# ProxyBridge for Linux
+# PEC-App for Linux
 
 Universal proxy client for Linux applications - Route any application through SOCKS5/HTTP proxies.
 
@@ -29,7 +29,7 @@ Universal proxy client for Linux applications - Route any application through SO
 **One-command automatic installation:**
 
 ```bash
-curl -Lo deploy.sh https://raw.githubusercontent.com/InterceptSuite/ProxyBridge/refs/heads/master/Linux/deploy.sh && sudo bash deploy.sh
+curl -Lo deploy.sh https://raw.githubusercontent.com/vlv-code/PEC/main/client/Linux/deploy.sh && sudo bash deploy.sh
 ```
 
 This script will:
@@ -52,7 +52,7 @@ This script will:
 
 **From GitHub Releases:**
 
-1. Download the latest `ProxyBridge-Linux-vX.X.X.tar.gz` from the [Releases](https://github.com/InterceptSuite/ProxyBridge/releases) page
+1. Download the latest `ProxyBridge-Linux-vX.X.X.tar.gz` from the [PEC Releases](https://github.com/vlv-code/PEC/releases) page
 2. Extract the archive:
    ```bash
    tar -xzf ProxyBridge-Linux-vX.X.X.tar.gz

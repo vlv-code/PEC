@@ -1,6 +1,6 @@
-# ProxyBridge for Windows
+# PEC-App for Windows
 
-Universal proxy client for Windows applications - route any application through SOCKS5/HTTP proxies without modifying the application.
+Universal transparent proxy client for Windows enterprise applications - route any process through corporate SOCKS5/HTTP proxies without modifying target applications. Part of the **PEC (Proxy Extension Corp)** platform.
 
 ## Table of Contents
 

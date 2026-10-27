@@ -71,29 +71,18 @@ Squid в архитектуру не входит: фильтрацию доме
      - ⚠️ **Критически важно в делегировании (Delegation):** На вкладке *Delegation* объекта GPO **ОБЯЗАТЕЛЬНО** должна присутствовать группа **`Authenticated Users`** («Прошедшие проверку») с разрешением **«Read» (Чтение)** (требование MS16-072 / KB3163622 для чтения пользовательских политик рабочей станцией).
      - В политике компьютера включить режим замыкания:
        `Конфигурация компьютера → Административные шаблоны → Система → Групповая политика → Режим обработки пользовательской групповой политики замыкания = Включено (Объединение / Merge)`.
-   - **Размещение в редакторе GPO (Group Policy Preferences):**
-     - Путь: `Конфигурация пользователя (включено) → Настройка → Конфигурация Windows → Реестр`
-     - Для поддерживаемых браузеров создаются элементы реестра:
-       - **Действие:** Заменить (Replace)
-       - **Куст:** `HKEY_CURRENT_USER`
-       - **Тип параметра:** `REG_SZ`
-       - **Имя параметра:** `ExtensionSettings`
-       - **Общие параметры:** Остановить при ошибке: Нет; Контекст пользователя: Нет; Удалить если не применяется: Нет; Применить один раз: Нет.
-   - **Параметры для браузеров:**
-     - **Google Chrome** (`Software\Policies\Google\Chrome`):
-       ```json
-       {"*":{"install_sources":["https://<serverBaseUrl>/*"]},"<extension_id>":{"installation_mode":"force_installed","update_url":"https://<serverBaseUrl>/updates/updates.xml","override_update_url":true}}
-       ```
-     - **Microsoft Edge** (`Software\Policies\Microsoft\Edge`):
-       ```json
-       {"*":{"install_sources":["https://<serverBaseUrl>/*"]},"<extension_id>":{"installation_mode":"force_installed","update_url":"https://<serverBaseUrl>/updates/updates.xml","override_update_url":true}}
-       ```
-     - **Яндекс.Браузер** (`Software\Policies\YandexBrowser`):
-       ```json
-       {"*":{"install_sources":["https://<serverBaseUrl>/*"]},"<extension_id>":{"installation_mode":"normal_installed","update_url":"https://<serverBaseUrl>/updates/updates.xml","override_update_url":true}}
-       ```
-     - ⚠️ **Критическое замечание по Яндекс.Браузеру:**  
-       Если версия Яндекс.Браузера не управляется через консоль администрирования Яндекса, режим `force_installed` ставить **нельзя** — внутренняя прослойка безопасности Яндекса принудительно заблокирует и сделает расширение неактивным. Обязательно использовать режим **`normal_installed`**!
+    - **Способы развертывания политик GPO:**
+      - **Рекомендуемый (Zero Clobbering / deploy-pec-gpo.ps1):** Используйте готовый скрипт развертывания из архива *GPO Deployment Pack* веб-панели PEC. Скрипт автоматически десериализует существующие значения `ExtensionSettings` и выполняет безопасное слияние JSON (Merge), либо находит свободный индекс в `ExtensionInstallForcelist`, гарантируя, что другие корпоративные расширения (антивирусы, DLP, EDR) не будут стёрты (аудит X-02).
+      - **Через Group Policy Preferences (Registry):**
+        - Путь: `Конфигурация пользователя (включено) → Настройка → Конфигурация Windows → Реестр`
+        - Для каждого браузера создается ветка `ExtensionInstallForcelist` (числовой параметр со значением `<ID>;https://<serverBaseUrl>/updates/updates.xml`) и ветка `3rdparty\extensions\<ID>\policy` (параметры `extToken`, `syncUrl`, `credsUrl`).
+        - Если используется `ExtensionSettings`, обязательно выполняйте слияние JSON, чтобы не перезаписать политики сторонних расширений.
+    - **Параметры для браузеров:**
+      - **Google Chrome** (`Software\Policies\Google\Chrome`): `installation_mode = force_installed`
+      - **Microsoft Edge** (`Software\Policies\Microsoft\Edge`): `installation_mode = force_installed`
+      - **Яндекс.Браузер** (`Software\Policies\YandexBrowser`): `installation_mode = normal_installed`
+      - ⚠️ **Критическое замечание по Яндекс.Браузеру:**  
+        Если версия Яндекс.Браузера не управляется через консоль администрирования Яндекса, режим `force_installed` ставить **нельзя** — внутренняя прослойка безопасности Яндекса принудительно заблокирует и сделает расширение неактивным. Обязательно использовать режим **`normal_installed`**!
    - Применить политику: `gpupdate /force` на рабочей станции. Проверить в браузере `chrome://policy` / `edge://policy` / `browser://policy`.
 
 ### Этап 4. PAC-файл
@@ -130,29 +119,30 @@ Squid в архитектуру не входит: фильтрацию доме
 
 ```
 proxy_extention_corp/
-├── docs/
-│   └── architecture-plan.md       # Данный документ
-├── extension/                     # Модуль расширения Chrome (Manifest V3)
-│   ├── background.js              # Service worker с обработкой onAuthRequired
-│   ├── managed_schema.json        # Описание политик GPO для chrome.storage.managed
-│   ├── manifest.json              # Манифест расширения
-│   ├── updates.xml.example        # Пример update manifest
-│   └── README.md                  # Инструкция по сборке и установке расширения
+├── docs/                          # Архитектурная документация и руководства GPO
+├── client/                        # Нативный десктопный клиент (PEC-App)
+│   ├── Windows/                   # DirectX 11 / Dear ImGui GUI, служба PECAppSvc, CLI, MSVC
+│   └── Linux/                     # eBPF / cgroups демон pec-client, CLI, systemd
+├── extension/                     # Исходный шаблон расширения Chrome (Manifest V3)
 ├── server.ts                      # Точка входа Express-сервера
 ├── src/                           # Серверные модули (TypeScript)
-│   ├── routes/                    # Роуты: creds, builder, rotation, instances, system
-│   ├── middleware/security.ts     # CORS, security headers, токен-аутентификация, rate limiting
-│   ├── packager.ts                # CRX3-упаковщик, подпись RSA, генератор GPO
-│   ├── rotate.ts                  # Атомарное хранилище кредов, интеграция 3x-ui, SSRF-валидатор
-│   ├── routing.ts                 # Генератор PAC, пресеты, расширение доменов
-│   ├── scheduler.ts               # Планировщик ротации
-│   └── views/dashboardView.ts     # HTML дашборда управления
-├── deploy/                        # Скрипты установки: Docker, systemd, standalone; nginx-шаблон
-├── test/                          # node:test интеграционные и модульные тесты
-├── .editorconfig                  # Настройки форматирования кода
-├── .gitignore                     # Правила игнорирования Git
-├── CONTRIBUTING.md                # Правила участия в разработке
-├── LICENSE                        # Лицензия MIT
-├── README.md                      # Главное описание проекта
-└── SECURITY.md                    # Политика безопасности и модель угроз
+│   ├── routes/                    # Роуты: creds, appBuilder, sync, releases, routing, rotation
+│   ├── middleware/security.ts     # Заголовки безопасности, CORS, токен-изоляция, rate limiting
+│   ├── appPackager.ts             # Сборщик профилей и пакетов нативного клиента (.pbprofile, PS1)
+│   ├── codeSigner.ts              # Подпись Authenticode (osslsigncode / signtool.exe)
+│   ├── geodatParser.ts            # Высокопроизводительный парсер бинарных гео-баз geosite/geoip
+│   ├── packager.ts                # CRX3-упаковщик, подпись RSA-SHA256, генератор GPO
+│   ├── releases.ts                # Менеджер версий, менеджер откатов, проверка SHA-256
+│   ├── rotate.ts                  # Атомарное хранилище учетных данных, интеграция 3x-ui, SSRF-защита
+│   ├── routing.ts                 # Генератор PAC, иерархия профилей, CIDR и доменные маски
+│   ├── scheduler.ts               # Планировщик периодической ротации учетных данных
+│   └── views/dashboardView.ts     # HTML дашборда управления и Extension/App Studio
+├── templates/                     # Шаблоны конфигураций GPO, WiX WXS и бинарные шаблоны клиента
+├── deploy/                        # Скрипты развертывания: Docker Compose, systemd, Nginx
+├── test/                          # Набор автоматизированных тестов node:test
+├── CONTRIBUTING.md                # Руководство по участию в разработке
+├── LICENSE                        # Лицензия AGPL v3
+├── README.md                      # Документация на английском языке
+├── README.ru.md                   # Полная русскоязычная документация
+└── SECURITY.md                    # Политика безопасности и модель корпоративных угроз
 ```
