@@ -5,7 +5,9 @@
 #ifndef PB_LOC_H
 #define PB_LOC_H
 
+#ifndef APP_VERSION
 #define APP_VERSION PB_VER_STRW   // defined in res/resource.h (single source of truth)
+#endif
 
 enum {
     S_M_PROXY, S_M_PROXY_SETTINGS, S_M_PROXY_RULES, S_M_ENABLE, S_TITLE_PAUSED,

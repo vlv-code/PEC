@@ -17,11 +17,25 @@
 #pragma comment(lib, "advapi32.lib")
 
 
+#if defined(__has_include)
+#if __has_include("version_gen.h")
+#include "version_gen.h"
+#endif
+#endif
+
 #ifndef VERSION
+#ifdef PB_VER_STR
+#define VERSION PB_VER_STR
+#else
 #define VERSION "2.2.0"
 #endif
+#endif
 #ifndef VERSION_W
+#ifdef PB_VER_STRW
+#define VERSION_W PB_VER_STRW
+#else
 #define VERSION_W L"2.2.0"
+#endif
 #endif
 #define MAX_PROXY_CONFIGS 16
 #define MAX_RULES         256

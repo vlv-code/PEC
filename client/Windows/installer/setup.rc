@@ -1,5 +1,11 @@
 #include <windows.h>
 
+#if defined(__has_include)
+#if __has_include("version_gen.h")
+#include "version_gen.h"
+#endif
+#endif
+
 1 24 "setup.manifest"
 100 ICON "../gui/res/logo.ico"
 
@@ -19,8 +25,14 @@
 #ifndef APP_VER_BUILD
 #define APP_VER_BUILD 0
 #endif
+
+#ifndef APP_STR_HELPER
+#define APP_STR_HELPER(x) #x
+#define APP_STR(x) APP_STR_HELPER(x)
+#endif
+
 #ifndef APP_VERSION_STR
-#define APP_VERSION_STR "2.2.0.0"
+#define APP_VERSION_STR APP_STR(APP_VER_MAJOR) "." APP_STR(APP_VER_MINOR) "." APP_STR(APP_VER_PATCH) "." APP_STR(APP_VER_BUILD)
 #endif
 
 VS_VERSION_INFO VERSIONINFO

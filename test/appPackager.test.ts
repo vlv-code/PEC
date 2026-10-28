@@ -25,6 +25,7 @@ import {
   compileBinariesWithMinGW,
   cleanAppBinaries,
   parseAppVersion,
+  writeVersionGenHeaders,
   getToolchainDiagnostics,
   MINGW_GUI_CMD,
   MSVC_GUI_CMD,
@@ -710,5 +711,26 @@ test("buildAppBinaries with available compiler verifies PE integrity (> 100 KB a
   }
 });
 
+test("writeVersionGenHeaders generates C headers with correct numeric and string definitions without shell escape corruption", () => {
+  const clientWinDir = path.resolve("./client/Windows");
+  const parsed = parseAppVersion("1.0.5");
+  writeVersionGenHeaders(clientWinDir, parsed);
 
+  const guiVerGen = path.join(clientWinDir, "gui", "res", "version_gen.h");
+  const instVerGen = path.join(clientWinDir, "installer", "version_gen.h");
+
+  assert.strictEqual(fs.existsSync(guiVerGen), true, "gui version_gen.h must exist");
+  assert.strictEqual(fs.existsSync(instVerGen), true, "installer version_gen.h must exist");
+
+  const guiContent = fs.readFileSync(guiVerGen, "utf-8");
+  assert.ok(guiContent.includes('#define PB_VER_MAJOR 1'), "Must define numeric major");
+  assert.ok(guiContent.includes('#define PB_VER_MINOR 0'), "Must define numeric minor");
+  assert.ok(guiContent.includes('#define PB_VER_PATCH 5'), "Must define numeric patch");
+  assert.ok(guiContent.includes('#define PB_VER_STR "1.0.5"'), 'Must define PB_VER_STR as "1.0.5"');
+  assert.ok(guiContent.includes('#define APP_VERSION_STR "1.0.5.0"'), 'Must define APP_VERSION_STR as "1.0.5.0"');
+
+  const instContent = fs.readFileSync(instVerGen, "utf-8");
+  assert.ok(instContent.includes('#define APP_VER_MAJOR 1'));
+  assert.ok(instContent.includes('#define APP_VERSION_STR "1.0.5.0"'));
+});
 

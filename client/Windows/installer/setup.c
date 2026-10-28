@@ -37,9 +37,19 @@
 #pragma comment(lib, "uuid.lib")
 #pragma comment(lib, "wintrust.lib")
 
+#if defined(__has_include)
+#if __has_include("version_gen.h")
+#include "version_gen.h"
+#endif
+#endif
+
 #define APP_NAME       L"PEC-App"
 #ifndef APP_VERSION
+#ifdef APP_VERSION_W
+#define APP_VERSION    APP_VERSION_W
+#else
 #define APP_VERSION    L"2.2.0"
+#endif
 #endif
 #define APP_PUBLISHER  L"PEC Team"
 #define SVC_NAME       L"PECAppSvc"

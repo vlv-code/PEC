@@ -1,6 +1,12 @@
 #ifndef RESOURCE_H
 #define RESOURCE_H
 
+#if defined(__has_include)
+#if __has_include("version_gen.h")
+#include "version_gen.h"
+#endif
+#endif
+
 // App version - single source of truth
 // Feeds the About dialog (via loc.h APP_VERSION) and the VS_VERSION_INFO resource
 // (exe Properties → Details). Also mirror the numeric form in res\app.manifest's
@@ -17,11 +23,26 @@
 #ifndef PB_VER_BUILD
 #define PB_VER_BUILD 0
 #endif
+
+#ifndef PB_STR_HELPER
+#define PB_STR_HELPER(x) #x
+#define PB_STR(x) PB_STR_HELPER(x)
+#endif
+
 #ifndef PB_VER_STR
-#define PB_VER_STR   "2.2.0"     // narrow, for the .rc VERSIONINFO strings
+#define PB_VER_STR   PB_STR(PB_VER_MAJOR) "." PB_STR(PB_VER_MINOR) "." PB_STR(PB_VER_PATCH)
 #endif
 #ifndef PB_VER_STRW
-#define PB_VER_STRW  L"2.2.0"    // wide, for the C/About UI
+#define PB_VER_STRW  L"" PB_STR(PB_VER_MAJOR) L"." L"" PB_STR(PB_VER_MINOR) L"." L"" PB_STR(PB_VER_PATCH)
+#endif
+#ifndef APP_VERSION
+#define APP_VERSION  PB_VER_STR
+#endif
+#ifndef APP_VERSION_STR
+#define APP_VERSION_STR PB_STR(PB_VER_MAJOR) "." PB_STR(PB_VER_MINOR) "." PB_STR(PB_VER_PATCH) "." PB_STR(PB_VER_BUILD)
+#endif
+#ifndef APP_VERSION_W
+#define APP_VERSION_W PB_VER_STRW
 #endif
 
 #define IDI_APPICON                 101

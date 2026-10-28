@@ -1501,6 +1501,52 @@ export function parseAppVersion(rawVersion?: string): {
   };
 }
 
+export function writeVersionGenHeaders(clientWinDir: string, appVer: ReturnType<typeof parseAppVersion>): void {
+  const content = `#ifndef VERSION_GEN_H
+#define VERSION_GEN_H
+
+#define PB_VER_MAJOR ${appVer.major}
+#define PB_VER_MINOR ${appVer.minor}
+#define PB_VER_PATCH ${appVer.patch}
+#define PB_VER_BUILD ${appVer.build}
+#define PB_VER_STR "${appVer.version}"
+#define PB_VER_STRW L"${appVer.version}"
+
+#define APP_VER_MAJOR ${appVer.major}
+#define APP_VER_MINOR ${appVer.minor}
+#define APP_VER_PATCH ${appVer.patch}
+#define APP_VER_BUILD ${appVer.build}
+#define APP_VERSION_STR "${appVer.quad}"
+#define APP_VERSION_STRW L"${appVer.quad}"
+#define APP_VERSION_W L"${appVer.version}"
+#define APP_VERSION_NARROW "${appVer.version}"
+#define VERSION "${appVer.version}"
+#define VERSION_W L"${appVer.version}"
+
+#ifndef APP_VERSION
+#define APP_VERSION L"${appVer.version}"
+#endif
+
+#endif // VERSION_GEN_H
+`;
+
+  const targetDirs = [
+    path.join(clientWinDir, "gui", "res"),
+    path.join(clientWinDir, "installer"),
+    path.join(clientWinDir, "cli"),
+    path.join(clientWinDir, "src", "service"),
+    clientWinDir,
+  ];
+
+  for (const dir of targetDirs) {
+    try {
+      if (fs.existsSync(dir)) {
+        fs.writeFileSync(path.join(dir, "version_gen.h"), content, "utf-8");
+      }
+    } catch {}
+  }
+}
+
 export function cleanAppBinaries(): CleanAppBinariesResult {
   const deletedFiles: string[] = [];
   const preservedFiles: string[] = [];
@@ -1864,12 +1910,13 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
     }
   };
 
-  const windresGuiDefines = `-DPB_VER_MAJOR=${appVer.major} -DPB_VER_MINOR=${appVer.minor} -DPB_VER_PATCH=${appVer.patch} -DPB_VER_BUILD=${appVer.build} -DPB_VER_STR=\\"${appVer.version}\\" -DAPP_VER_MAJOR=${appVer.major} -DAPP_VER_MINOR=${appVer.minor} -DAPP_VER_PATCH=${appVer.patch} -DAPP_VER_BUILD=${appVer.build} -DAPP_VERSION_STR=\\"${appVer.quad}\\"`;
-  const mingwGuiDefines = `-DAPP_VERSION=\\"${appVer.version}\\" -DAPP_VERSION_STR=\\"${appVer.version}\\" -DAPP_VERSION_W=L\\"${appVer.version}\\" -DPB_VER_MAJOR=${appVer.major} -DPB_VER_MINOR=${appVer.minor} -DPB_VER_PATCH=${appVer.patch} -DPB_VER_BUILD=${appVer.build} -DPB_VER_STR=\\"${appVer.version}\\"`;
+  writeVersionGenHeaders(clientWinDir, appVer);
+
+  const windresNumericDefines = `-DPB_VER_MAJOR=${appVer.major} -DPB_VER_MINOR=${appVer.minor} -DPB_VER_PATCH=${appVer.patch} -DPB_VER_BUILD=${appVer.build} -DAPP_VER_MAJOR=${appVer.major} -DAPP_VER_MINOR=${appVer.minor} -DAPP_VER_PATCH=${appVer.patch} -DAPP_VER_BUILD=${appVer.build}`;
 
   try {
     log("[GUI] Compiling resources with windres...");
-    child_process.execSync(`"${mingw.windres}" -i res/app.rc --include-dir=res -I res ${windresGuiDefines} -o res.res -O coff`, { cwd: guiDir, stdio: "pipe" });
+    child_process.execSync(`"${mingw.windres}" -i res/app.rc --include-dir=res -I res ${windresNumericDefines} -o res.res -O coff`, { cwd: guiDir, stdio: "pipe" });
     try {
       fs.copyFileSync(path.join(guiDir, "res.res"), path.join(guiDir, "app.res"));
       const resSubdir = path.join(guiDir, "res");
@@ -1883,7 +1930,7 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
     if (fs.existsSync(mainImgui)) {
       log("[GUI] Compiling PEC-App DirectX 11 ImGui GUI with x86_64-w64-mingw32-g++...");
       let mingwGuiCmd = MINGW_GUI_CMD.replace(/^x86_64-w64-mingw32-g\+\+/, `"${gxxBin}"`);
-      mingwGuiCmd = mingwGuiCmd.replace(/main_imgui\.cpp/, `${mingwGuiDefines} main_imgui.cpp`);
+      mingwGuiCmd = mingwGuiCmd.replace(/main_imgui\.cpp/, `-I res main_imgui.cpp`);
       if (process.platform === "win32") {
         const imguiDir = path.join(guiDir, "imgui");
         if (fs.existsSync(imguiDir)) {
@@ -1900,7 +1947,7 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
     } else {
       log("[GUI] Compiling PEC-App.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 ${mingwGuiDefines} main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi`,
+        `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi`,
         { cwd: guiDir, stdio: "pipe" }
       );
     }
@@ -1914,11 +1961,11 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
 
     if (fs.existsSync(cliDir)) {
       log("[CLI] Compiling CLI resources with windres...");
-      child_process.execSync(`"${mingw.windres}" -i cli/cli.rc ${windresGuiDefines} -o cli/cli.res -O coff`, { cwd: clientWinDir, stdio: "pipe" });
+      child_process.execSync(`"${mingw.windres}" -i cli/cli.rc --include-dir=gui/res -I gui/res --include-dir=cli -I cli ${windresNumericDefines} -o cli/cli.res -O coff`, { cwd: clientWinDir, stdio: "pipe" });
 
       log("[CLI] Compiling PEC-CLI.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -DVERSION=\\"${appVer.version}\\" -DVERSION_W=L\\"${appVer.version}\\" -DAPP_VERSION=\\"${appVer.version}\\" cli/main.c cli/cli.res -o PEC-CLI.exe -lwinhttp -lshell32 -ladvapi32 -lws2_32`,
+        `"${mingw.gcc}" -O2 -s -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I gui/res -I cli cli/main.c cli/cli.res -o PEC-CLI.exe -lwinhttp -lshell32 -ladvapi32 -lws2_32`,
         { cwd: clientWinDir, stdio: "pipe" }
       );
 
@@ -1933,11 +1980,11 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
     const svcDir = path.join(clientWinDir, "src", "service");
     if (fs.existsSync(svcDir)) {
       log("[Service] Compiling Service resources with windres...");
-      child_process.execSync(`"${mingw.windres}" -i svc.rc ${windresGuiDefines} -o svc.res -O coff`, { cwd: svcDir, stdio: "pipe" });
+      child_process.execSync(`"${mingw.windres}" -i svc.rc --include-dir=../../gui/res -I ../../gui/res --include-dir=. -I . ${windresNumericDefines} -o svc.res -O coff`, { cwd: svcDir, stdio: "pipe" });
 
       log("[Service] Compiling PECAppSvc.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -mconsole -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -DAPP_VERSION=\\"${appVer.version}\\" pb_service.c svc.res -o PECAppSvc.exe -ladvapi32 -lnetapi32 -lwtsapi32 -luser32 -lshell32`,
+        `"${mingw.gcc}" -O2 -s -mconsole -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I . -I ../../gui/res pb_service.c svc.res -o PECAppSvc.exe -ladvapi32 -lnetapi32 -lwtsapi32 -luser32 -lshell32`,
         { cwd: svcDir, stdio: "pipe" }
       );
 
@@ -1952,12 +1999,11 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
     const instDir = path.join(clientWinDir, "installer");
     if (fs.existsSync(instDir)) {
       log("[Installer] Compiling Installer resources with windres...");
-      const windresInstDefines = `-DAPP_VER_MAJOR=${appVer.major} -DAPP_VER_MINOR=${appVer.minor} -DAPP_VER_PATCH=${appVer.patch} -DAPP_VER_BUILD=${appVer.build} -DAPP_VERSION_STR=\\"${appVer.quad}\\"`;
-      child_process.execSync(`"${mingw.windres}" -i setup.rc ${windresInstDefines} -o setup.res -O coff`, { cwd: instDir, stdio: "pipe" });
+      child_process.execSync(`"${mingw.windres}" -i setup.rc --include-dir=. -I . --include-dir=../gui/res -I ../gui/res ${windresNumericDefines} -o setup.res -O coff`, { cwd: instDir, stdio: "pipe" });
 
       log("[Installer] Compiling PEC-App-Setup.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -DAPP_VERSION=L\\"${appVer.version}\\" -DAPP_VERSION_STR=\\"${appVer.version}\\" setup.c setup.res -o PEC-App-Setup.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -ladvapi32 -lole32 -luuid`,
+        `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I . -I ../gui/res setup.c setup.res -o PEC-App-Setup.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -ladvapi32 -lole32 -luuid`,
         { cwd: instDir, stdio: "pipe" }
       );
 
@@ -2033,6 +2079,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   let compilerStatus: {
     compiled: boolean;
     compilerName: string;
+    compilerMissing?: boolean;
     error?: string;
   } = {
     compiled: false,
@@ -2081,6 +2128,8 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
 
   const msvcGuiDefines = `/DAPP_VERSION=\\"${appVer.version}\\" /DAPP_VERSION_STR=\\"${appVer.version}\\" /DAPP_VERSION_W=L\\"${appVer.version}\\" /DPB_VER_MAJOR=${appVer.major} /DPB_VER_MINOR=${appVer.minor} /DPB_VER_PATCH=${appVer.patch} /DPB_VER_BUILD=${appVer.build} /DPB_VER_STR=\\"${appVer.version}\\" /DPB_VER_STRW=L\\"${appVer.version}\\"`;
   const msvcRcAppDefines = `/dPB_VER_MAJOR=${appVer.major} /dPB_VER_MINOR=${appVer.minor} /dPB_VER_PATCH=${appVer.patch} /dPB_VER_BUILD=${appVer.build} /dPB_VER_STR=\\"${appVer.version}\\" /dAPP_VER_MAJOR=${appVer.major} /dAPP_VER_MINOR=${appVer.minor} /dAPP_VER_PATCH=${appVer.patch} /dAPP_VER_BUILD=${appVer.build} /dAPP_VERSION_STR=\\"${appVer.quad}\\"`;
+
+  writeVersionGenHeaders(clientWinDir, appVer);
 
   if (process.env.SKIP_NATIVE_REBUILD !== "true" && vcvars && fs.existsSync(guiDir)) {
     try {
@@ -2440,6 +2489,22 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
         buildLog,
       };
     }
+  }
+
+  if (!compilerStatus.compiled && !compilerStatus.compilerMissing && process.env.SKIP_NATIVE_REBUILD !== "true" && (vcvars || mingw)) {
+    const errorMsg = compilerStatus.error || "Native compilation failed";
+    log(`[ERROR] Compilation failed with detected compiler (${compilerName}): ${errorMsg}`);
+    return {
+      ok: false,
+      compiled: false,
+      compilerMissing: false,
+      compiler: compilerName,
+      compilerStatus,
+      toolchain,
+      builtFiles: uniqueFiles,
+      message: `Ошибка компиляции бинарников (${compilerName}): ${errorMsg}`,
+      buildLog,
+    };
   }
 
   const hasRealSys = fs.existsSync(winDivertSys) && fs.statSync(winDivertSys).size > 50000;
