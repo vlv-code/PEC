@@ -828,7 +828,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
               <div>
                 <label data-i18n="lblAppVersion">Версия</label>
-                <input type="text" id="appBuildVersion" value="2.1.0" oninput="onAppConfigChangeLive()" placeholder="2.1.0" />
+                <input type="text" id="appBuildVersion" value="2.2.0" oninput="onAppConfigChangeLive()" placeholder="2.2.0" />
               </div>
               <div>
                 <label data-i18n="lblAppIconType">Иконка приложения</label>

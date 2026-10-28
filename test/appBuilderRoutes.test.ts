@@ -340,15 +340,38 @@ test("appBuilderRoutes: rejects path traversal and invalid semver versions (Audi
     const validBody = await validPreRelease.json();
     assert.equal(validBody.version, "1.0.4-beta.1.alpha");
 
-    // Restore version back to 2.1.0
+    // Restore version back to 2.2.0
     await fetch(`${baseUrl}/api/app-builder/config`, {
       method: "POST",
       headers: {
         "x-admin-token": TEST_ADMIN_TOKEN,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ version: "2.1.0" }),
+      body: JSON.stringify({ version: "2.2.0" }),
     });
   });
 });
+
+test("appBuilderRoutes: GET /api/app-builder/info includes embeddedVersion and coreModulesIntegrity", async () => {
+  await withTestServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/api/app-builder/info`, {
+      headers: { "x-admin-token": TEST_ADMIN_TOKEN },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, true);
+
+    const embeddedVersion = body.embeddedVersion || body.info?.embeddedVersion;
+    const coreModulesIntegrity = body.coreModulesIntegrity || body.info?.coreModulesIntegrity;
+
+    assert.ok(embeddedVersion, "Must include embeddedVersion");
+    assert.ok(Array.isArray(coreModulesIntegrity), "Must include coreModulesIntegrity array");
+    assert.ok(coreModulesIntegrity.length > 0, "coreModulesIntegrity should contain module entries");
+
+    const coreDll = coreModulesIntegrity.find((m: any) => m.name === "PECAppCore.dll");
+    assert.ok(coreDll, "Must include PECAppCore.dll integrity");
+    assert.ok(coreDll.sha256 && coreDll.sha256.length === 64, "PECAppCore.dll must have 64-char sha256");
+  });
+});
+
 

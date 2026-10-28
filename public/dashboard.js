@@ -3413,7 +3413,7 @@
 
         if (nameEl) nameEl.value = cfg.name || 'PEC - Proxy Client';
         if (shortNameEl) shortNameEl.value = cfg.shortName || 'PEC Client';
-        if (verEl) verEl.value = cfg.version || '2.1.0';
+        if (verEl) verEl.value = cfg.version || '2.2.0';
         if (descEl) descEl.value = cfg.description || '';
         if (iconEl) iconEl.value = cfg.iconType || 'shield';
         if (presetEl) presetEl.value = cfg.presetStyle || 'cyber-blue';
@@ -3472,25 +3472,8 @@
           if (infoRes.ok) {
             const infoData = await infoRes.json();
             const info = infoData.info || infoData.result;
-            const statusEl = document.getElementById('appBuildStatusMsg');
-            if (info && statusEl) {
-              const winSizeKb = Math.round((info.windowsPackageSize || 0) / 1024);
-              const linSizeKb = Math.round((info.linuxPackageSize || 0) / 1024);
-              const winSha = (info.windowsPackageSha256 || '').slice(0, 10);
-              statusEl.style.display = 'block';
-              statusEl.style.color = 'var(--text-muted)';
-              const builtAtStr = info.builtAt ? new Date(info.builtAt).toLocaleTimeString() : '';
-              if (Array.isArray(info.buildLog) && info.buildLog.length > 0) {
-                lastAppBuildLog = info.buildLog;
-                const logBtn = document.getElementById('btnAppViewBuildLog');
-                if (logBtn) logBtn.style.display = 'inline-block';
-              }
-              const msiSizeKb = info.windowsMsiSize ? Math.round(info.windowsMsiSize / 1024) : 0;
-              const msiPart = msiSizeKb ? `, MSI (${msiSizeKb} KB)` : '';
-              const signPart = (info.codeSigningStatus && info.codeSigningStatus.isSigned) ? ` &bull; 🔏 ${esc(info.codeSigningStatus.type || 'Signed')}` : '';
-              statusEl.innerHTML = currentLang === 'ru'
-                ? `Собран: Windows (${winSizeKb} KB, SHA: ${esc(winSha)}...)${msiPart}, Linux (${linSizeKb} KB)${builtAtStr ? ' &bull; ' + builtAtStr : ''}${signPart}`
-                : `Built: Windows (${winSizeKb} KB, SHA: ${esc(winSha)}...)${msiPart}, Linux (${linSizeKb} KB)${builtAtStr ? ' &bull; ' + builtAtStr : ''}${signPart}`;
+            if (info) {
+              renderAppStudioBuildInfo(info);
             }
           }
         } catch (_) {}
@@ -3509,6 +3492,123 @@
         isAppStudioDirty = false;
       } catch (e) {
         console.error('Failed to load App Studio config:', e);
+      }
+    }
+
+    function renderAppStudioBuildInfo(info) {
+      if (!info) return;
+
+      // 1. Prominent amber warning card/banner in App Studio tab for stale binaries
+      let staleBannerEl = document.getElementById('appBinariesStaleBanner');
+      if (info.binariesStale) {
+        if (!staleBannerEl) {
+          staleBannerEl = document.createElement('div');
+          staleBannerEl.id = 'appBinariesStaleBanner';
+          const container = document.getElementById('viewAppStudio')
+            || document.getElementById('tab-app-studio')
+            || (document.getElementById('appBuildStatusMsg') ? document.getElementById('appBuildStatusMsg').parentNode : null)
+            || document.body;
+          if (container) {
+            if (container.firstChild) {
+              container.insertBefore(staleBannerEl, container.firstChild);
+            } else {
+              container.appendChild(staleBannerEl);
+            }
+          }
+        }
+        if (staleBannerEl) {
+          staleBannerEl.className = 'alert-banner alert-warning';
+          staleBannerEl.style.display = 'block';
+          staleBannerEl.style.background = 'rgba(245, 158, 11, 0.12)';
+          staleBannerEl.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+          staleBannerEl.style.borderLeft = '4px solid #f59e0b';
+          staleBannerEl.style.color = '#fbbf24';
+          staleBannerEl.style.padding = '12px 16px';
+          staleBannerEl.style.borderRadius = '6px';
+          staleBannerEl.style.marginBottom = '16px';
+          staleBannerEl.style.fontSize = '13px';
+          staleBannerEl.style.lineHeight = '1.5';
+          staleBannerEl.style.gridColumn = '1 / -1';
+          staleBannerEl.innerHTML = `⚠️ Внимание: Версия в бинарниках (${esc(info.embeddedVersion || 'старая')}) не совпадает с версией релиза (${esc(info.version)}). Перед публикацией релиза пересоберите бинарники (кнопка «Собрать бинарники»), чтобы исключить вечный цикл обновлений у клиентов.`;
+        }
+      } else if (staleBannerEl) {
+        staleBannerEl.style.display = 'none';
+        staleBannerEl.innerHTML = '';
+      }
+
+      // 2. Build status message (Windows / Linux package sizes, SHA, MSI, signature)
+      const statusEl = document.getElementById('appBuildStatusMsg');
+      if (statusEl) {
+        const winSizeKb = Math.round((info.windowsPackageSize || 0) / 1024);
+        const linSizeKb = Math.round((info.linuxPackageSize || 0) / 1024);
+        const winSha = (info.windowsPackageSha256 || '').slice(0, 10);
+        statusEl.style.display = 'block';
+        statusEl.style.color = 'var(--text-muted)';
+        const builtAtStr = info.builtAt ? new Date(info.builtAt).toLocaleTimeString() : '';
+        if (Array.isArray(info.buildLog) && info.buildLog.length > 0) {
+          lastAppBuildLog = info.buildLog;
+          const logBtn = document.getElementById('btnAppViewBuildLog');
+          if (logBtn) logBtn.style.display = 'inline-block';
+        }
+        const msiSizeKb = info.windowsMsiSize ? Math.round(info.windowsMsiSize / 1024) : 0;
+        const msiPart = msiSizeKb ? `, MSI (${msiSizeKb} KB)` : '';
+        const signPart = (info.codeSigningStatus && info.codeSigningStatus.isSigned) ? ` &bull; 🔏 ${esc(info.codeSigningStatus.type || 'Signed')}` : '';
+        statusEl.innerHTML = (typeof currentLang !== 'undefined' && currentLang === 'ru')
+          ? `Собран: Windows (${winSizeKb} KB, SHA: ${esc(winSha)}...)${msiPart}, Linux (${linSizeKb} KB)${builtAtStr ? ' &bull; ' + builtAtStr : ''}${signPart}`
+          : `Built: Windows (${winSizeKb} KB, SHA: ${esc(winSha)}...)${msiPart}, Linux (${linSizeKb} KB)${builtAtStr ? ' &bull; ' + builtAtStr : ''}${signPart}`;
+      }
+
+      // 3. Core modules integrity badges/list
+      let modules = [];
+      if (Array.isArray(info.coreModulesIntegrity)) {
+        modules = info.coreModulesIntegrity;
+      } else if (info.coreModulesIntegrity && typeof info.coreModulesIntegrity === 'object') {
+        modules = Object.entries(info.coreModulesIntegrity).map(([k, v]) => ({ name: k, ...v }));
+      }
+
+      let integrityEl = document.getElementById('appCoreModulesIntegrity');
+      if (modules.length > 0) {
+        if (!integrityEl) {
+          integrityEl = document.createElement('div');
+          integrityEl.id = 'appCoreModulesIntegrity';
+          if (statusEl && statusEl.parentNode) {
+            statusEl.parentNode.appendChild(integrityEl);
+          } else {
+            const container = document.getElementById('viewAppStudio')
+              || document.getElementById('tab-app-studio')
+              || document.body;
+            if (container) container.appendChild(integrityEl);
+          }
+        }
+        if (integrityEl) {
+          integrityEl.style.display = 'flex';
+          integrityEl.style.flexWrap = 'wrap';
+          integrityEl.style.gap = '8px';
+          integrityEl.style.marginTop = '8px';
+          integrityEl.style.alignItems = 'center';
+
+          const isRu = typeof currentLang !== 'undefined' && currentLang === 'ru';
+          const labelText = isRu ? 'Целостность ядра:' : 'Core Modules:';
+
+          const badgesHtml = modules.map(m => {
+            const sz = m.size ? `${Math.round(m.size / 1024)} KB` : '0 KB';
+            const isVerified = Boolean(m.verified);
+            const isPresent = m.present !== false;
+            let badgeColor = isVerified ? '#10b981' : (isPresent ? '#f59e0b' : '#ef4444');
+            let badgeBg = isVerified ? 'rgba(16, 185, 129, 0.12)' : (isPresent ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)');
+            let badgeBorder = isVerified ? 'rgba(16, 185, 129, 0.3)' : (isPresent ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)');
+            let icon = isVerified ? '✓' : (isPresent ? '⚠️' : '❌');
+            let statusText = isVerified ? (isRu ? 'проверен' : 'verified') : (isPresent ? (isRu ? 'не проверен' : 'unverified') : (isRu ? 'отсутствует' : 'missing'));
+
+            return `<span class="badge" data-module="${esc(m.name)}" data-verified="${isVerified ? 'true' : 'false'}" style="background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeBorder}; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-family: monospace;">` +
+              `${icon} ${esc(m.name)} (${sz}, ${statusText})</span>`;
+          }).join(' ');
+
+          integrityEl.innerHTML = `<span style="font-size: 11px; color: var(--text-muted);">${labelText}</span> ${badgesHtml}`;
+        }
+      } else if (integrityEl) {
+        integrityEl.style.display = 'none';
+        integrityEl.innerHTML = '';
       }
     }
 
@@ -3530,7 +3630,7 @@
       return {
         name: nameEl ? nameEl.value.trim() : 'PEC - Proxy Client',
         shortName: shortNameEl ? shortNameEl.value.trim() : 'PEC Client',
-        version: verEl ? verEl.value.trim() : '2.1.0',
+        version: verEl ? verEl.value.trim() : '2.2.0',
         description: descEl ? descEl.value.trim() : '',
         iconType: iconEl ? iconEl.value : 'shield',
         presetStyle: presetEl ? presetEl.value : 'cyber-blue',
@@ -3652,6 +3752,9 @@
               ? `Бинарники готовы (${esc(data.compiler || 'Toolchain')}, ${filesCount} файлов): ${esc(data.message || 'OK')} &bull; ${new Date().toLocaleTimeString()}`
               : `Binaries ready (${esc(data.compiler || 'Toolchain')}, ${filesCount} files): ${esc(data.message || 'OK')} &bull; ${new Date().toLocaleTimeString()}`;
           }
+          if (data.info) {
+            renderAppStudioBuildInfo(data.info);
+          }
           if (Array.isArray(data.buildLog) && data.buildLog.length > 0) {
             lastAppBuildLog = data.buildLog;
             const logBtn = document.getElementById('btnAppViewBuildLog');
@@ -3700,6 +3803,7 @@
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
           const info = data.info || data.result || {};
+          renderAppStudioBuildInfo(info);
           const winSizeKb = Math.round((info.windowsPackageSize || 0) / 1024);
           const linSizeKb = Math.round((info.linuxPackageSize || 0) / 1024);
           const winSha = (info.windowsPackageSha256 || '').slice(0, 10);
@@ -4101,7 +4205,7 @@
         if (platform === 'linux') {
           filename = 'pec-client-linux-x64.tar.gz';
         } else if (platform === 'installer' || platform === 'setup' || platform === 'exe') {
-          filename = 'PEC-App-Setup-2.1.0.exe';
+          filename = 'PEC-App-Setup-2.2.0.exe';
         } else if (platform === 'msi') {
           filename = 'PEC-App.msi';
         }
@@ -4306,6 +4410,7 @@
     window.saveEditedRule = saveEditedRule;
     window.setAppLayout = setAppLayout;
     window.importSelectedRoutingProfileRules = importSelectedRoutingProfileRules;
+    window.renderAppStudioBuildInfo = renderAppStudioBuildInfo;
     window.loadAppStudioConfig = loadAppStudioConfig;
     window.saveAppStudioConfigAction = saveAppStudioConfigAction;
     window.cleanAppBinariesAction = cleanAppBinariesAction;
@@ -4754,7 +4859,7 @@
           <td><strong>${esc(inst.hostname || '-')}</strong></td>
           <td><span class="badge badge-subtle">👤 ${esc(inst.username || '-')}</span></td>
           <td><code>${esc(inst.ip || '-')}</code></td>
-          <td><span class="badge badge-version">v${esc(inst.version || '2.1.0')}</span></td>
+          <td><span class="badge badge-version">v${esc(inst.version || '2.2.0')}</span></td>
           <td>${pairedBadge}</td>
           <td>
             <select class="form-select form-select-sm desktop-proxy-select" data-app-id="${esc(inst.appInstanceId)}" style="font-size: 12px; max-width: 170px; margin-bottom: 0;">

@@ -78,6 +78,7 @@ typedef struct {
 typedef struct {
     int         localhost_via_proxy;   // legacy global key; only the default for rules that lack their own
     int         traffic_logging;
+    char        server_url[512];
     PBProxyConfig configs[MAX_PROXY_CONFIGS];
     int         num_configs;
     PBRule      rules[MAX_RULES];
@@ -214,6 +215,7 @@ static void show_help(const char* prog)
     printf("Options:\n");
     printf("  --profile <path>     Path to .pbprofile file\n");
     printf("                       Export from the GUI: File > Export Profile\n\n");
+    printf("  --server <url>       Corporate PEC central server URL (for --update)\n\n");
     printf("  --verbose <0-3>      Logging verbosity\n");
     printf("                         0 - Silent (default)\n");
     printf("                         1 - Log messages only\n");
@@ -222,11 +224,14 @@ static void show_help(const char* prog)
     printf("  --version            Show version information\n");
     printf("  -?, -h, --help       Show this help\n\n");
     printf("Commands:\n");
-    printf("  --update             Check for updates and open releases page\n\n");
+    printf("  --update             Check corporate PEC server for updates\n");
+    printf("  --update-github      Check public GitHub repository for updates\n\n");
     printf("Examples:\n");
     printf("  ProxyBridge_CLI.exe --profile C:\\ProgramData\\PEC-App\\profile.pbprofile\n");
     printf("  ProxyBridge_CLI.exe --profile myconfig.pbprofile --verbose 2\n");
-    printf("  ProxyBridge_CLI.exe --update\n\n");
+    printf("  ProxyBridge_CLI.exe --update\n");
+    printf("  ProxyBridge_CLI.exe --update --server https://pec.corp\n");
+    printf("  ProxyBridge_CLI.exe --update-github\n\n");
 }
 
 // Admin check . Windivert require admin
@@ -492,6 +497,14 @@ static bool load_profile(const char* path, PBProfile* prof)
     prof->localhost_via_proxy = jbool(json, "LocalhostViaProxy",        false) ? 1 : 0;
     prof->traffic_logging     = jbool(json, "IsTrafficLoggingEnabled",  true)  ? 1 : 0;
 
+    // Corporate sync server URL from profile (PecSync.serverUrl or pecSync.serverUrl or serverUrl)
+    const char* sync = jfind(json, "PecSync");
+    if (!sync) sync = jfind(json, "pecSync");
+    if (sync)
+        jstr(sync, "serverUrl", prof->server_url, sizeof(prof->server_url));
+    if (!prof->server_url[0])
+        jstr(json, "serverUrl", prof->server_url, sizeof(prof->server_url));
+
     // ── ProxyConfigs ──────────────────────────────────────────────────────────
     const char* arr = jarray(json, "ProxyConfigs");
     if (arr)
@@ -667,9 +680,72 @@ static int parse_ver(const char* s)
     return a * 10000 + b * 100 + c;
 }
 
-static void do_update(void)
+static bool get_corporate_server_url(const char* cli_server, const char* profile_path, char* out_url, size_t out_sz)
 {
-    printf("Checking for updates...\n\n");
+    out_url[0] = '\0';
+
+    // 1. Explicit CLI argument --server <url>
+    if (cli_server && cli_server[0])
+    {
+        strncpy_s(out_url, out_sz, cli_server, _TRUNCATE);
+    }
+    // 2. From specified .pbprofile (PecSync.serverUrl)
+    else if (profile_path && profile_path[0])
+    {
+        size_t sz = 0;
+        char* json = read_file_text(profile_path, &sz);
+        if (json)
+        {
+            const char* sync = jfind(json, "PecSync");
+            if (!sync) sync = jfind(json, "pecSync");
+            if (sync) jstr(sync, "serverUrl", out_url, out_sz);
+            if (!out_url[0]) jstr(json, "serverUrl", out_url, out_sz);
+            free(json);
+        }
+    }
+
+    // 3. From standard APPDATA path (%APPDATA%/PEC-App/profiles/pec_profile.pbprofile)
+    if (!out_url[0])
+    {
+        char appdata[MAX_PATH] = {0};
+        if (GetEnvironmentVariableA("APPDATA", appdata, MAX_PATH) > 0 && appdata[0])
+        {
+            char default_path[MAX_PATH];
+            snprintf(default_path, sizeof(default_path), "%s\\PEC-App\\profiles\\pec_profile.pbprofile", appdata);
+            size_t sz = 0;
+            char* json = read_file_text(default_path, &sz);
+            if (!json)
+            {
+                snprintf(default_path, sizeof(default_path), "%s\\PEC-App\\pec_profile.pbprofile", appdata);
+                json = read_file_text(default_path, &sz);
+            }
+            if (json)
+            {
+                const char* sync = jfind(json, "PecSync");
+                if (!sync) sync = jfind(json, "pecSync");
+                if (sync) jstr(sync, "serverUrl", out_url, out_sz);
+                if (!out_url[0]) jstr(json, "serverUrl", out_url, out_sz);
+                free(json);
+            }
+        }
+    }
+
+    if (out_url[0])
+    {
+        size_t ulen = strlen(out_url);
+        while (ulen > 0 && (out_url[ulen - 1] == '/' || out_url[ulen - 1] == '\\'))
+        {
+            out_url[--ulen] = '\0';
+        }
+        return true;
+    }
+
+    return false;
+}
+
+static void do_update_github(void)
+{
+    printf("Checking for updates on public GitHub repository...\n\n");
 
     HINTERNET sess = WinHttpOpen(L"PEC-CLI/" VERSION_W,
                                   WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
@@ -732,9 +808,6 @@ static void do_update(void)
     char tag[64] = {0};
     jstr(response, "tag_name", tag, sizeof(tag));
 
-    // Check assets array for a Windows .exe installer
-    // Same logic as GUI UpdateService: only announce update if Windows
-    // installer asset is present in the release (Mac/Linux releases won't have one).
     char download_url[1024] = {0};
     char asset_name[256]    = {0};
     bool has_win_installer  = false;
@@ -755,7 +828,6 @@ static void do_update(void)
             char name[256] = {0};
             jstr(buf, "name", name, sizeof(name));
 
-            // Must end in .exe
             size_t nlen = strlen(name);
             bool is_exe = nlen > 4 && _stricmp(name + nlen - 4, ".exe") == 0;
 
@@ -769,14 +841,11 @@ static void do_update(void)
                      strstr(name, "PEC")         != NULL))
             {
                 jstr(buf, "browser_download_url", download_url, sizeof(download_url));
-                // Extract only the filename portion to prevent path traversal
-                // (e.g. asset names like "..\evil.exe" from a malicious response)
                 const char* fname = name;
                 const char* sl = strrchr(name, '/');
                 const char* bs = strrchr(name, '\\');
                 if (sl)  fname = sl  + 1;
                 if (bs && bs > fname) fname = bs + 1;
-                // Reject empty or dot-only names
                 if (fname[0] == '\0' || strcmp(fname, ".") == 0 || strcmp(fname, "..") == 0)
                     { free(buf); continue; }
                 strncpy_s(asset_name, sizeof(asset_name), fname, _TRUNCATE);
@@ -821,10 +890,210 @@ static void do_update(void)
     printf("  https://github.com/vlv-code/PEC/releases\n\n");
 }
 
+static void do_update(const char* cli_server, const char* profile_path)
+{
+    char server_url[512] = {0};
+    if (!get_corporate_server_url(cli_server, profile_path, server_url, sizeof(server_url)))
+    {
+        printf("Notice: Corporate update server URL not configured.\n\n");
+        printf("  To check the corporate PEC central server for updates, specify the URL:\n");
+        printf("    ProxyBridge_CLI.exe --update --server https://pec.corp\n");
+        printf("  or configure 'PecSync.serverUrl' in your profile (%%APPDATA%%\\PEC-App\\profiles\\pec_profile.pbprofile).\n\n");
+        printf("  To check the public GitHub repository instead, use:\n");
+        printf("    ProxyBridge_CLI.exe --update-github\n\n");
+        return;
+    }
+
+    printf("Checking for updates from corporate server (%s)...\n\n", server_url);
+
+    wchar_t wurl[1024] = {0};
+    MultiByteToWideChar(CP_UTF8, 0, server_url, -1, wurl, 1024);
+
+    URL_COMPONENTSW uc;
+    wchar_t host[256] = {0};
+    wchar_t path[1024] = {0};
+    ZeroMemory(&uc, sizeof(uc));
+    uc.dwStructSize = sizeof(uc);
+    uc.lpszHostName = host;
+    uc.dwHostNameLength = 255;
+    uc.lpszUrlPath = path;
+    uc.dwUrlPathLength = 1023;
+
+    if (!WinHttpCrackUrl(wurl, 0, 0, &uc))
+    {
+        printf("ERROR: Invalid corporate server URL: %s\n", server_url);
+        return;
+    }
+
+    bool is_https = (uc.nScheme == INTERNET_SCHEME_HTTPS);
+    INTERNET_PORT port = uc.nPort ? uc.nPort : (is_https ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT);
+
+    wchar_t full_path[1024] = {0};
+    size_t pl = wcslen(path);
+    while (pl > 0 && path[pl - 1] == L'/') path[--pl] = L'\0';
+
+    if (wcsstr(path, L"/api/releases/latest") || wcsstr(path, L"/api/app/sync"))
+    {
+        _snwprintf_s(full_path, sizeof(full_path)/sizeof(wchar_t), _TRUNCATE, L"%s", path);
+    }
+    else
+    {
+        _snwprintf_s(full_path, sizeof(full_path)/sizeof(wchar_t), _TRUNCATE, L"%s/api/releases/latest", path);
+    }
+
+    HINTERNET sess = WinHttpOpen(L"PEC-CLI/" VERSION_W,
+                                  WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                  WINHTTP_NO_PROXY_NAME,
+                                  WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!sess) { printf("ERROR: WinHTTP init failed (%lu).\n", GetLastError()); return; }
+
+    HINTERNET conn = WinHttpConnect(sess, host, port, 0);
+    if (!conn) { WinHttpCloseHandle(sess); printf("ERROR: Connection to corporate server failed (%lu).\n", GetLastError()); return; }
+
+    HINTERNET req = WinHttpOpenRequest(conn, L"GET", full_path,
+                                       NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                       is_https ? WINHTTP_FLAG_SECURE : 0);
+    if (!req)
+    {
+        WinHttpCloseHandle(conn);
+        WinHttpCloseHandle(sess);
+        printf("ERROR: Request initialization failed (%lu).\n", GetLastError());
+        return;
+    }
+
+    WinHttpAddRequestHeaders(req, L"Accept: application/json\r\n", (DWORD)-1L, WINHTTP_ADDREQ_FLAG_ADD);
+
+    char* response = NULL;
+    DWORD total = 0;
+
+    if (WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        WinHttpReceiveResponse(req, NULL))
+    {
+        DWORD status = 0, ssz = sizeof(status);
+        if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                WINHTTP_HEADER_NAME_BY_INDEX, &status, &ssz, WINHTTP_NO_HEADER_INDEX))
+        {
+            if (status != 200)
+            {
+                printf("ERROR: Corporate server returned HTTP status %lu.\n", status);
+                WinHttpCloseHandle(req);
+                WinHttpCloseHandle(conn);
+                WinHttpCloseHandle(sess);
+                return;
+            }
+        }
+
+        DWORD avail = 0;
+        while (WinHttpQueryDataAvailable(req, &avail) && avail > 0)
+        {
+            if (avail > 256u * 1024u || total > 256u * 1024u - avail) break;
+            char* tmp = (char*)realloc(response, total + avail + 1);
+            if (!tmp) break;
+            response = tmp;
+            DWORD rd = 0;
+            if (!WinHttpReadData(req, response + total, avail, &rd) || rd == 0) break;
+            total += rd;
+            response[total] = '\0';
+        }
+    }
+    else
+    {
+        printf("ERROR: Failed to receive response from corporate server (%lu).\n", GetLastError());
+    }
+
+    WinHttpCloseHandle(req);
+    WinHttpCloseHandle(conn);
+    WinHttpCloseHandle(sess);
+
+    if (!response)
+    {
+        printf("ERROR: No response received from corporate server.\n");
+        return;
+    }
+
+    char latest_ver[64] = {0};
+    char download_url[1024] = {0};
+
+    // Check nested "update" object first
+    const char* upd_obj = jfind(response, "update");
+    if (upd_obj)
+    {
+        jstr(upd_obj, "latestVersion", latest_ver, sizeof(latest_ver));
+        if (!latest_ver[0]) jstr(upd_obj, "version", latest_ver, sizeof(latest_ver));
+        jstr(upd_obj, "downloadUrl", download_url, sizeof(download_url));
+        if (!download_url[0]) jstr(upd_obj, "download", download_url, sizeof(download_url));
+    }
+
+    // Check nested "windows" object
+    if (!latest_ver[0])
+    {
+        const char* win_obj = jfind(response, "windows");
+        if (win_obj)
+        {
+            jstr(win_obj, "version", latest_ver, sizeof(latest_ver));
+            jstr(win_obj, "download", download_url, sizeof(download_url));
+        }
+    }
+
+    // Check root fields
+    if (!latest_ver[0]) jstr(response, "latestVersion", latest_ver, sizeof(latest_ver));
+    if (!latest_ver[0]) jstr(response, "version", latest_ver, sizeof(latest_ver));
+    if (!latest_ver[0]) jstr(response, "activeAppVersion", latest_ver, sizeof(latest_ver));
+    if (!latest_ver[0]) jstr(response, "tag_name", latest_ver, sizeof(latest_ver));
+
+    if (!download_url[0]) jstr(response, "downloadUrl", download_url, sizeof(download_url));
+    if (!download_url[0]) jstr(response, "download", download_url, sizeof(download_url));
+    if (!download_url[0]) jstr(response, "browser_download_url", download_url, sizeof(download_url));
+    if (!download_url[0]) jstr(response, "url", download_url, sizeof(download_url));
+
+    free(response);
+
+    if (!latest_ver[0])
+    {
+        printf("ERROR: Could not parse release version from corporate server response.\n");
+        return;
+    }
+
+    int latest = parse_ver(latest_ver);
+    int current = parse_ver(VERSION);
+
+    printf("  Corporate server: %s\n", server_url);
+    printf("  Current version : %s\n", VERSION);
+    printf("  Latest version  : %s\n\n", latest_ver);
+
+    if (latest <= current)
+    {
+        printf("You are already running the latest version.\n\n");
+        return;
+    }
+
+    printf("  Update available: %s (current: %s)\n", latest_ver, VERSION);
+    if (download_url[0])
+    {
+        if (download_url[0] == '/')
+        {
+            char full_dl[1024];
+            snprintf(full_dl, sizeof(full_dl), "%s%s", server_url, download_url);
+            printf("  Download URL    : %s\n\n", full_dl);
+        }
+        else
+        {
+            printf("  Download URL    : %s\n\n", download_url);
+        }
+    }
+    else
+    {
+        printf("  Download URL    : %s/api/releases\n\n", server_url);
+    }
+    printf("  Please download and install the update from the corporate server.\n\n");
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[])
 {
-    bool do_upd       = false;
+    bool do_upd        = false;
+    bool do_upd_github = false;
+    char server_url[512] = {0};
     char profile_path[MAX_PATH] = {0};
 
     // No args: show full help
@@ -853,6 +1122,19 @@ int main(int argc, char* argv[])
         else if (strcmp(argv[i], "--update") == 0)
         {
             do_upd = true;
+        }
+        else if (strcmp(argv[i], "--update-github") == 0)
+        {
+            do_upd_github = true;
+        }
+        else if (strcmp(argv[i], "--server") == 0 || strcmp(argv[i], "-s") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                fprintf(stderr, "ERROR: --server requires a server URL.\n");
+                return 1;
+            }
+            strncpy_s(server_url, sizeof(server_url), argv[++i], _TRUNCATE);
         }
         else if (strcmp(argv[i], "--profile") == 0)
         {
@@ -887,9 +1169,15 @@ int main(int argc, char* argv[])
 
     show_banner();
 
+    if (do_upd_github)
+    {
+        do_update_github();
+        return 0;
+    }
+
     if (do_upd)
     {
-        do_update();
+        do_update(server_url, profile_path);
         return 0;
     }
 

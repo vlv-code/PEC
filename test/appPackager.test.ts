@@ -9,6 +9,9 @@ import zlib from "node:zlib";
 import { execSync } from "node:child_process";
 import {
   DEFAULT_APP_BUILD_CONFIG,
+  DEFAULT_APP_VERSION,
+  extractPeVersion,
+  getCoreModulesIntegrity,
   getAppBuildConfig,
   saveAppBuildConfig,
   buildAppProfile,
@@ -517,4 +520,117 @@ test("update.h enforces WinVerifyTrust Authenticode signature verification befor
     }
   }
 });
+
+test("DEFAULT_APP_VERSION is 2.2.0 and DEFAULT_APP_BUILD_CONFIG.version is 2.2.0 (Д-1, §2)", () => {
+  assert.strictEqual(DEFAULT_APP_VERSION, "2.2.0");
+  assert.strictEqual(DEFAULT_APP_BUILD_CONFIG.version, "2.2.0");
+});
+
+test("PUBLIC_BASE_URL has top priority in buildAppProfile, assembleAppPackage, and packageApp (R-1)", () => {
+  const origEnv = process.env.PUBLIC_BASE_URL;
+  try {
+    process.env.PUBLIC_BASE_URL = "https://env-override.corp.example:8443";
+    const cfg = getAppBuildConfig();
+    const profile = buildAppProfile(cfg, "https://passed-param.example:3000") as any;
+    assert.strictEqual(
+      profile.PecSync.serverUrl,
+      "https://env-override.corp.example:8443",
+      "PUBLIC_BASE_URL from env must take precedence over parameter baseUrl"
+    );
+
+    const deployPs1 = renderAppDeployPs1(cfg, "https://passed-param.example:3000");
+    assert.ok(
+      deployPs1.includes("https://env-override.corp.example:8443"),
+      "deploy script must use PUBLIC_BASE_URL over passed parameter"
+    );
+  } finally {
+    if (origEnv !== undefined) {
+      process.env.PUBLIC_BASE_URL = origEnv;
+    } else {
+      delete process.env.PUBLIC_BASE_URL;
+    }
+  }
+});
+
+test("extractPeVersion accurately parses VS_FIXEDFILEINFO (Д-4, R-3)", () => {
+  // Empty or non-PE buffer
+  assert.strictEqual(extractPeVersion(Buffer.alloc(32)), null);
+
+  // Synthetic buffer containing VS_FIXEDFILEINFO signature 0xFEEF04BD
+  const buf = Buffer.alloc(48);
+  buf.writeUInt32LE(0xfeef04bd, 8);  // dwSignature
+  buf.writeUInt32LE(0x00010000, 12); // dwStrucVersion
+  buf.writeUInt32LE((2 << 16) | 3, 16); // dwFileVersionMS = 2.3
+  buf.writeUInt32LE((4 << 16) | 5, 20); // dwFileVersionLS = 4.5
+  buf.writeUInt32LE((1 << 16) | 0, 24); // dwProductVersionMS = 1.0
+  buf.writeUInt32LE((9 << 16) | 0, 28); // dwProductVersionLS = 9.0
+
+  const res = extractPeVersion(buf);
+  assert.ok(res !== null);
+  assert.strictEqual(res.fileVersion, "2.3.4.5");
+  assert.strictEqual(res.productVersion, "1.0.9");
+
+  // Real template binary if present
+  const exePath = path.resolve("./templates/app/windows/PEC-App.exe");
+  if (fs.existsSync(exePath) && fs.statSync(exePath).size > 1000) {
+    const realBuf = fs.readFileSync(exePath);
+    const realVer = extractPeVersion(realBuf);
+    assert.ok(realVer !== null, "PEC-App.exe must contain valid VS_FIXEDFILEINFO");
+    assert.ok(typeof realVer.fileVersion === "string");
+    assert.ok(typeof realVer.productVersion === "string");
+  }
+});
+
+test("getCoreModulesIntegrity computes sha256 and size for core modules (Д-3, R-2)", () => {
+  const modules = getCoreModulesIntegrity();
+  assert.strictEqual(Array.isArray(modules), true);
+  assert.strictEqual(modules.length, 3);
+
+  const names = modules.map((m) => m.name);
+  assert.deepStrictEqual(names, ["PECAppCore.dll", "WinDivert.dll", "WinDivert64.sys"]);
+
+  for (const mod of modules) {
+    assert.ok(typeof mod.name === "string");
+    assert.ok(typeof mod.present === "boolean");
+    assert.ok(typeof mod.verified === "boolean");
+    if (mod.present) {
+      assert.strictEqual(mod.sha256.length, 64, `Module ${mod.name} should have valid SHA-256`);
+      assert.ok(mod.size > 1000, `Module ${mod.name} size should be > 1000 bytes`);
+      assert.strictEqual(mod.verified, true, `Module ${mod.name} should be verified`);
+    }
+  }
+});
+
+test("buildAppBinaries reports compilerStatus accurately and avoids false MSVC claims (Д-2, R-4)", () => {
+  const result = buildAppBinaries();
+  assert.strictEqual(typeof result.ok, "boolean");
+  assert.ok(result.compilerStatus !== undefined, "compilerStatus must be defined in buildAppBinaries result");
+  assert.strictEqual(typeof result.compilerStatus.compiled, "boolean");
+  assert.strictEqual(typeof result.compilerStatus.compilerName, "string");
+
+  if (!result.compilerStatus.compiled) {
+    assert.ok(
+      !result.compilerStatus.compilerName.includes("MSVC 2022") ||
+      result.compilerStatus.compilerName.includes("failed"),
+      "If not compiled, compilerName must not falsely claim pure MSVC success"
+    );
+  }
+});
+
+test("packageApp inspects embeddedVersion, sets binariesStale when mismatched, and includes coreModulesIntegrity (Д-4, R-3)", () => {
+  saveAppBuildConfig({ version: "2.3.0" });
+  const info = packageApp("https://pec.example.com");
+
+  assert.ok(info.coreModulesIntegrity !== undefined, "coreModulesIntegrity must be present in AppBuildInfo");
+  assert.strictEqual(Array.isArray(info.coreModulesIntegrity), true);
+  assert.strictEqual(info.coreModulesIntegrity.length, 3);
+
+  assert.ok(info.embeddedVersion !== undefined, "embeddedVersion should be detected from PEC-App.exe");
+  // Embedded binary in templates is 1.0.3, while target package is 2.3.0 -> stale!
+  assert.strictEqual(info.binariesStale, true, "binariesStale must be true when embedded version != configured version");
+
+  // Restore back to default
+  saveAppBuildConfig({ version: DEFAULT_APP_VERSION });
+});
+
 

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import crypto from "node:crypto";
 import { Router, Request, Response } from "express";
 import { getClientIp } from "../audit.js";
@@ -18,6 +19,7 @@ import { getActiveRelease } from "../releases.js";
 import { resolveProfileForInstance, expandRuleDomains } from "../routing.js";
 import { getBuildConfig as getExtensionBuildConfig } from "../packager.js";
 import { isNewerVersion } from "../utils/semver.js";
+import { getAppBuildInfoPath } from "../storage.js";
 
 export function createAppSyncRouter(
   getFleetToken: () => string,
@@ -216,8 +218,36 @@ export function createAppSyncRouter(
 
       const activeRelease = getActiveRelease("app");
       const clientVersion = String(version || "").trim();
-      const latestVersion = activeRelease?.version || "2.1.0";
-      const hasUpdate = Boolean(activeRelease && isNewerVersion(activeRelease.version, clientVersion));
+      const latestVersion = activeRelease?.version || "2.2.0";
+      let hasUpdate = Boolean(activeRelease && isNewerVersion(activeRelease.version, clientVersion));
+
+      let activeReleaseInfo: any = { ...(activeRelease || {}) };
+      try {
+        const infoPath = getAppBuildInfoPath();
+        if (fs.existsSync(infoPath)) {
+          const buildInfo = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
+          if (!activeRelease || buildInfo?.version === activeRelease?.version) {
+            activeReleaseInfo = {
+              embeddedVersion: buildInfo.embeddedVersion,
+              binariesStale: buildInfo.binariesStale,
+              ...activeReleaseInfo,
+            };
+            if (activeReleaseInfo.binariesStale === undefined && buildInfo.binariesStale !== undefined) {
+              activeReleaseInfo.binariesStale = buildInfo.binariesStale;
+            }
+            if (!activeReleaseInfo.embeddedVersion && buildInfo.embeddedVersion) {
+              activeReleaseInfo.embeddedVersion = buildInfo.embeddedVersion;
+            }
+          }
+        }
+      } catch {}
+
+      if (hasUpdate && activeReleaseInfo?.binariesStale && activeReleaseInfo?.embeddedVersion && activeReleaseInfo.embeddedVersion === clientVersion) {
+        hasUpdate = false;
+        console.warn(
+          `[APP-SYNC] Suppressed infinite update loop for client ${clientVersion}: active release ${latestVersion} has stale binaries with matching embeddedVersion ${activeReleaseInfo.embeddedVersion}`
+        );
+      }
 
       const downloadUrl = activeRelease
         ? `/api/releases/download/app/${encodeURIComponent(activeRelease.version)}`

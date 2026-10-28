@@ -67,11 +67,13 @@ test("purity: exercising every store writer never touches the repository directo
   }
 
   // The writes must have landed in the redirected temp stores instead
+  const { getAppBuildConfig: getBuildConfigNow } = await import("../src/appPackager.js");
+  const appVer = getBuildConfigNow().version || "2.2.0";
   assert.ok(fs.existsSync(path.join(TEST_TMP_DIR, "routing_profiles.json")), "profiles must go to the temp store");
   assert.ok(fs.existsSync(path.join(TEST_TMP_DIR, "updates", "extension.crx")), "packaged extension must go to the temp updates dir");
   assert.ok(fs.existsSync(path.join(TEST_TMP_DIR, "app_build_config.json")), "app build config must go to the temp store");
-  assert.ok(fs.existsSync(path.join(TEST_TMP_DIR, "releases", "apps", "2.1.0", "pec-client-windows-x64.zip")), "packaged windows app must go to the temp releases dir");
-  assert.ok(fs.existsSync(path.join(TEST_TMP_DIR, "releases", "apps", "2.1.0", "pec-client-linux-x64.tar.gz")), "packaged linux app must go to the temp releases dir");
+  assert.ok(fs.existsSync(path.join(TEST_TMP_DIR, "releases", "apps", appVer, "pec-client-windows-x64.zip")), "packaged windows app must go to the temp releases dir");
+  assert.ok(fs.existsSync(path.join(TEST_TMP_DIR, "releases", "apps", appVer, "pec-client-linux-x64.tar.gz")), "packaged linux app must go to the temp releases dir");
   assert.strictEqual(fs.existsSync(path.join(TEST_TMP_DIR, "updates", "pec-client-windows-x64.zip")), false, "packaged windows app must never go to updates dir (C-1 isolation)");
   assert.strictEqual(fs.existsSync(path.join(TEST_TMP_DIR, "updates", "pec-client-linux-x64.tar.gz")), false, "packaged linux app must never go to updates dir (C-1 isolation)");
 });

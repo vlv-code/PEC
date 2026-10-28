@@ -215,7 +215,7 @@ PEC Native Client profiles are stored in JSON format (`pec_profile.pbprofile`). 
 
 ```json
 {
-  "version": "2.1.0",
+  "version": "2.2.0",
   "proxy_configs": [
     {
       "id": 1,

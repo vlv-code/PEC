@@ -73,10 +73,12 @@ export function ensurePristineTemplates(): void {
 
 try { ensurePristineTemplates(); } catch {}
 
+export const DEFAULT_APP_VERSION = "2.2.0";
+
 export const DEFAULT_APP_BUILD_CONFIG: AppBuildConfig = {
   name: "PEC-App",
   shortName: "PEC-App",
-  version: "2.1.0",
+  version: "2.2.0",
   description: "Корпоративный прозрачный клиент PEC-App с маршрутизацией трафика, фильтрацией процессов и автоматической синхронизацией.",
   presetStyle: "cyber-blue",
   uiLayout: "console",
@@ -354,7 +356,7 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
   });
 
   const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
-  const effectiveServerUrl = (baseUrl || envPublicBase || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
+  const effectiveServerUrl = (envPublicBase || baseUrl || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
 
   return {
     Version: "1.0",
@@ -386,9 +388,9 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
 
 export function renderAppDeployPs1(cfg: AppBuildConfig, baseUrl: string): string {
   const appName = cfg.name || "PEC - Proxy Client";
-  const appVersion = cfg.version || "2.1.0";
+  const appVersion = cfg.version || DEFAULT_APP_VERSION;
   const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
-  const serverUrl = (baseUrl || envPublicBase || cfg.defaultServerUrl || "").replace(/\/+$/, "");
+  const serverUrl = (envPublicBase || baseUrl || cfg.defaultServerUrl || "").replace(/\/+$/, "");
   const autoStart = cfg.autoStartWithWindows ? "$true" : "$false";
   const isService = cfg.installAsService ? "$true" : "$false";
 
@@ -924,13 +926,13 @@ export function assembleAppPackage(
   destinationDir?: string
 ): AppPackageResult {
   const cfg = config || getAppBuildConfig();
-  const targetDir = destinationDir || path.join(getReleasesDir(), "apps", cfg.version || "2.1.0");
+  const targetDir = destinationDir || path.join(getReleasesDir(), "apps", cfg.version || DEFAULT_APP_VERSION);
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
   const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
-  const effectiveBaseUrl = (baseUrl || envPublicBase || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
+  const effectiveBaseUrl = (envPublicBase || baseUrl || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
   const profileObj = buildAppProfile(cfg, effectiveBaseUrl);
   const profileJson = JSON.stringify(profileObj, null, 2);
   const profileBuffer = Buffer.from(profileJson, "utf-8");
@@ -1028,7 +1030,7 @@ export function assembleAppPackage(
   const stagedDivertSys = stageAndResolve("WinDivert64.sys", resolveTemplateBinary("WinDivert64.sys"));
   const stagedCore = stageAndResolve("PECAppCore.dll", resolveTemplateBinary("PECAppCore.dll") || resolveTemplateBinary("ProxyBridgeCore.dll"));
   const stagedSvc = stageAndResolve("PECAppSvc.exe", resolveTemplateBinary("PECAppSvc.exe") || resolveTemplateBinary("ProxyBridgeSvc.exe"));
-  const stagedSetup = stageAndResolve("PEC-App-Setup.exe", resolveTemplateBinary("PEC-App-Setup.exe") || resolveTemplateBinary(`PEC-App-Setup-${cfg.version || "2.1.0"}.exe`));
+  const stagedSetup = stageAndResolve("PEC-App-Setup.exe", resolveTemplateBinary("PEC-App-Setup.exe") || resolveTemplateBinary(`PEC-App-Setup-${cfg.version || DEFAULT_APP_VERSION}.exe`));
 
   // Write profile into staging
   fs.writeFileSync(path.join(stagingDir, "pec_profile.pbprofile"), profileBuffer);
@@ -1051,7 +1053,7 @@ export function assembleAppPackage(
       signBinary(stagedMsi);
     }
     const finalMsiPath = path.join(targetDir, "PEC-App.msi");
-    const versionedMsiPath = path.join(targetDir, `PEC-App-${cfg.version || "2.1.0"}.msi`);
+    const versionedMsiPath = path.join(targetDir, `PEC-App-${cfg.version || DEFAULT_APP_VERSION}.msi`);
     fs.copyFileSync(stagedMsi, finalMsiPath);
     fs.copyFileSync(stagedMsi, versionedMsiPath);
     winZip.addLocalFile(stagedMsi, "", "PEC-App.msi");
@@ -1146,7 +1148,8 @@ export function assembleAppPackage(
 
 export function packageApp(baseUrl: string): AppBuildInfo {
   const cfg = getAppBuildConfig();
-  const targetReleasesDir = path.join(getReleasesDir(), "apps", cfg.version || "2.1.0");
+  const appVersion = cfg.version || DEFAULT_APP_VERSION;
+  const targetReleasesDir = path.join(getReleasesDir(), "apps", appVersion);
   if (!fs.existsSync(targetReleasesDir)) {
     fs.mkdirSync(targetReleasesDir, { recursive: true });
   }
@@ -1157,15 +1160,18 @@ export function packageApp(baseUrl: string): AppBuildInfo {
     pkgLog.push(`[${ts}] ${msg}`);
   };
 
-  log(`Starting PEC-App package assembly v${cfg.version || "2.1.0"}...`);
-  log(`Base URL: ${baseUrl}`);
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const effectiveBaseUrl = (envPublicBase || baseUrl || cfg.defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
 
-  const profileObj = buildAppProfile(cfg, baseUrl);
+  log(`Starting PEC-App package assembly v${appVersion}...`);
+  log(`Base URL: ${effectiveBaseUrl}`);
+
+  const profileObj = buildAppProfile(cfg, effectiveBaseUrl);
   const profileJson = JSON.stringify(profileObj, null, 2);
   const profileBuffer = Buffer.from(profileJson, "utf-8");
 
   // 1. Windows Package (DirectX 11 ImGui Standalone, no web server or ui/ directory)
-  const winPackage = assembleAppPackage(baseUrl, cfg, targetReleasesDir);
+  const winPackage = assembleAppPackage(effectiveBaseUrl, cfg, targetReleasesDir);
   const winZipBuffer = fs.readFileSync(winPackage.zipPath);
   const winSha256 = winPackage.sha256;
 
@@ -1189,17 +1195,37 @@ export function packageApp(baseUrl: string): AppBuildInfo {
     }
     return null;
   };
-  const realSetup = resolveTemplateBinary("PEC-App-Setup.exe") || resolveTemplateBinary(`PEC-App-Setup-${cfg.version || "2.1.0"}.exe`);
+
+  const realGui = resolveTemplateBinary("PEC-App.exe") || resolveTemplateBinary("ProxyBridge.exe");
+  let embeddedVersion: string | undefined = undefined;
+  let binariesStale = false;
+  if (realGui) {
+    try {
+      const peBuf = fs.readFileSync(realGui);
+      const peVer = extractPeVersion(peBuf);
+      if (peVer) {
+        embeddedVersion = peVer.productVersion || peVer.fileVersion;
+      }
+    } catch {}
+  }
+
+  if (embeddedVersion && embeddedVersion !== appVersion) {
+    binariesStale = true;
+    log(`[WARN] Embedded binary version (${embeddedVersion}) does not match configured package version (${appVersion}). Binaries may be stale.`);
+  }
+
+  const coreModulesIntegrity = getCoreModulesIntegrity();
+
+  const realSetup = resolveTemplateBinary("PEC-App-Setup.exe") || resolveTemplateBinary(`PEC-App-Setup-${appVersion}.exe`);
   let setupBuffer: Buffer | null = null;
   let setupSha256 = "";
   if (realSetup) {
     try {
       setupBuffer = fs.readFileSync(realSetup);
       setupSha256 = crypto.createHash("sha256").update(setupBuffer).digest("hex");
-      const ver = cfg.version || "2.1.0";
-      fs.writeFileSync(path.join(targetReleasesDir, `PEC-App-Setup-${ver}.exe`), setupBuffer);
+      fs.writeFileSync(path.join(targetReleasesDir, `PEC-App-Setup-${appVersion}.exe`), setupBuffer);
       fs.writeFileSync(path.join(targetReleasesDir, "PEC-App-Setup.exe"), setupBuffer);
-      log(`[Installer] Prepared PEC-App-Setup-${ver}.exe (${Math.round(setupBuffer.length / 1024)} KB) for releases`);
+      log(`[Installer] Prepared PEC-App-Setup-${appVersion}.exe (${Math.round(setupBuffer.length / 1024)} KB) for releases`);
     } catch (setupErr) {
       log(`[Installer] Note: installer embedding warning: ${setupErr}`);
     }
@@ -1222,7 +1248,6 @@ export function packageApp(baseUrl: string): AppBuildInfo {
       }
     }
   }
-
 
   linuxFiles.push({
     name: "pec_profile.pbprofile",
@@ -1264,8 +1289,11 @@ export function packageApp(baseUrl: string): AppBuildInfo {
   }
 
   const buildInfo: AppBuildInfo = {
-    version: cfg.version || "2.1.0",
+    version: appVersion,
     builtAt: new Date().toISOString(),
+    embeddedVersion,
+    binariesStale,
+    coreModulesIntegrity,
     windowsPackageUrl: "/api/app-builder/download/windows",
     windowsPackageSize: winZipBuffer.length,
     windowsPackageSha256: winSha256,
@@ -1328,9 +1356,89 @@ export function packageApp(baseUrl: string): AppBuildInfo {
   return buildInfo;
 }
 
+export function extractPeVersion(buffer: Buffer): { fileVersion: string; productVersion: string } | null {
+  const sig = Buffer.from([0xbd, 0x04, 0xef, 0xfe]); // 0xFEEF04BD VS_FIXEDFILEINFO
+  const idx = buffer.indexOf(sig);
+  if (idx === -1 || idx + 24 > buffer.length) return null;
+  const fvMs = buffer.readUInt32LE(idx + 8);
+  const fvLs = buffer.readUInt32LE(idx + 12);
+  const pvMs = buffer.readUInt32LE(idx + 16);
+  const pvLs = buffer.readUInt32LE(idx + 20);
+  const fv = `${fvMs >> 16}.${fvMs & 0xffff}.${fvLs >> 16}${fvLs & 0xffff ? `.${fvLs & 0xffff}` : ""}`;
+  const pv = `${pvMs >> 16}.${pvMs & 0xffff}.${pvLs >> 16}${pvLs & 0xffff ? `.${pvLs & 0xffff}` : ""}`;
+  return { fileVersion: fv, productVersion: pv };
+}
+
+export function getCoreModulesIntegrity(customWinTemplatesDir?: string): Array<{
+  name: string;
+  sha256: string;
+  size: number;
+  present: boolean;
+  verified: boolean;
+}> {
+  const winTemplatesDir = customWinTemplatesDir || path.join(getTemplatesAppDir(), "windows");
+  const fallbackWin = path.resolve("./templates/app/windows");
+  const pristineDir = path.join(fallbackWin, ".pristine");
+  const modules = ["PECAppCore.dll", "WinDivert.dll", "WinDivert64.sys"];
+
+  return modules.map((name) => {
+    const candidates = [
+      path.join(winTemplatesDir, name),
+      path.join(winTemplatesDir, ".pristine", name),
+      path.join(fallbackWin, name),
+      path.join(pristineDir, name),
+    ];
+    const found = candidates.find((p) => {
+      try {
+        return fs.existsSync(p) && fs.statSync(p).size > 0;
+      } catch {
+        return false;
+      }
+    });
+
+    if (!found) {
+      return {
+        name,
+        sha256: "",
+        size: 0,
+        present: false,
+        verified: false,
+      };
+    }
+
+    try {
+      const buf = fs.readFileSync(found);
+      const sha256 = crypto.createHash("sha256").update(buf).digest("hex");
+      const size = buf.length;
+      const isDummy = size < 512 && buf.subarray(0, 32).toString().includes("MZ_DUMMY");
+      const verified = size > 1000 && !isDummy;
+      return {
+        name,
+        sha256,
+        size,
+        present: true,
+        verified,
+      };
+    } catch {
+      return {
+        name,
+        sha256: "",
+        size: 0,
+        present: false,
+        verified: false,
+      };
+    }
+  });
+}
+
 export interface BuildAppBinariesResult {
   ok: boolean;
   compiler?: string;
+  compilerStatus?: {
+    compiled: boolean;
+    compilerName: string;
+    error?: string;
+  };
   builtFiles: string[];
   message: string;
   buildLog?: string[];
@@ -1351,10 +1459,10 @@ export function parseAppVersion(rawVersion?: string): {
   build: number;
   quad: string;
 } {
-  const clean = (rawVersion || "").trim().replace(/^v/i, "") || "2.1.0";
+  const clean = (rawVersion || "").trim().replace(/^v/i, "") || DEFAULT_APP_VERSION;
   const parts = clean.split(/[.-]/).map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
   const major = parts[0] ?? 2;
-  const minor = parts[1] ?? 1;
+  const minor = parts[1] ?? 2;
   const patch = parts[2] ?? 0;
   const build = parts[3] ?? 0;
   return {
@@ -1811,6 +1919,14 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   log(`Starting PEC-App binary build pipeline for v${appVer.version} (${appVer.quad})...`);
   const builtFiles: string[] = [];
   let compilerName = "Pre-compiled / Verified";
+  let compilerStatus: {
+    compiled: boolean;
+    compilerName: string;
+    error?: string;
+  } = {
+    compiled: false,
+    compilerName: "Pre-compiled / Verified",
+  };
 
   const vcvars = findMsvcVcvars();
   const mingw = findMingwW64();
@@ -1834,7 +1950,6 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
 
   if (process.env.SKIP_NATIVE_REBUILD !== "true" && vcvars && fs.existsSync(guiDir)) {
     try {
-      compilerName = "MSVC 2022 (x64)";
       log(`[Toolchain] Native MSVC compiler detected: ${vcvars}`);
       const mainImgui = path.join(guiDir, "main_imgui.cpp");
       if (fs.existsSync(mainImgui)) {
@@ -1895,20 +2010,50 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
           log(`[Installer] Successfully built PEC-App-Setup.exe (${Math.round(fs.statSync(builtInst).size / 1024)} KB)`);
         }
       }
+
+      compilerName = "MSVC 2022 (x64)";
+      compilerStatus = {
+        compiled: true,
+        compilerName: "MSVC 2022 (x64)",
+      };
     } catch (err: any) {
       const out = (err?.stdout?.toString() || "") + " " + (err?.stderr?.toString() || "");
       log(`[WARN] MSVC build warning: ${err?.message || err}`);
       console.warn("[appPackager] MSVC compilation error, checking pre-built binaries:", err?.message || err, out);
+      compilerName = "Pre-compiled / Verified (MSVC compilation failed)";
+      compilerStatus = {
+        compiled: false,
+        compilerName: "Pre-compiled / Verified (MSVC compilation failed)",
+        error: String(err?.message || err),
+      };
     }
   } else if (process.env.SKIP_NATIVE_REBUILD !== "true" && mingw && fs.existsSync(guiDir)) {
     const mingwRes = compileBinariesWithMinGW(winTemplatesDir, appVer.version);
-    compilerName = mingwRes.compiler || "MinGW-w64 GCC (x86_64)";
     if (mingwRes.buildLog) {
       buildLog.push(...mingwRes.buildLog);
     }
-    builtFiles.push(...mingwRes.builtFiles);
+    if (mingwRes.ok) {
+      compilerName = mingwRes.compiler || "MinGW-w64 GCC (x86_64)";
+      compilerStatus = {
+        compiled: true,
+        compilerName,
+      };
+      builtFiles.push(...mingwRes.builtFiles);
+    } else {
+      compilerName = "Pre-compiled / Verified (MinGW compilation failed)";
+      compilerStatus = {
+        compiled: false,
+        compilerName: "Pre-compiled / Verified (MinGW compilation failed)",
+        error: mingwRes.message,
+      };
+    }
   } else {
     log("[Toolchain] No local C compiler detected. Using verified pre-compiled release templates.");
+    compilerName = "Pre-compiled / Verified";
+    compilerStatus = {
+      compiled: false,
+      compilerName: "Pre-compiled / Verified",
+    };
   }
 
   if (process.env.SKIP_NATIVE_REBUILD === "true") {
@@ -2087,6 +2232,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
       return {
         ok: false,
         compiler: compilerName,
+        compilerStatus,
         builtFiles: [],
         buildLog,
         message: `Missing required native binaries: ${stillMissing.join(", ")}. Please build them or install MSVC/MinGW.`,
@@ -2127,6 +2273,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   return {
     ok: true,
     compiler: compilerName,
+    compilerStatus,
     builtFiles: uniqueFiles,
     message: `Binaries ready (${compilerName}${driverStatus}): ${uniqueFiles.join(", ")}`,
     buildLog,

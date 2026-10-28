@@ -1,7 +1,172 @@
 import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import vm from "node:vm";
 import { renderDashboardHtml } from "../src/views/dashboardView.js";
+
+const dashboardJs = fs.readFileSync(
+  path.join(process.cwd(), "public", "dashboard.js"),
+  "utf-8"
+);
+
+function createMockDashboardEnvironment(
+  fetchHandler: (url: string, opts?: any) => Promise<any> = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({}),
+    blob: async () => ({}),
+  })
+) {
+  const elements: Record<string, any> = {};
+
+  const getEl = (id: string) => {
+    if (!elements[id]) {
+      const classSet = new Set<string>();
+      const customStyles: Record<string, string> = { display: "block" };
+      let currentId = id;
+      const el: any = {
+        value: "",
+        textContent: "",
+        innerHTML: "",
+        checked: false,
+        disabled: false,
+        style: new Proxy(customStyles, {
+          get(target, prop: string) {
+            if (prop === "setProperty") {
+              return (k: string, v: string) => {
+                target[k] = v;
+              };
+            }
+            return target[prop];
+          },
+          set(target, prop: string, val: string) {
+            target[prop] = val;
+            return true;
+          },
+        }),
+        classList: {
+          classes: classSet,
+          add: (c: string) => classSet.add(c),
+          remove: (c: string) => classSet.delete(c),
+          toggle: (c: string, force?: boolean) => {
+            if (force === true) classSet.add(c);
+            else if (force === false) classSet.delete(c);
+            else if (classSet.has(c)) classSet.delete(c);
+            else classSet.add(c);
+          },
+          contains: (c: string) => classSet.has(c),
+        },
+        children: [] as any[],
+        firstChild: null as any,
+        parentNode: null as any,
+        appendChild(child: any) {
+          child.parentNode = this;
+          this.children.push(child);
+          if (!this.firstChild) this.firstChild = child;
+        },
+        insertBefore(newNode: any, referenceNode: any) {
+          newNode.parentNode = this;
+          const idx = this.children.indexOf(referenceNode);
+          if (idx !== -1) {
+            this.children.splice(idx, 0, newNode);
+          } else {
+            this.children.push(newNode);
+          }
+          this.firstChild = this.children[0] || null;
+        },
+        removeChild(child: any) {
+          child.parentNode = null;
+          this.children = this.children.filter((x: any) => x !== child);
+          this.firstChild = this.children[0] || null;
+        },
+        remove() {},
+        addEventListener() {},
+        removeEventListener() {},
+        setAttribute(k: string, v: string) {
+          (this as any)[k] = v;
+        },
+        getAttribute(k: string) {
+          return (this as any)[k] || null;
+        },
+        focus() {},
+        click() {},
+      };
+
+      Object.defineProperty(el, "id", {
+        get() {
+          return currentId;
+        },
+        set(newId: string) {
+          currentId = newId;
+          elements[newId] = el;
+        },
+      });
+
+      elements[id] = el;
+    }
+    return elements[id];
+  };
+
+  const sandbox: any = {
+    window: {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      location: { href: "http://localhost:3000" },
+    },
+    document: {
+      getElementById: getEl,
+      querySelector: (sel: string) => {
+        if (sel.startsWith("#")) return getEl(sel.slice(1));
+        return getEl("mock_" + sel);
+      },
+      querySelectorAll: () => [],
+      createElement: (tag: string) => {
+        const tempId = "created_" + Math.random().toString(36).slice(2, 8);
+        const el = getEl(tempId);
+        el.tagName = tag.toUpperCase();
+        return el;
+      },
+      body: getEl("body"),
+      activeElement: null,
+      addEventListener: () => {},
+    },
+    fetch: fetchHandler,
+    URL: {
+      createObjectURL: () => "blob:mock-url",
+      revokeObjectURL: () => {},
+    },
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    setInterval: () => 1,
+    clearInterval: () => {},
+    console: {
+      log: () => {},
+      warn: () => {},
+      error: () => {},
+      info: () => {},
+    },
+    Date: global.Date,
+    Math: global.Math,
+    JSON: global.JSON,
+    Array: global.Array,
+    Object: global.Object,
+    String: global.String,
+    Number: global.Number,
+    Boolean: global.Boolean,
+    RegExp: global.RegExp,
+  };
+
+  sandbox.window.document = sandbox.document;
+  sandbox.global = sandbox.window;
+  sandbox.self = sandbox.window;
+
+  const ctx = vm.createContext(sandbox);
+  vm.runInContext(dashboardJs, ctx);
+
+  return { ctx, elements, getEl, sandbox };
+}
 
 test("dashboard: App Studio tab exists and is positioned next to Extension Studio", () => {
   const html = renderDashboardHtml({});
@@ -93,4 +258,122 @@ test("dashboard: Element IDs remain globally unique with App Studio included", (
     [],
     `Found duplicate DOM IDs in dashboard HTML: ${duplicates.join(", ")}`
   );
+});
+
+test("dashboard: dashboard.js handles binariesStale and renders amber warning banner when present", () => {
+  const { ctx, getEl } = createMockDashboardEnvironment();
+  const info = {
+    version: "2.2.0",
+    embeddedVersion: "2.1.0",
+    binariesStale: true,
+  };
+
+  ctx.window.renderAppStudioBuildInfo(info);
+
+  const banner = getEl("appBinariesStaleBanner");
+  assert.equal(banner.style.display, "block");
+  assert.match(
+    banner.innerHTML,
+    /⚠️ Внимание: Версия в бинарниках \(2\.1\.0\) не совпадает с версией релиза \(2\.2\.0\)/
+  );
+  assert.match(
+    banner.innerHTML,
+    /Перед публикацией релиза пересоберите бинарники \(кнопка «Собрать бинарники»\)/
+  );
+});
+
+test("dashboard: dashboard.js hides binariesStale banner when binaries are up to date", () => {
+  const { ctx, getEl } = createMockDashboardEnvironment();
+
+  // First render with stale binaries
+  ctx.window.renderAppStudioBuildInfo({
+    version: "2.2.0",
+    embeddedVersion: "2.1.0",
+    binariesStale: true,
+  });
+  const banner = getEl("appBinariesStaleBanner");
+  assert.equal(banner.style.display, "block");
+
+  // Re-render when binaries are up to date
+  ctx.window.renderAppStudioBuildInfo({
+    version: "2.2.0",
+    embeddedVersion: "2.2.0",
+    binariesStale: false,
+  });
+  assert.equal(banner.style.display, "none");
+});
+
+test("dashboard: dashboard.js renders coreModulesIntegrity badges with size and verified status", () => {
+  const { ctx, getEl } = createMockDashboardEnvironment();
+  const info = {
+    version: "2.2.0",
+    embeddedVersion: "2.2.0",
+    binariesStale: false,
+    coreModulesIntegrity: [
+      { name: "PECAppCore.dll", sha256: "abc123", size: 1048576, present: true, verified: true },
+      { name: "WinDivert.dll", sha256: "def456", size: 524288, present: true, verified: true },
+      { name: "WinDivert64.sys", sha256: "ghi789", size: 262144, present: true, verified: false },
+    ],
+  };
+
+  ctx.window.renderAppStudioBuildInfo(info);
+
+  const integrityEl = getEl("appCoreModulesIntegrity");
+  assert.equal(integrityEl.style.display, "flex");
+  assert.ok(integrityEl.innerHTML.includes("PECAppCore.dll"));
+  assert.ok(integrityEl.innerHTML.includes("1024 KB"));
+  assert.ok(integrityEl.innerHTML.includes("проверен"));
+  assert.ok(integrityEl.innerHTML.includes("WinDivert.dll"));
+  assert.ok(integrityEl.innerHTML.includes("512 KB"));
+  assert.ok(integrityEl.innerHTML.includes("WinDivert64.sys"));
+  assert.ok(integrityEl.innerHTML.includes("256 KB"));
+  assert.ok(integrityEl.innerHTML.includes("не проверен"));
+});
+
+test("dashboard: loadAppStudioConfig triggers renderAppStudioBuildInfo with stale binary warning from API", async () => {
+  const fetchMock = async (url: string) => {
+    if (url.includes("/api/app-builder/config")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          name: "Test App",
+          version: "2.2.0",
+          processRules: [],
+        }),
+      };
+    }
+    if (url.includes("/api/app-builder/info")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          info: {
+            version: "2.2.0",
+            embeddedVersion: "2.1.0",
+            binariesStale: true,
+            coreModulesIntegrity: [
+              { name: "PECAppCore.dll", sha256: "111", size: 1048576, present: true, verified: true },
+              { name: "WinDivert.dll", sha256: "222", size: 524288, present: true, verified: true },
+              { name: "WinDivert64.sys", sha256: "333", size: 262144, present: true, verified: true },
+            ],
+          },
+        }),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+
+  const { ctx, getEl } = createMockDashboardEnvironment(fetchMock);
+
+  await ctx.window.loadAppStudioConfig();
+
+  const banner = getEl("appBinariesStaleBanner");
+  assert.equal(banner.style.display, "block");
+  assert.match(banner.innerHTML, /⚠️ Внимание: Версия в бинарниках \(2\.1\.0\)/);
+
+  const integrityEl = getEl("appCoreModulesIntegrity");
+  assert.equal(integrityEl.style.display, "flex");
+  assert.ok(integrityEl.innerHTML.includes("PECAppCore.dll"));
 });

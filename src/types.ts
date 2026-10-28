@@ -270,6 +270,20 @@ export interface AppBuildConfig {
 export interface AppBuildInfo {
   version: string;
   builtAt: string;
+  embeddedVersion?: string;
+  binariesStale?: boolean;
+  compilerStatus?: {
+    compiled: boolean;
+    compilerName: string;
+    error?: string;
+  };
+  coreModulesIntegrity?: {
+    name: string;
+    sha256: string;
+    size: number;
+    present: boolean;
+    verified: boolean;
+  }[];
   windowsPackageUrl: string;
   windowsPackageSize: number;
   windowsPackageSha256: string;

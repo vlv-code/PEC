@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
+import * as appPackager from "../appPackager.js";
 import {
   getAppBuildConfig,
   saveAppBuildConfig,
@@ -12,6 +14,7 @@ import {
   getTemplatesAppDir,
   buildAppBinaries,
   cleanAppBinaries,
+  DEFAULT_APP_VERSION,
 } from "../appPackager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
 import { createRateLimiter } from "../middleware/security.js";
@@ -105,6 +108,40 @@ export function validateProcessRules(rules: unknown): AppProcessRule[] {
   });
 }
 
+export function extractPeVersionFromFile(filePath?: string): string | null {
+  try {
+    const target = filePath || path.join(getTemplatesAppDir(), "windows", "PEC-App.exe");
+    if (!fs.existsSync(target)) return null;
+    const buf = fs.readFileSync(target);
+    const sig = Buffer.from([0xbd, 0x04, 0xef, 0xfe]); // 0xFEEF04BD VS_FIXEDFILEINFO signature
+    const idx = buf.indexOf(sig);
+    if (idx === -1 || idx + 24 > buf.length) return null;
+    const fvMs = buf.readUInt32LE(idx + 8);
+    const fvLs = buf.readUInt32LE(idx + 12);
+    const major = fvMs >> 16;
+    const minor = fvMs & 0xffff;
+    const patch = fvLs >> 16;
+    const build = fvLs & 0xffff;
+    return `${major}.${minor}.${patch}${build ? `.${build}` : ""}`;
+  } catch {
+    return null;
+  }
+}
+
+export function computeCoreModulesIntegrity(): Array<{ name: string; sha256: string; size: number }> {
+  const winDir = path.join(getTemplatesAppDir(), "windows");
+  const modules = ["PECAppCore.dll", "WinDivert.dll", "WinDivert64.sys"];
+  return modules.map((name) => {
+    const fullPath = path.join(winDir, name);
+    if (fs.existsSync(fullPath)) {
+      const data = fs.readFileSync(fullPath);
+      const sha256 = crypto.createHash("sha256").update(data).digest("hex");
+      return { name, sha256, size: data.length };
+    }
+    return { name, sha256: "", size: 0 };
+  });
+}
+
 export function createAppBuilderRouter(
   _getFleetToken: () => string,
   getAdminToken?: () => string
@@ -157,11 +194,52 @@ export function createAppBuilderRouter(
   router.get("/api/app-builder/info", (_req: Request, res: Response) => {
     try {
       const infoPath = getAppBuildInfoPath();
+      let info: any = null;
       if (fs.existsSync(infoPath)) {
-        const info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
-        return res.json({ ok: true, info, result: info });
+        try {
+          info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
+        } catch {}
       }
-      res.json({ ok: true, info: null, result: null });
+
+      const coreModulesIntegrity = (info && Array.isArray(info.coreModulesIntegrity) && info.coreModulesIntegrity.length > 0)
+        ? info.coreModulesIntegrity
+        : (typeof (appPackager as any).getCoreModulesIntegrity === "function"
+            ? (appPackager as any).getCoreModulesIntegrity()
+            : computeCoreModulesIntegrity());
+
+      if (info) {
+        const embeddedVersion = info.embeddedVersion ?? extractPeVersionFromFile() ?? info.version ?? "2.2.0";
+        const binariesStale = typeof info.binariesStale === "boolean" ? info.binariesStale : (embeddedVersion !== info.version);
+        const compilerStatus = info.compilerStatus ?? { compiled: true, compilerName: "Pre-compiled" };
+
+        const enriched = {
+          ...info,
+          embeddedVersion,
+          binariesStale,
+          compilerStatus,
+          coreModulesIntegrity,
+        };
+        return res.json({
+          ok: true,
+          info: enriched,
+          result: enriched,
+          embeddedVersion,
+          binariesStale,
+          compilerStatus,
+          coreModulesIntegrity,
+        });
+      }
+
+      const embeddedVersion = extractPeVersionFromFile() || "2.2.0";
+      res.json({
+        ok: true,
+        info: null,
+        result: null,
+        embeddedVersion,
+        binariesStale: false,
+        compilerStatus: { compiled: true, compilerName: "Pre-compiled" },
+        coreModulesIntegrity,
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ ok: false, error: msg });
@@ -339,7 +417,7 @@ export function createAppBuilderRouter(
       const updatesDir = getAppUpdatesDir();
       const cfg = getAppBuildConfig();
       const rawVer = typeof cfg.version === "string" ? cfg.version.trim() : "";
-      const ver = SEMVER_REGEX.test(rawVer) ? rawVer : "2.1.0";
+      const ver = SEMVER_REGEX.test(rawVer) ? rawVer : DEFAULT_APP_VERSION;
       const releasesDir = path.join(getReleasesDir(), "apps", ver);
 
       if (platform === "msi" || platform === "windows-msi") {

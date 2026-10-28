@@ -1,5 +1,5 @@
 !define PRODUCT_NAME "PEC-App"
-!define PRODUCT_VERSION "2.1.0"
+!define PRODUCT_VERSION "2.2.0"
 !define PRODUCT_PUBLISHER "PEC Team"
 !define PRODUCT_WEB_SITE "https://pec.local"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
@@ -8,7 +8,7 @@
 Unicode True
 
 ; Version Information
-VIProductVersion "2.1.0.0"
+VIProductVersion "2.2.0.0"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
 VIAddVersionKey "ProductVersion" "${PRODUCT_VERSION}"
 VIAddVersionKey "CompanyName" "${PRODUCT_PUBLISHER}"

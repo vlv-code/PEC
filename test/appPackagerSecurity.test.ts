@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import child_process from "node:child_process";
-import { buildMsiPackage, buildMsiWithWix, getAppBuildConfig } from "../src/appPackager.js";
+import { buildMsiPackage, buildMsiWithWix, getAppBuildConfig, extractPeVersion, getCoreModulesIntegrity } from "../src/appPackager.js";
 
 test("S-4: buildMsiPackage executes wixl via execFileSync with discrete array arguments", () => {
   const origExecFileSync = child_process.execFileSync;
@@ -204,3 +204,51 @@ test("S-4: buildMsiWithWix is exported as an alias of buildMsiPackage", () => {
   assert.equal(typeof buildMsiWithWix, "function");
   assert.equal(buildMsiWithWix, buildMsiPackage);
 });
+
+test("Security: extractPeVersion resists truncated buffers and bounds overrun without throwing", () => {
+  // Empty buffer
+  assert.equal(extractPeVersion(Buffer.alloc(0)), null);
+
+  // Buffer with signature but truncated fixed file info (< 24 bytes after signature)
+  const truncatedBuf = Buffer.alloc(10);
+  truncatedBuf.writeUInt32LE(0xfeef04bd, 0);
+  assert.equal(extractPeVersion(truncatedBuf), null);
+
+  // Signature exactly at end of buffer
+  const endSigBuf = Buffer.alloc(100);
+  endSigBuf.writeUInt32LE(0xfeef04bd, 96);
+  assert.equal(extractPeVersion(endSigBuf), null);
+
+  // Signature placed where idx + 24 === buffer.length (minimum valid fixed file info length)
+  const minBuf = Buffer.alloc(28);
+  minBuf.writeUInt32LE(0xfeef04bd, 4);
+  minBuf.writeUInt32LE(0x00010000, 8);
+  minBuf.writeUInt32LE((1 << 16) | 2, 12); // 1.2
+  minBuf.writeUInt32LE((3 << 16) | 4, 16); // 3.4
+  minBuf.writeUInt32LE((5 << 16) | 6, 20); // 5.6
+  minBuf.writeUInt32LE((7 << 16) | 8, 24); // 7.8
+  const parsed = extractPeVersion(minBuf);
+  assert.ok(parsed !== null);
+  assert.equal(parsed.fileVersion, "1.2.3.4");
+  assert.equal(parsed.productVersion, "5.6.7.8");
+});
+
+test("Security: getCoreModulesIntegrity detects dummy / truncated binaries as unverified", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pec-sec-modules-"));
+  try {
+    // Create a dummy module with MZ_DUMMY header
+    const dummyCore = path.join(tmpDir, "PECAppCore.dll");
+    fs.writeFileSync(dummyCore, "MZ_DUMMY fake stub DLL content");
+
+    const integrity = getCoreModulesIntegrity(tmpDir);
+    const core = integrity.find((m) => m.name === "PECAppCore.dll");
+    assert.ok(core);
+    assert.equal(core.present, true);
+    assert.equal(core.verified, false, "Dummy stub DLL must not be verified");
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
+  }
+});
+

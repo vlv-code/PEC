@@ -122,7 +122,8 @@ test("buildMsiPackage handles environments without WiX gracefully", () => {
 
 test("MSI download routes: serve MSI from releases when present", async () => {
   await withTestServer(async (baseUrl) => {
-    const testVer = "2.1.0";
+    const cfg = getAppBuildConfig();
+    const testVer = cfg.version || "2.2.0";
     const appRelDir = path.join(getReleasesDir(), "apps", testVer);
     if (!fs.existsSync(appRelDir)) fs.mkdirSync(appRelDir, { recursive: true });
 

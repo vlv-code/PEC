@@ -1,4 +1,5 @@
 import "./helpers/setup.js";
+import fs from "node:fs";
 import test from "node:test";
 import assert from "node:assert";
 import express from "express";
@@ -12,6 +13,7 @@ import {
   clearInstances,
 } from "../src/instances.js";
 import { recordRelease, resetReleasesStore } from "../src/releases.js";
+import { getAppBuildInfoPath } from "../src/storage.js";
 
 function buildApp() {
   const app = express();
@@ -324,3 +326,109 @@ test("App Sync API: availableProxies, proxy assignment, and instance deletion", 
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test("App Sync API: suppresses hasUpdate when client already runs embedded version of stale release (Defect Д-5)", async () => {
+  resetReleasesStore();
+
+  const buildInfoPath = getAppBuildInfoPath();
+  const prevBuildInfo = fs.existsSync(buildInfoPath) ? fs.readFileSync(buildInfoPath, "utf-8") : null;
+
+  try {
+    // Admin published 2.3.0 without recompiling binary (embeddedVersion is 2.2.0)
+    recordRelease({
+      type: "app",
+      version: "2.3.0",
+      builtAt: new Date().toISOString(),
+      sha256: "sha256-stale-app",
+      fileName: "pec-client-windows-x64.zip",
+      filePath: "dist/releases/apps/2.3.0/pec-client-windows-x64.zip",
+      isActive: true,
+    });
+
+    fs.writeFileSync(
+      buildInfoPath,
+      JSON.stringify({
+        version: "2.3.0",
+        binariesStale: true,
+        embeddedVersion: "2.2.0",
+        windowsPackageSha256: "sha256-stale-app",
+      })
+    );
+
+    await withServer(async (base) => {
+      // 1. Client running 2.2.0 should NOT get infinite update loop even though server release is 2.3.0
+      const res220 = await fetch(`${base}/api/app/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Fleet-Token": TEST_TOKEN,
+        },
+        body: JSON.stringify({
+          appInstanceId: "app_stale_guard_1",
+          hostname: "WORKSTATION-STALE",
+          username: "user_stale",
+          version: "2.2.0",
+        }),
+      });
+
+      assert.strictEqual(res220.status, 200);
+      const body220 = await res220.json();
+      assert.strictEqual(body220.ok, true);
+      assert.strictEqual(body220.update.hasUpdate, false, "Must suppress hasUpdate when client version matches embeddedVersion of stale release");
+      assert.strictEqual(body220.update.latestVersion, "2.3.0");
+
+      // 2. Client running 2.1.0 SHOULD still get update to 2.3.0
+      const res210 = await fetch(`${base}/api/app/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Fleet-Token": TEST_TOKEN,
+        },
+        body: JSON.stringify({
+          appInstanceId: "app_stale_guard_2",
+          hostname: "WORKSTATION-OLD",
+          username: "user_old",
+          version: "2.1.0",
+        }),
+      });
+
+      assert.strictEqual(res210.status, 200);
+      const body210 = await res210.json();
+      assert.strictEqual(body210.ok, true);
+      assert.strictEqual(body210.update.hasUpdate, true, "Old client v2.1.0 should still receive update notification");
+      assert.strictEqual(body210.update.latestVersion, "2.3.0");
+    });
+  } finally {
+    if (prevBuildInfo !== null) {
+      fs.writeFileSync(buildInfoPath, prevBuildInfo);
+    } else if (fs.existsSync(buildInfoPath)) {
+      try { fs.unlinkSync(buildInfoPath); } catch {}
+    }
+  }
+});
+
+test("App Sync API: fallback version without active release is 2.2.0", async () => {
+  resetReleasesStore();
+
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/app/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Fleet-Token": TEST_TOKEN,
+      },
+      body: JSON.stringify({
+        appInstanceId: "app_no_release",
+        hostname: "WORKSTATION-FALLBACK",
+        username: "user_fallback",
+        version: "2.2.0",
+      }),
+    });
+
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.ok, true);
+    assert.strictEqual(body.update.latestVersion, "2.2.0", "Fallback version without active release must be 2.2.0");
+  });
+});
+
