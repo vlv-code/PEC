@@ -24,14 +24,14 @@ COPY . .
 RUN npm run build
 
 # ==============================================================================
-# Stage 2: Production Runner (clean runtime image: no compilers, no raw C client code)
+# Stage 2: Production Runner (runtime image with msitools & MinGW cross-compiler)
 # ==============================================================================
 FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Install runtime utilities and WiX MSI tools (wixl)
-RUN apk add --no-cache tzdata dumb-init curl bash msitools
+# Install runtime utilities, WiX MSI tools (wixl), and MinGW cross-compiler for on-demand packaging
+RUN apk add --no-cache tzdata dumb-init curl bash msitools mingw-w64-gcc mingw-w64-binutils || apk add --no-cache tzdata dumb-init curl bash msitools
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -48,6 +48,9 @@ RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit
 
 # Built bundle only - server.ts/src are not needed at runtime
 COPY --from=builder --chown=pecuser:pecgroup /app/dist ./dist
+
+# Client sources for on-demand cross-compilation of Windows binaries
+COPY --from=builder --chown=pecuser:pecgroup /app/client ./client
 
 # Dashboard static assets served by express.static (see server.ts) and templates
 COPY --from=builder --chown=pecuser:pecgroup /app/public ./public

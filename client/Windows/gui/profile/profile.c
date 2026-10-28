@@ -340,6 +340,13 @@ void PB_GetLogFilePath(wchar_t* out, int cch)
 
 static CRITICAL_SECTION g_appLogCs;
 static BOOL g_appLogCsInit = FALSE;
+static PB_AppLogUiCallback g_appLogUiCallback = NULL;
+static __declspec(thread) int s_inAppLogUi = 0;
+
+void PB_SetAppLogUiCallback(PB_AppLogUiCallback cb)
+{
+    g_appLogUiCallback = cb;
+}
 
 void PB_WriteAppLog(const char* fmt, ...)
 {
@@ -398,6 +405,27 @@ void PB_WriteAppLog(const char* fmt, ...)
     }
 
     LeaveCriticalSection(&g_appLogCs);
+
+    if (g_appLogUiCallback && !s_inAppLogUi)
+    {
+        s_inAppLogUi = 1;
+        char msgBuf[2048];
+        va_list ap_ui;
+        va_start(ap_ui, fmt);
+        vsnprintf(msgBuf, sizeof(msgBuf), fmt, ap_ui);
+        va_end(ap_ui);
+
+        int level = 0;
+        if (strstr(msgBuf, "ERROR") || strstr(msgBuf, "error") || strstr(msgBuf, "failed") || strstr(msgBuf, "Failed") ||
+            strstr(msgBuf, "Ошибка") || strstr(msgBuf, "ошибк") || strstr(msgBuf, "Не удалось") || strstr(msgBuf, "rejected")) {
+            level = 2;
+        } else if (strstr(msgBuf, "WARN") || strstr(msgBuf, "warn") || strstr(msgBuf, "ignored")) {
+            level = 1;
+        }
+
+        g_appLogUiCallback(msgBuf, level);
+        s_inAppLogUi = 0;
+    }
 }
 
 static void ensure_dirs(void)

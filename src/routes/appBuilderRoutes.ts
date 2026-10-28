@@ -14,6 +14,7 @@ import {
   getTemplatesAppDir,
   buildAppBinaries,
   cleanAppBinaries,
+  getToolchainDiagnostics,
   DEFAULT_APP_VERSION,
 } from "../appPackager.js";
 import { recordAudit, getClientIp, getBaseUrl } from "../audit.js";
@@ -201,6 +202,8 @@ export function createAppBuilderRouter(
         } catch {}
       }
 
+      const toolchain = getToolchainDiagnostics();
+
       const coreModulesIntegrity = (info && Array.isArray(info.coreModulesIntegrity) && info.coreModulesIntegrity.length > 0)
         ? info.coreModulesIntegrity
         : (typeof (appPackager as any).getCoreModulesIntegrity === "function"
@@ -214,6 +217,7 @@ export function createAppBuilderRouter(
 
         const enriched = {
           ...info,
+          toolchain,
           embeddedVersion,
           binariesStale,
           compilerStatus,
@@ -223,6 +227,7 @@ export function createAppBuilderRouter(
           ok: true,
           info: enriched,
           result: enriched,
+          toolchain,
           embeddedVersion,
           binariesStale,
           compilerStatus,
@@ -235,6 +240,7 @@ export function createAppBuilderRouter(
         ok: true,
         info: null,
         result: null,
+        toolchain,
         embeddedVersion,
         binariesStale: false,
         compilerStatus: { compiled: true, compilerName: "Pre-compiled" },
@@ -289,18 +295,21 @@ export function createAppBuilderRouter(
       }
       const customVersion = typeof rawVersion === "string" && rawVersion.trim() ? rawVersion.trim() : undefined;
       const result = buildAppBinaries(customVersion);
+      const isMissingCompiler = result.compilerMissing || (!result.ok && result.compilerStatus?.compiled === false);
+      const httpStatus = result.ok || isMissingCompiler ? 200 : 500;
+
       recordAudit({
         ip: getClientIp(req),
         endpoint: "/api/app-builder/build-binaries",
-        status: result.ok ? 200 : 500,
+        status: httpStatus,
         result: result.ok ? "BUILD_SUCCESS" : "STORE_ERROR",
         details: `${result.message} (version: ${customVersion || "default"})`,
       });
 
-      if (!result.ok) {
+      if (!result.ok && result.compilerStatus?.compiled !== false) {
         return res.status(500).json(result);
       }
-      res.json(result);
+      res.status(200).json(result);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[appBuilderRoutes] build-binaries exception:", msg);

@@ -374,4 +374,55 @@ test("appBuilderRoutes: GET /api/app-builder/info includes embeddedVersion and c
   });
 });
 
+test("appBuilderRoutes: GET /api/app-builder/info includes toolchain diagnostics", async () => {
+  await withTestServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/api/app-builder/info`, {
+      headers: { "x-admin-token": TEST_ADMIN_TOKEN },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, true);
+    assert.ok(body.toolchain !== undefined, "GET /info must include toolchain");
+    assert.equal(typeof body.toolchain.available, "boolean");
+    assert.equal(typeof body.toolchain.compilerName, "string");
+    assert.equal(typeof body.toolchain.hasGcc, "boolean");
+    assert.equal(typeof body.toolchain.hasGxx, "boolean");
+    assert.equal(typeof body.toolchain.hasWindres, "boolean");
+    assert.equal(typeof body.toolchain.hasWixl, "boolean");
+    assert.equal(typeof body.toolchain.hasMakensis, "boolean");
+  });
+});
+
+test("appBuilderRoutes: POST /api/app-builder/build-binaries returns 200 with honest status when compiler is missing", async () => {
+  const origEnv = process.env.PEC_FORCE_NO_COMPILER;
+  try {
+    process.env.PEC_FORCE_NO_COMPILER = "true";
+    await withTestServer(async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/app-builder/build-binaries`, {
+        method: "POST",
+        headers: { "x-admin-token": TEST_ADMIN_TOKEN },
+      });
+      assert.equal(res.status, 200, "Should return HTTP 200 with diagnostic result even when compiler is missing");
+      const body = await res.json();
+      assert.equal(body.ok, false);
+      assert.equal(body.compiled, false);
+      assert.equal(body.compilerMissing, true);
+      assert.equal(body.compilerStatus?.compiled, false);
+      assert.ok(
+        body.message.includes("Компилятор C/C++ не обнаружен в системе"),
+        `Response message should indicate compiler is missing: ${body.message}`
+      );
+      assert.ok(body.toolchain !== undefined, "Result must include toolchain diagnostics");
+      assert.equal(body.toolchain.available, false);
+    });
+  } finally {
+    if (origEnv !== undefined) {
+      process.env.PEC_FORCE_NO_COMPILER = origEnv;
+    } else {
+      delete process.env.PEC_FORCE_NO_COMPILER;
+    }
+  }
+});
+
+
 

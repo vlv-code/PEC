@@ -25,6 +25,7 @@ import {
   compileBinariesWithMinGW,
   cleanAppBinaries,
   parseAppVersion,
+  getToolchainDiagnostics,
   MINGW_GUI_CMD,
   MSVC_GUI_CMD,
 } from "../src/appPackager.js";
@@ -632,5 +633,82 @@ test("packageApp inspects embeddedVersion, sets binariesStale when mismatched, a
   // Restore back to default
   saveAppBuildConfig({ version: DEFAULT_APP_VERSION });
 });
+
+test("getToolchainDiagnostics returns structured diagnostic object with compiler inspection", () => {
+  const diag = getToolchainDiagnostics();
+  assert.strictEqual(typeof diag.available, "boolean");
+  assert.strictEqual(typeof diag.compilerName, "string");
+  assert.strictEqual(typeof diag.hasGcc, "boolean");
+  assert.strictEqual(typeof diag.hasGxx, "boolean");
+  assert.strictEqual(typeof diag.hasWindres, "boolean");
+  assert.strictEqual(typeof diag.hasWixl, "boolean");
+  assert.strictEqual(typeof diag.hasMakensis, "boolean");
+
+  if (diag.available) {
+    assert.ok(diag.compilerName !== "None", "compilerName should identify available compiler");
+    assert.ok(diag.compilerName.includes("MSVC") || diag.compilerName.includes("MinGW") || diag.compilerName.includes("GCC"));
+  } else {
+    assert.strictEqual(diag.compilerName, "None");
+    assert.strictEqual(diag.hasGcc, false);
+    assert.strictEqual(diag.hasGxx, false);
+    assert.strictEqual(diag.hasWindres, false);
+  }
+});
+
+test("buildAppBinaries reports ok: false, compiled: false, compilerMissing: true honestly when no compiler is present", () => {
+  const origEnv = process.env.PEC_FORCE_NO_COMPILER;
+  try {
+    process.env.PEC_FORCE_NO_COMPILER = "true";
+    const diag = getToolchainDiagnostics();
+    assert.strictEqual(diag.available, false);
+    assert.strictEqual(diag.compilerName, "None");
+
+    const result = buildAppBinaries();
+    assert.strictEqual(result.ok, false, "buildAppBinaries must NOT return ok: true when compiler is missing");
+    assert.strictEqual(result.compiled, false, "compiled must be false");
+    assert.strictEqual(result.compilerMissing, true, "compilerMissing must be true");
+    assert.ok(result.compilerStatus !== undefined);
+    assert.strictEqual(result.compilerStatus.compiled, false);
+    assert.strictEqual(result.compilerStatus.compilerMissing, true);
+    assert.ok(
+      result.message.includes("Компилятор C/C++ не обнаружен в системе. Сборка невозможна. В шаблонах находятся бинарники v"),
+      `Message must explain compiler is missing and state embedded version: ${result.message}`
+    );
+    assert.ok(result.toolchain !== undefined);
+    assert.strictEqual(result.toolchain.available, false);
+  } finally {
+    if (origEnv !== undefined) {
+      process.env.PEC_FORCE_NO_COMPILER = origEnv;
+    } else {
+      delete process.env.PEC_FORCE_NO_COMPILER;
+    }
+  }
+});
+
+test("buildAppBinaries with available compiler verifies PE integrity (> 100 KB and version matching) and includes toolchain", () => {
+  const diag = getToolchainDiagnostics();
+  if (!diag.available) {
+    return;
+  }
+
+  const result = buildAppBinaries("2.2.0");
+  assert.ok(result.toolchain !== undefined, "toolchain must be present in build result");
+  assert.strictEqual(result.toolchain.available, true);
+  if (result.compiled) {
+    assert.strictEqual(result.ok, true);
+    const winTemplatesDir = path.join(getTemplatesAppDir(), "windows");
+    for (const exe of ["PEC-App.exe", "PEC-CLI.exe", "PECAppSvc.exe"]) {
+      const p = path.join(winTemplatesDir, exe);
+      assert.strictEqual(fs.existsSync(p), true, `${exe} must exist`);
+      const sz = fs.statSync(p).size;
+      assert.ok(sz > 100 * 1024, `${exe} size (${sz} bytes) must be > 100 KB`);
+      const pe = extractPeVersion(fs.readFileSync(p));
+      assert.ok(pe, `${exe} must have valid PE version info`);
+      const ver = pe.productVersion || pe.fileVersion;
+      assert.ok(ver.startsWith("2.2.0") || ver === "2.2.0.0", `${exe} PE version (${ver}) must match target version 2.2.0`);
+    }
+  }
+});
+
 
 

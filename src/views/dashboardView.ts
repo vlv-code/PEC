@@ -801,6 +801,8 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
     <!-- ==================== TAB: APP CONSTRUCTOR STUDIO ==================== -->
     <div id="tab-app-studio" class="tab-pane">
+      <div id="appBinariesStaleBanner" class="alert-banner alert-warning" style="display: none; margin-bottom: 12px;"></div>
+      <div id="appToolchainDiagnostics" class="card toolchain-card" style="display: none; margin-bottom: 14px;"></div>
       <div id="viewAppStudio" class="app-studio-grid">
         <!-- Left Panel: Settings Form -->
         <div class="app-studio-form-col">
@@ -1894,6 +1896,21 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <div style="display: flex; gap: 8px;">
         <button type="button" id="btnSubmitImportPreset" onclick="submitImportPreset()" style="flex: 1;">Импортировать</button>
         <button type="button" onclick="closeImportPresetsModal()" class="btn-secondary" style="flex: 1;">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- Modal: Compiler Warning -->
+  <div id="modalCompilerWarning" class="modal-backdrop-theme" style="display: none;">
+    <div class="modal-card-theme" style="max-width: 500px; width: 90%; padding: 24px;">
+      <h3 style="margin-top: 0; color: #f59e0b; display: flex; align-items: center; gap: 8px;">
+        <span>⚠</span>
+        <span data-i18n="titleCompilerWarning">Компилятор C/C++ не обнаружен</span>
+      </h3>
+      <p id="compilerWarningModalText" style="font-size: 13px; line-height: 1.5; color: var(--text-color); margin: 16px 0;">
+      </p>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn" onclick="closeCompilerWarningModal()" data-i18n="btnCloseModal">Понятно</button>
       </div>
     </div>
   </div>

@@ -342,6 +342,9 @@ static void CheckAndRotateAppLog()
     }
 }
 
+static thread_local bool s_inLogAdd = false;
+static thread_local bool s_inAppLogBridge = false;
+
 static void LogAdd(const char* message, int level = 0)
 {
     SYSTEMTIME st;
@@ -357,8 +360,20 @@ static void LogAdd(const char* message, int level = 0)
     snprintf(g_logEntries.back().time, sizeof(g_logEntries.back().time), "%s", ts);
     LeaveCriticalSection(&g_logCs);
 
-    CheckAndRotateAppLog();
-    PB_WriteAppLog("ENGINE: %s", message ? message : "");
+    if (!s_inAppLogBridge) {
+        s_inLogAdd = true;
+        CheckAndRotateAppLog();
+        PB_WriteAppLog("ENGINE: %s", message ? message : "");
+        s_inLogAdd = false;
+    }
+}
+
+static void OnAppLogUiBridge(const char* msg, int level)
+{
+    if (s_inLogAdd) return;
+    s_inAppLogBridge = true;
+    LogAdd(msg, level);
+    s_inAppLogBridge = false;
 }
 
 // -----------------------------------------------------------------------------
@@ -1511,6 +1526,21 @@ static void RenderEngineLogsTab()
         OpenLogFile();
     }
 
+    ImGui::SameLine();
+    if (ImGui::Button(u8"📋 Скопировать весь лог##copylogall")) {
+        EnterCriticalSection(&g_logCs);
+        std::string allLogs;
+        for (const auto& entry : g_logEntries) {
+            allLogs += "[";
+            allLogs += entry.time;
+            allLogs += "] ";
+            allLogs += entry.message;
+            allLogs += "\r\n";
+        }
+        LeaveCriticalSection(&g_logCs);
+        ImGui::SetClipboardText(allLogs.c_str());
+    }
+
     ImGui::Spacing();
 
     // Scrollable log view
@@ -2032,6 +2062,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     g_connBuffer.Init();
     InitializeCriticalSection(&g_logCs);
     InitializeCriticalSection(&g_profileCs);
+    PB_SetAppLogUiCallback(OnAppLogUiBridge);
 
     // Profile Initialization
     {
@@ -2080,22 +2111,28 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
             PB_ProfileDefaults(&g_profile, g_activeProfile);
         }
 
-        // Ensure PecSync has a valid serverUrl and fleetToken. If empty in current profile,
-        // attempt to load them from pec_profile.pbprofile in exe directory or default to local server.
-        if (g_profile.pecSync.serverUrl[0] == 0 && candExists) {
+        // Server URL Auto-Heal: When loading the profile at startup, check if %APPDATA% has
+        // serverUrl equal to "http://127.0.0.1:3000" (or empty). If so, and the local cand profile
+        // (pec_profile.pbprofile in the executable's directory) has a valid remote HTTPS serverUrl
+        // (starts with "https://"), automatically upgrade g_profile.pecSync.serverUrl and fleetToken
+        // to match cand, and save the profile!
+        bool isLocalOrEmpty = (g_profile.pecSync.serverUrl[0] == 0 ||
+                               wcscmp(g_profile.pecSync.serverUrl, L"http://127.0.0.1:3000") == 0);
+        if (isLocalOrEmpty && candExists) {
             PBProfile* candProf = (PBProfile*)calloc(1, sizeof(PBProfile));
             if (candProf) {
                 PB_ProfileLoad(cand, candProf);
-                if (candProf->pecSync.serverUrl[0] != 0) {
+                bool candIsHttps = (_wcsnicmp(candProf->pecSync.serverUrl, L"https://", 8) == 0);
+                if (candIsHttps || (g_profile.pecSync.serverUrl[0] == 0 && candProf->pecSync.serverUrl[0] != 0)) {
                     lstrcpynW(g_profile.pecSync.serverUrl, candProf->pecSync.serverUrl, 512);
                     lstrcpynW(g_profile.pecSync.fleetToken, candProf->pecSync.fleetToken, 256);
                     g_profile.pecSync.intervalMinutes = candProf->pecSync.intervalMinutes;
                     g_profile.pecSync.enabled = 1;
+                    if (candProf->theme.hasTheme) {
+                        g_profile.theme = candProf->theme;
+                    }
+                    PB_ProfileSave(g_activeProfile, &g_profile);
                 }
-                if (candProf->theme.hasTheme) {
-                    g_profile.theme = candProf->theme;
-                }
-                PB_ProfileSave(g_activeProfile, &g_profile);
                 free(candProf);
             }
         }
@@ -2373,6 +2410,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     DestroyWindow(g_hWnd);
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
 
+    PB_SetAppLogUiCallback(nullptr);
     g_connBuffer.Destroy();
     DeleteCriticalSection(&g_logCs);
     DeleteCriticalSection(&g_profileCs);

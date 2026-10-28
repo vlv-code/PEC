@@ -377,3 +377,174 @@ test("dashboard: loadAppStudioConfig triggers renderAppStudioBuildInfo with stal
   assert.equal(integrityEl.style.display, "flex");
   assert.ok(integrityEl.innerHTML.includes("PECAppCore.dll"));
 });
+
+
+test("dashboard: App Studio renders static placeholder for toolchain diagnostics and compiler warning modal", () => {
+  const html = renderDashboardHtml({});
+  assert.ok(html.includes('id="appToolchainDiagnostics"'), "appToolchainDiagnostics must exist in dashboard HTML");
+  assert.ok(html.includes('id="modalCompilerWarning"'), "modalCompilerWarning must exist in dashboard HTML");
+  assert.ok(html.includes('id="compilerWarningModalText"'), "compilerWarningModalText must exist in dashboard HTML");
+});
+
+test("dashboard: dashboard.js renders toolchain diagnostics badge when toolchain is available", () => {
+  const { ctx, getEl } = createMockDashboardEnvironment();
+  const info = {
+    version: "2.2.0",
+    embeddedVersion: "2.2.0",
+    toolchain: {
+      available: true,
+      compilerName: "MinGW-w64 GCC (x86_64)",
+      gcc: { available: true, version: "13.2.0" },
+      windres: { available: true },
+      wixl: { available: true, version: "0.100" },
+    },
+  };
+
+  ctx.window.renderAppStudioBuildInfo(info);
+
+  const toolchainEl = getEl("appToolchainDiagnostics");
+  assert.equal(toolchainEl.style.display, "flex");
+  assert.ok(
+    toolchainEl.innerHTML.includes("✓ Тулчейн компиляции: MinGW-w64 GCC (x86_64)"),
+    "Must display green badge with compiler name"
+  );
+  // Detailed badges for GCC, Windres, Wixl
+  assert.ok(toolchainEl.innerHTML.includes("✓ GCC (13.2.0)"), "Must display GCC badge with version");
+  assert.ok(toolchainEl.innerHTML.includes("✓ Windres"), "Must display Windres badge");
+  assert.ok(toolchainEl.innerHTML.includes("✓ Wixl (0.100)"), "Must display Wixl badge");
+  assert.ok(
+    toolchainEl.getAttribute("title").includes("GCC: 13.2.0"),
+    "Toolchain bar title must contain toolchain details"
+  );
+});
+
+test("dashboard: dashboard.js renders amber badge when toolchain is missing or compilerMissing", () => {
+  const { ctx, getEl } = createMockDashboardEnvironment();
+  const info = {
+    version: "2.2.0",
+    embeddedVersion: "2.1.0",
+    compilerMissing: true,
+    toolchain: {
+      available: false,
+      compilerMissing: true,
+      compilerName: "None",
+      gcc: false,
+      windres: false,
+      wixl: false,
+    },
+  };
+
+  ctx.window.renderAppStudioBuildInfo(info);
+
+  const toolchainEl = getEl("appToolchainDiagnostics");
+  assert.equal(toolchainEl.style.display, "flex");
+  assert.ok(
+    toolchainEl.innerHTML.includes("⚠ Компилятор C/C++ не установлен (сборка из исходников недоступна)"),
+    "Must display amber badge for missing compiler"
+  );
+  assert.ok(toolchainEl.innerHTML.includes("❌ GCC"), "Must show missing GCC badge");
+  assert.ok(toolchainEl.innerHTML.includes("❌ Windres"), "Must show missing Windres badge");
+  assert.ok(toolchainEl.innerHTML.includes("⚠ Wixl"), "Must show missing/warning Wixl badge");
+});
+
+test("dashboard: buildAppBinariesAction shows warning notification and modal when compiler is missing", async () => {
+  const fetchMock = async (url: string) => {
+    if (url.includes("/api/app-builder/build-binaries")) {
+      return {
+        ok: false,
+        status: 500,
+        json: async () => ({
+          ok: false,
+          compilerMissing: true,
+          embeddedVersion: "2.1.0",
+          error: "MinGW-w64 toolchain not found",
+        }),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+
+  const { ctx, getEl } = createMockDashboardEnvironment(fetchMock);
+  getEl("appBuildVersion").value = "2.2.0";
+
+  await ctx.window.buildAppBinariesAction();
+
+  const statusEl = getEl("appBuildStatusMsg");
+  assert.equal(statusEl.style.display, "block");
+  assert.ok(
+    statusEl.textContent.includes("Компилятор C/C++ (MinGW / MSVC) не обнаружен. Сборка не производилась. В шаблонах остаются бинарники v2.1.0"),
+    "Status message must warn about missing compiler"
+  );
+
+  const modalEl = getEl("modalCompilerWarning");
+  assert.equal(modalEl.style.display, "flex", "Warning modal must be displayed");
+
+  const modalTextEl = getEl("compilerWarningModalText");
+  assert.ok(
+    modalTextEl.textContent.includes("Компилятор C/C++ (MinGW / MSVC) не обнаружен. Сборка не производилась. В шаблонах остаются бинарники v2.1.0"),
+    "Modal content must describe missing compiler state"
+  );
+
+  // Close modal works
+  ctx.window.closeCompilerWarningModal();
+  assert.equal(modalEl.style.display, "none", "Modal should close on close action");
+});
+
+test("dashboard: buildAppBinariesAction shows success notification with execution time and compiled version", async () => {
+  const fetchMock = async (url: string) => {
+    if (url.includes("/api/app-builder/build-binaries")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          message: "Binaries ready",
+          compiler: "MinGW-w64 GCC (x86_64)",
+          version: "2.2.0",
+          builtFiles: ["PEC-App.exe", "PEC-CLI.exe", "PECAppCore.dll"],
+          info: {
+            version: "2.2.0",
+            embeddedVersion: "2.2.0",
+            binariesStale: false,
+            toolchain: {
+              available: true,
+              compilerName: "MinGW-w64 GCC (x86_64)",
+              gcc: { available: true, version: "13.2.0" },
+              windres: { available: true },
+              wixl: { available: true },
+            },
+          },
+        }),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+
+  const { ctx, getEl } = createMockDashboardEnvironment(fetchMock);
+  getEl("appBuildVersion").value = "2.2.0";
+
+  await ctx.window.buildAppBinariesAction();
+
+  const statusEl = getEl("appBuildStatusMsg");
+  assert.equal(statusEl.style.display, "block");
+  assert.ok(statusEl.innerHTML.includes("v2.2.0"), "Status must contain compiled version");
+  assert.ok(statusEl.innerHTML.includes("MinGW-w64 GCC"), "Status must contain compiler name");
+  assert.match(statusEl.innerHTML, /\d+(\.\d+)?с/, "Status must display execution time in seconds");
+
+  const toastHost = getEl("toastHost");
+  assert.ok(
+    toastHost.children.some(
+      (c: any) =>
+        c.textContent &&
+        c.textContent.includes("Сборка бинарников v2.2.0 успешно выполнена")
+    ),
+    "Toast message must indicate success with compiled version and execution time"
+  );
+
+  const toolchainEl = getEl("appToolchainDiagnostics");
+  assert.equal(toolchainEl.style.display, "flex");
+  assert.ok(
+    toolchainEl.innerHTML.includes("✓ Тулчейн компиляции: MinGW-w64 GCC (x86_64)"),
+    "Toolchain diagnostics must be updated with success toolchain info"
+  );
+});

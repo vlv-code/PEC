@@ -134,7 +134,7 @@ test("Task 3.4: deploy/pec-app-linux.service has valid headless systemd unit con
   assert.ok(content.includes("WantedBy=multi-user.target"), "Must be WantedBy multi-user.target");
 });
 
-test("Task 3.4: Dockerfile implements multi-stage build keeping compilers out of production image", () => {
+test("Task 3.4: Dockerfile implements multi-stage build with MinGW packaging tools and client sources in runner stage", () => {
   const dockerfile = fs.readFileSync("Dockerfile", "utf-8");
 
   // Multi-stage check
@@ -150,21 +150,20 @@ test("Task 3.4: Dockerfile implements multi-stage build keeping compilers out of
     "Builder stage must contain MinGW-w64 toolchain"
   );
 
-  // Check runner stage does NOT install compilers
+  // Check runner stage includes MinGW cross-compiler for on-demand packaging, but not host build tools like g++
   assert.ok(
-    !runnerPart.includes("mingw-w64-gcc"),
-    "Runner stage must NOT install MinGW-w64 compilers"
+    runnerPart.includes("mingw-w64-gcc"),
+    "Runner stage must include MinGW-w64 toolchain for on-demand packaging"
   );
   assert.ok(
     !runnerPart.includes("g++"),
-    "Runner stage must NOT install g++"
+    "Runner stage must NOT install host g++"
   );
 
-  // Check runner does NOT copy raw client sources
+  // Check runner copies client sources for on-demand native packaging
   assert.ok(
-    !runnerPart.includes("COPY --from=builder /app/client ./client") &&
-    !runnerPart.includes("COPY --from=builder --chown=pecuser:pecgroup /app/client ./client"),
-    "Runner stage must NOT copy raw client C sources"
+    runnerPart.includes("COPY --from=builder --chown=pecuser:pecgroup /app/client ./client"),
+    "Runner stage must copy client sources for on-demand native packaging"
   );
 
   // Check runner creates necessary non-root directories

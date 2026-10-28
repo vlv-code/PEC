@@ -52,6 +52,31 @@ static int PecCompareVersion(const int a[3], const int b[3])
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "winhttp.lib")
 
+#ifndef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2
+#define WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 0x00000800
+#endif
+#ifndef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
+#define WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3 0x00002000
+#endif
+
+static const char* PecFormatWinHttpError(DWORD err)
+{
+    switch (err) {
+    case 12029:
+        return "ERROR_WINHTTP_CANNOT_CONNECT (не удалось подключиться к серверу)";
+    case 12007:
+        return "ERROR_WINHTTP_NAME_NOT_RESOLVED (DNS не может разрешить имя хоста)";
+    case 12045:
+        return "ERROR_WINHTTP_SECURE_INVALID_CA (сертификат сервера не доверен в Windows)";
+    case 12038:
+        return "ERROR_WINHTTP_SECURE_CERT_CN_INVALID (имя сертификата не совпадает с доменом)";
+    case 12175:
+        return "ERROR_WINHTTP_SECURE_FAILURE (сбой TLS/SSL рукопожатия)";
+    default:
+        return NULL;
+    }
+}
+
 #ifndef PB_UPD_INFO_DEFINED
 #define PB_UPD_INFO_DEFINED
 typedef struct {
@@ -589,7 +614,10 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
 
                     if (hSession)
                     {
-                    HINTERNET hConnect = WinHttpConnect(hSession, host, uc.nPort, 0);
+                        DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+                        WinHttpSetOption(hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
+
+                        HINTERNET hConnect = WinHttpConnect(hSession, host, uc.nPort, 0);
                     if (hConnect)
                     {
                         size_t pl = wcslen(path);
@@ -965,7 +993,12 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                 DWORD err = GetLastError();
                                 g_lastSyncError = err;
                                 _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Ошибка отправки (код %lu)", err);
-                                PB_WriteAppLog("PecSync: Ошибка отправки запроса на %ls (WinHttp err %lu)", host, err);
+                                const char* errDesc = PecFormatWinHttpError(err);
+                                if (errDesc) {
+                                    PB_WriteAppLog("PecSync: Ошибка отправки запроса на %ls (WinHttp err %lu: %s)", host, err, errDesc);
+                                } else {
+                                    PB_WriteAppLog("PecSync: Ошибка отправки запроса на %ls (WinHttp err %lu)", host, err);
+                                }
                             }
                             WinHttpCloseHandle(hRequest);
                             g_isSyncing = FALSE;
@@ -984,7 +1017,12 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                         DWORD err = GetLastError();
                         g_lastSyncError = err;
                         _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Сбой подключения (%ls:%d)", host, uc.nPort);
-                        PB_WriteAppLog("PecSync: Не удалось подключиться к серверу %ls:%d (WinHttp error %lu)", host, uc.nPort, err);
+                        const char* errDesc = PecFormatWinHttpError(err);
+                        if (errDesc) {
+                            PB_WriteAppLog("PecSync: Не удалось подключиться к серверу %ls:%d (WinHttp error %lu: %s)", host, uc.nPort, err, errDesc);
+                        } else {
+                            PB_WriteAppLog("PecSync: Не удалось подключиться к серверу %ls:%d (WinHttp error %lu)", host, uc.nPort, err);
+                        }
                     }
                     WinHttpCloseHandle(hSession);
                 }

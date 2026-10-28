@@ -126,4 +126,8 @@ void PB_GetLogsDir(wchar_t* out, int cch);
 void PB_GetLogFilePath(wchar_t* out, int cch);
 void PB_WriteAppLog(const char* fmt, ...);
 
+// App log UI callback bridge
+typedef void (*PB_AppLogUiCallback)(const char* msg, int level);
+void PB_SetAppLogUiCallback(PB_AppLogUiCallback cb);
+
 #endif // PB_PROFILE_H

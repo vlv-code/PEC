@@ -267,6 +267,17 @@ export interface AppBuildConfig {
   updatedAt?: string;
 }
 
+export interface ToolchainDiagnostics {
+  available: boolean;
+  compilerName: string;
+  compilerVersion?: string;
+  hasGcc: boolean;
+  hasGxx: boolean;
+  hasWindres: boolean;
+  hasWixl: boolean;
+  hasMakensis: boolean;
+}
+
 export interface AppBuildInfo {
   version: string;
   builtAt: string;
@@ -277,6 +288,7 @@ export interface AppBuildInfo {
     compilerName: string;
     error?: string;
   };
+  toolchain?: ToolchainDiagnostics;
   coreModulesIntegrity?: {
     name: string;
     sha256: string;

@@ -11,7 +11,7 @@ import { recordRelease } from "./releases.js";
 import { getActiveProxy, getProxyById, getAllProxies } from "./proxies.js";
 import { getProxyConfig } from "./instances.js";
 import { getProfileById, expandRuleDomains } from "./routing.js";
-import type { AppBuildConfig, AppBuildInfo, AppProcessRule, ProxyNode } from "./types.js";
+import type { AppBuildConfig, AppBuildInfo, AppProcessRule, ProxyNode, ToolchainDiagnostics } from "./types.js";
 import { signBinary, getCertificateStatus } from "./codeSigner.js";
 
 export function getTemplatesAppDir(): string {
@@ -1294,6 +1294,7 @@ export function packageApp(baseUrl: string): AppBuildInfo {
     embeddedVersion,
     binariesStale,
     coreModulesIntegrity,
+    toolchain: getToolchainDiagnostics(),
     windowsPackageUrl: "/api/app-builder/download/windows",
     windowsPackageSize: winZipBuffer.length,
     windowsPackageSha256: winSha256,
@@ -1369,6 +1370,26 @@ export function extractPeVersion(buffer: Buffer): { fileVersion: string; product
   return { fileVersion: fv, productVersion: pv };
 }
 
+export function getEmbeddedVersion(customWinDir?: string): string {
+  const winDir = customWinDir || path.join(getTemplatesAppDir(), "windows");
+  const candidates = [
+    path.join(winDir, "PEC-App.exe"),
+    path.join(winDir, ".pristine", "PEC-App.exe"),
+    path.resolve("./templates/app/windows/PEC-App.exe"),
+    path.resolve("./templates/app/windows/.pristine/PEC-App.exe"),
+    path.join(winDir, "ProxyBridge.exe"),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      try {
+        const pe = extractPeVersion(fs.readFileSync(c));
+        if (pe) return pe.productVersion || pe.fileVersion;
+      } catch {}
+    }
+  }
+  return DEFAULT_APP_VERSION;
+}
+
 export function getCoreModulesIntegrity(customWinTemplatesDir?: string): Array<{
   name: string;
   sha256: string;
@@ -1433,12 +1454,17 @@ export function getCoreModulesIntegrity(customWinTemplatesDir?: string): Array<{
 
 export interface BuildAppBinariesResult {
   ok: boolean;
+  status?: string;
+  compiled?: boolean;
+  compilerMissing?: boolean;
   compiler?: string;
   compilerStatus?: {
     compiled: boolean;
     compilerName: string;
+    compilerMissing?: boolean;
     error?: string;
   };
+  toolchain?: ToolchainDiagnostics;
   builtFiles: string[];
   message: string;
   buildLog?: string[];
@@ -1579,6 +1605,9 @@ export function cleanAppBinaries(): CleanAppBinariesResult {
 }
 
 export function findMsvcVcvars(): string | null {
+  if (process.env.PEC_FORCE_NO_COMPILER === "true") {
+    return null;
+  }
   if (process.platform !== "win32") {
     return null;
   }
@@ -1624,6 +1653,9 @@ export const MSVC_GUI_CMD =
   "cl.exe /O2 /std:c++17 /EHsc /DUNICODE /D_UNICODE /DNDEBUG /D_WIN32_WINNT=0x0601 /utf-8 main_imgui.cpp imgui\\imgui*.cpp imgui\\backends\\imgui_impl_win32.cpp imgui\\backends\\imgui_impl_dx11.cpp profile\\profile.c profile\\json.c res\\app.res /Fe:PEC-App.exe /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib shlwapi.lib shell32.lib advapi32.lib ole32.lib user32.lib gdi32.lib ws2_32.lib winhttp.lib comctl32.lib";
 
 export function findMingwW64(): { gcc: string; gxx: string; windres: string } | null {
+  if (process.env.PEC_FORCE_NO_COMPILER === "true") {
+    return null;
+  }
   try {
     const isWin = process.platform === "win32";
     const gccNames = isWin ? ["x86_64-w64-mingw32-gcc.exe", "gcc.exe"] : ["x86_64-w64-mingw32-gcc"];
@@ -1705,6 +1737,85 @@ export function findMakensis(): string | null {
     if (fs.existsSync(stdNsis)) return stdNsis;
   }
   return null;
+}
+
+export function getToolchainDiagnostics(): ToolchainDiagnostics {
+  const mingw = findMingwW64();
+  const msvc = findMsvcVcvars();
+  const makensis = findMakensis();
+
+  let hasWixl = false;
+  try {
+    const isWin = process.platform === "win32";
+    const wixlCmd = isWin ? "where wixl.exe" : "which wixl";
+    const out = child_process
+      .execSync(wixlCmd, { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+      .trim();
+    if (out) hasWixl = true;
+  } catch {}
+  if (!hasWixl) {
+    try {
+      const isWin = process.platform === "win32";
+      const msiCmd = isWin ? "where msitools.exe" : "which msitools";
+      const out = child_process
+        .execSync(msiCmd, { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+        .trim();
+      if (out) hasWixl = true;
+    } catch {}
+  }
+  if (!hasWixl) {
+    try {
+      child_process.execFileSync("wixl", ["--version"], { windowsHide: true, stdio: "ignore" });
+      hasWixl = true;
+    } catch {}
+  }
+
+  const hasGcc = Boolean(mingw?.gcc);
+  const hasGxx = Boolean(mingw?.gxx);
+  const hasWindres = Boolean(mingw?.windres);
+  const hasMakensis = Boolean(makensis);
+
+  let available = false;
+  let compilerName = "None";
+  let compilerVersion: string | undefined = undefined;
+
+  if (msvc) {
+    available = true;
+    compilerName = "MSVC 2022 (x64)";
+    try {
+      const vcToolsVersionFile = path.join(path.dirname(msvc), "..", "..", "Microsoft.VCToolsVersion.default.txt");
+      if (fs.existsSync(vcToolsVersionFile)) {
+        compilerVersion = fs.readFileSync(vcToolsVersionFile, "utf-8").trim();
+      }
+    } catch {}
+    if (!compilerVersion) {
+      try {
+        const out = child_process.execSync(`call "${msvc}" x64 >nul && cl 2>&1`, { shell: "cmd.exe", windowsHide: true, encoding: "utf-8" });
+        const m = out.match(/Version\s+([\d.]+)/i);
+        if (m) compilerVersion = m[1];
+      } catch {}
+    }
+  } else if (mingw && mingw.gcc) {
+    available = true;
+    compilerName = "MinGW-w64 GCC (x86_64)";
+    try {
+      const out = child_process
+        .execSync(`"${mingw.gcc}" -dumpversion`, { encoding: "utf-8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] })
+        .trim();
+      if (out) compilerVersion = out;
+    } catch {}
+  }
+
+  return {
+    available,
+    compilerName,
+    compilerVersion,
+    hasGcc,
+    hasGxx,
+    hasWindres,
+    hasWixl,
+    hasMakensis,
+  };
 }
 
 export function compileBinariesWithMinGW(outDir?: string, customVersion?: string): BuildAppBinariesResult {
@@ -1930,6 +2041,29 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
 
   const vcvars = findMsvcVcvars();
   const mingw = findMingwW64();
+  const toolchain = getToolchainDiagnostics();
+
+  if (!vcvars && !mingw) {
+    const embeddedVersion = getEmbeddedVersion(winTemplatesDir);
+    log(`[Toolchain] No C/C++ compiler detected. Embedded templates binary version: v${embeddedVersion}`);
+    return {
+      ok: false,
+      compiled: false,
+      compilerMissing: true,
+      status: "compiler_missing",
+      compiler: "None",
+      compilerStatus: {
+        compiled: false,
+        compilerName: "None",
+        compilerMissing: true,
+        error: "No C/C++ compiler detected in system",
+      },
+      toolchain,
+      builtFiles: [],
+      message: `Компилятор C/C++ не обнаружен в системе. Сборка невозможна. В шаблонах находятся бинарники v${embeddedVersion}.`,
+      buildLog,
+    };
+  }
   const repoRoot = path.resolve(".");
   const clientWinDir = path.join(repoRoot, "client", "Windows");
   const guiDir = path.join(clientWinDir, "gui");
@@ -2263,6 +2397,51 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
     }
   }
 
+  if (compilerStatus.compiled) {
+    const integrityIssues: string[] = [];
+    const exesToVerify = ["PEC-App.exe", "PEC-CLI.exe", "PECAppSvc.exe"];
+    for (const exeName of exesToVerify) {
+      const exePath = path.join(winTemplatesDir, exeName);
+      if (!fs.existsSync(exePath)) {
+        integrityIssues.push(`${exeName} not found`);
+        continue;
+      }
+      const sz = fs.statSync(exePath).size;
+      if (sz < 100 * 1024) {
+        integrityIssues.push(`${exeName} size is ${sz} bytes (expected > 100 KB)`);
+      }
+      try {
+        const peBuf = fs.readFileSync(exePath);
+        const peVer = extractPeVersion(peBuf);
+        const peVerStr = peVer?.productVersion || peVer?.fileVersion;
+        if (!peVer || (!peVerStr?.startsWith(appVer.version) && peVerStr !== appVer.quad)) {
+          integrityIssues.push(`${exeName} version mismatch (got ${peVerStr || "none"}, expected ${appVer.version})`);
+        } else {
+          log(`[PE Integrity] ${exeName} verified (version: ${peVerStr}, size: ${Math.round(sz / 1024)} KB)`);
+        }
+      } catch (err: any) {
+        integrityIssues.push(`${exeName} PE check error: ${err?.message || err}`);
+      }
+    }
+
+    if (integrityIssues.length > 0) {
+      log(`[Integrity Warning] Output binary verification issues: ${integrityIssues.join("; ")}`);
+      return {
+        ok: false,
+        compiled: true,
+        compiler: compilerName,
+        compilerStatus: {
+          ...compilerStatus,
+          error: `Integrity check failed: ${integrityIssues.join("; ")}`,
+        },
+        toolchain,
+        builtFiles: uniqueFiles,
+        message: `Binary integrity verification failed: ${integrityIssues.join("; ")}`,
+        buildLog,
+      };
+    }
+  }
+
   const hasRealSys = fs.existsSync(winDivertSys) && fs.statSync(winDivertSys).size > 50000;
   if (hasRealSys) {
     log("[Security] Signed kernel driver WinDivert64.sys verified.");
@@ -2272,8 +2451,10 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   const driverStatus = hasRealSys ? " (Signed Driver Verified)" : "";
   return {
     ok: true,
+    compiled: compilerStatus.compiled,
     compiler: compilerName,
     compilerStatus,
+    toolchain,
     builtFiles: uniqueFiles,
     message: `Binaries ready (${compilerName}${driverStatus}): ${uniqueFiles.join(", ")}`,
     buildLog,

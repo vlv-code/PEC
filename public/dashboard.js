@@ -3271,6 +3271,20 @@
       modal.style.display = 'flex';
     }
 
+    function showCompilerWarningModal(message) {
+      const modal = document.getElementById('modalCompilerWarning');
+      const textEl = document.getElementById('compilerWarningModalText');
+      if (textEl) textEl.textContent = message;
+      if (modal) {
+        modal.style.display = 'flex';
+      }
+    }
+
+    function closeCompilerWarningModal() {
+      const modal = document.getElementById('modalCompilerWarning');
+      if (modal) modal.style.display = 'none';
+    }
+
     function closeBuildLogModal() {
       const modal = document.getElementById('modalBuildLog');
       if (modal) modal.style.display = 'none';
@@ -3471,7 +3485,7 @@
           const infoRes = await adminFetch('/api/app-builder/info');
           if (infoRes.ok) {
             const infoData = await infoRes.json();
-            const info = infoData.info || infoData.result;
+            const info = infoData.info || infoData.result || (infoData.toolchain || infoData.compilerMissing !== undefined ? infoData : null);
             if (info) {
               renderAppStudioBuildInfo(info);
             }
@@ -3534,6 +3548,108 @@
       } else if (staleBannerEl) {
         staleBannerEl.style.display = 'none';
         staleBannerEl.innerHTML = '';
+      }
+
+      // 1.1 Dedicated Toolchain Diagnostics card / pill next to the binary version warning
+      let toolchainEl = document.getElementById('appToolchainDiagnostics');
+      const tc = info.toolchain;
+      const hasToolchainInfo = Boolean(
+        tc ||
+        info.compilerMissing !== undefined ||
+        (info.compilerStatus && typeof info.compilerStatus === 'object')
+      );
+
+      if (hasToolchainInfo) {
+        if (!toolchainEl) {
+          toolchainEl = document.createElement('div');
+          toolchainEl.id = 'appToolchainDiagnostics';
+          const staleEl = document.getElementById('appBinariesStaleBanner');
+          if (staleEl && staleEl.parentNode) {
+            staleEl.parentNode.insertBefore(toolchainEl, staleEl.nextSibling);
+          } else {
+            const container = document.getElementById('viewAppStudio')
+              || document.getElementById('tab-app-studio')
+              || (document.getElementById('appBuildStatusMsg') ? document.getElementById('appBuildStatusMsg').parentNode : null)
+              || document.body;
+            if (container) {
+              if (container.firstChild) {
+                container.insertBefore(toolchainEl, container.firstChild);
+              } else {
+                container.appendChild(toolchainEl);
+              }
+            }
+          }
+        }
+        if (toolchainEl) {
+          const isAvailable = Boolean(tc && tc.available === true && !info.compilerMissing && !tc.compilerMissing);
+
+          toolchainEl.className = 'card toolchain-card';
+          toolchainEl.style.display = 'flex';
+          toolchainEl.style.alignItems = 'center';
+          toolchainEl.style.justifyContent = 'space-between';
+          toolchainEl.style.flexWrap = 'wrap';
+          toolchainEl.style.gap = '10px';
+          toolchainEl.style.padding = '10px 14px';
+          toolchainEl.style.borderRadius = '6px';
+          toolchainEl.style.marginBottom = '14px';
+          toolchainEl.style.gridColumn = '1 / -1';
+          toolchainEl.style.background = isAvailable ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.1)';
+          toolchainEl.style.border = isAvailable ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.35)';
+
+          function parseToolInfo(toolKey, defaultAvail) {
+            if (!tc) return { available: defaultAvail, text: '' };
+            const raw = tc[toolKey] !== undefined ? tc[toolKey] : (tc.tools && tc.tools[toolKey]);
+            if (typeof raw === 'boolean') return { available: raw, text: '' };
+            if (typeof raw === 'string') return { available: true, text: raw };
+            if (raw && typeof raw === 'object') {
+              const avail = raw.available !== undefined ? Boolean(raw.available) : (raw.present !== undefined ? Boolean(raw.present) : defaultAvail);
+              const txt = raw.version || raw.path || '';
+              return { available: avail, text: txt };
+            }
+            return { available: defaultAvail, text: '' };
+          }
+
+          const gccInfo = parseToolInfo('gcc', isAvailable);
+          const windresInfo = parseToolInfo('windres', isAvailable);
+          const wixlInfo = parseToolInfo('wixl', Boolean(tc && tc.wixl && (tc.wixl === true || tc.wixl.available)));
+
+          const mainBadgeText = isAvailable
+            ? ('✓ Тулчейн компиляции: ' + (tc.compilerName || (info.compilerStatus && info.compilerStatus.compilerName) || 'MinGW-w64 GCC'))
+            : '⚠ Компилятор C/C++ не установлен (сборка из исходников недоступна)';
+
+          const mainBadgeBg = isAvailable ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)';
+          const mainBadgeColor = isAvailable ? '#10b981' : '#f59e0b';
+          const mainBadgeBorder = isAvailable ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.5)';
+
+          const gccBadge = gccInfo.available
+            ? `<span class="badge badge-tool-gcc" id="appToolchainGccBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="GCC: ${esc(gccInfo.text || 'Доступен')}">✓ GCC${gccInfo.text ? ' (' + esc(gccInfo.text) + ')' : ''}</span>`
+            : `<span class="badge badge-tool-gcc" id="appToolchainGccBadge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="GCC: Отсутствует">❌ GCC</span>`;
+
+          const windresBadge = windresInfo.available
+            ? `<span class="badge badge-tool-windres" id="appToolchainWindresBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Windres: ${esc(windresInfo.text || 'Доступен')}">✓ Windres${windresInfo.text ? ' (' + esc(windresInfo.text) + ')' : ''}</span>`
+            : `<span class="badge badge-tool-windres" id="appToolchainWindresBadge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Windres: Отсутствует">❌ Windres</span>`;
+
+          const wixlBadge = wixlInfo.available
+            ? `<span class="badge badge-tool-wixl" id="appToolchainWixlBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Wixl: ${esc(wixlInfo.text || 'Доступен')}">✓ Wixl${wixlInfo.text ? ' (' + esc(wixlInfo.text) + ')' : ''}</span>`
+            : `<span class="badge badge-tool-wixl" id="appToolchainWixlBadge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Wixl: Отсутствует">⚠ Wixl</span>`;
+
+          const tooltipStr = `GCC: ${gccInfo.available ? (gccInfo.text || 'OK') : 'отсутствует'}, Windres: ${windresInfo.available ? (windresInfo.text || 'OK') : 'отсутствует'}, Wixl: ${wixlInfo.available ? (wixlInfo.text || 'OK') : 'отсутствует'}`;
+          toolchainEl.setAttribute('title', tooltipStr);
+
+          toolchainEl.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span id="appToolchainMainBadge" class="badge" style="background: ${mainBadgeBg}; color: ${mainBadgeColor}; border: 1px solid ${mainBadgeBorder}; font-weight: 600; padding: 4px 10px; border-radius: 6px; font-size: 12px;">${esc(mainBadgeText)}</span>
+            </div>
+            <div id="appToolchainToolsList" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;" title="${esc(tooltipStr)}">
+              ${gccBadge}
+              ${windresBadge}
+              ${wixlBadge}
+            </div>
+          `;
+        }
+      } else if (toolchainEl) {
+        toolchainEl.style.display = 'none';
+        toolchainEl.innerHTML = '';
       }
 
       // 2. Build status message (Windows / Linux package sizes, SHA, MSI, signature)
@@ -3735,6 +3851,7 @@
       toast(currentLang === 'ru' ? 'Запуск сборки бинарников PEC-App...' : 'Starting binary build...', 'info');
 
       try {
+        const startTime = Date.now();
         const verEl = document.getElementById('appBuildVersion');
         const targetVer = verEl ? verEl.value.trim() : '';
         const res = await adminFetch('/api/app-builder/build-binaries', {
@@ -3743,31 +3860,65 @@
           body: JSON.stringify({ version: targetVer }),
         });
         const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok) {
+
+        const isMissingOrFailed = Boolean(
+          !res.ok ||
+          res.compilerMissing ||
+          data.compilerMissing ||
+          !data.ok
+        );
+
+        if (isMissingOrFailed) {
+          const remVer = data.embeddedVersion || (data.info && data.info.embeddedVersion) || (data.info && data.info.version) || targetVer || '2.1.0';
+          const warnMsg = currentLang === 'ru'
+            ? `Компилятор C/C++ (MinGW / MSVC) не обнаружен. Сборка не производилась. В шаблонах остаются бинарники v${remVer}`
+            : `C/C++ compiler (MinGW / MSVC) not found. Compilation was not performed. Templates keep binaries v${remVer}`;
+
+          if (data.info) {
+            renderAppStudioBuildInfo(data.info);
+          } else if (res.compilerMissing || data.compilerMissing || !res.ok) {
+            renderAppStudioBuildInfo({
+              version: targetVer || '2.2.0',
+              embeddedVersion: remVer,
+              binariesStale: true,
+              compilerMissing: true,
+              toolchain: { available: false, compilerMissing: true }
+            });
+          }
+
+          if (statusEl) {
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--danger, #ef4444)';
+            statusEl.textContent = warnMsg;
+          }
+          toast(warnMsg, 'error');
+          showCompilerWarningModal(warnMsg);
+        } else {
+          // Render build info first so it does not overwrite the statusEl build message
+          if (data.info) {
+            renderAppStudioBuildInfo(data.info);
+          }
+
+          const executionTimeMs = Date.now() - startTime;
+          const timeSec = (executionTimeMs / 1000).toFixed(1);
+          const compiledVer = data.version || (data.info && data.info.version) || targetVer || '2.2.0';
           const filesCount = Array.isArray(data.builtFiles) ? data.builtFiles.length : 0;
           if (statusEl) {
             statusEl.style.display = 'block';
             statusEl.style.color = 'var(--success)';
             statusEl.innerHTML = currentLang === 'ru'
-              ? `Бинарники готовы (${esc(data.compiler || 'Toolchain')}, ${filesCount} файлов): ${esc(data.message || 'OK')} &bull; ${new Date().toLocaleTimeString()}`
-              : `Binaries ready (${esc(data.compiler || 'Toolchain')}, ${filesCount} files): ${esc(data.message || 'OK')} &bull; ${new Date().toLocaleTimeString()}`;
-          }
-          if (data.info) {
-            renderAppStudioBuildInfo(data.info);
+              ? `Бинарники v${esc(compiledVer)} готовы (${esc(data.compiler || 'Toolchain')}, ${filesCount} файлов, ${timeSec}с): ${esc(data.message || 'OK')} &bull; ${new Date().toLocaleTimeString()}`
+              : `Binaries v${esc(compiledVer)} ready (${esc(data.compiler || 'Toolchain')}, ${filesCount} files, ${timeSec}s): ${esc(data.message || 'OK')} &bull; ${new Date().toLocaleTimeString()}`;
           }
           if (Array.isArray(data.buildLog) && data.buildLog.length > 0) {
             lastAppBuildLog = data.buildLog;
             const logBtn = document.getElementById('btnAppViewBuildLog');
             if (logBtn) logBtn.style.display = 'inline-block';
           }
-          toast(currentLang === 'ru' ? 'Бинарники успешно подготовлены!' : 'Binaries compiled/verified successfully!', 'success');
-        } else {
-          if (statusEl) {
-            statusEl.style.display = 'block';
-            statusEl.style.color = 'var(--danger)';
-            statusEl.textContent = currentLang === 'ru' ? 'Ошибка сборки бинарников: ' + (data.error || data.message || res.status) : 'Binary build error: ' + (data.error || data.message || res.status);
-          }
-          toast(currentLang === 'ru' ? 'Ошибка сборки бинарников: ' + (data.error || data.message || res.status) : 'Binary build error: ' + (data.error || data.message || res.status), 'error');
+          const successMsg = currentLang === 'ru'
+            ? `Сборка бинарников v${compiledVer} успешно выполнена (${timeSec} с)`
+            : `Binaries v${compiledVer} compiled successfully (${timeSec}s)`;
+          toast(successMsg, 'success');
         }
       } catch (e) {
         if (statusEl) {
@@ -4415,6 +4566,8 @@
     window.saveAppStudioConfigAction = saveAppStudioConfigAction;
     window.cleanAppBinariesAction = cleanAppBinariesAction;
     window.buildAppBinariesAction = buildAppBinariesAction;
+    window.showCompilerWarningModal = showCompilerWarningModal;
+    window.closeCompilerWarningModal = closeCompilerWarningModal;
     window.buildAppPackageAction = buildAppPackageAction;
     window.updateAppLivePreview = updateAppLivePreview;
     window.importSelectedRoutingProfileRules = importSelectedRoutingProfileRules;
