@@ -1,15 +1,17 @@
 # ==============================================================================
 # PEC - Proxy Extension Corp
-# Production Multi-Stage Dockerfile
+# Production Multi-Stage Dockerfile (Debian Bookworm)
 # ==============================================================================
 
 # Stage 1: Build environment (includes compilers, MinGW-w64, and raw C client code)
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
 # Install build dependencies for native modules and MinGW cross-compiler
-RUN apk add --no-cache python3 make g++ git mingw-w64-gcc mingw-w64-binutils || apk add --no-cache python3 make g++ git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ git mingw-w64 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests (package-lock.json is committed - npm ci works)
 COPY package.json package-lock.json* ./
@@ -26,12 +28,14 @@ RUN npm run build
 # ==============================================================================
 # Stage 2: Production Runner (runtime image with msitools & MinGW cross-compiler)
 # ==============================================================================
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 
 WORKDIR /app
 
 # Install runtime utilities, WiX MSI tools (wixl), and MinGW cross-compiler for on-demand packaging
-RUN apk add --no-cache tzdata dumb-init curl bash msitools mingw-w64-gcc mingw-w64-binutils || apk add --no-cache tzdata dumb-init curl bash msitools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata dumb-init curl bash msitools mingw-w64 \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -39,8 +43,8 @@ ENV HOST=0.0.0.0
 ENV DATA_DIR=/app/data
 
 # Create application directories with non-root ownership
-RUN addgroup -g 1001 -S pecgroup && \
-    adduser -u 1001 -S pecuser -G pecgroup
+RUN groupadd -g 1001 pecgroup && \
+    useradd -u 1001 -g pecgroup -s /bin/bash pecuser
 
 # Runtime dependencies only: the bundle (dist/server.cjs) externalizes packages
 COPY --from=builder --chown=pecuser:pecgroup /app/package.json /app/package-lock.json* ./

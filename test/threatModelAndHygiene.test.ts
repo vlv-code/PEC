@@ -142,18 +142,23 @@ test("Task 3.4: Dockerfile implements multi-stage build with MinGW packaging too
   assert.ok(dockerfile.includes("AS runner"), "Dockerfile must define runner stage");
 
   // Check builder stage installs MinGW toolchain
-  const builderPart = dockerfile.split("FROM node:20-alpine AS runner")[0];
-  const runnerPart = dockerfile.split("FROM node:20-alpine AS runner")[1];
+  const splitRunner = dockerfile.split(/FROM\s+node:20-[^\s]+\s+AS\s+runner/i);
+  const builderPart = splitRunner[0];
+  const runnerPart = splitRunner[1];
 
   assert.ok(
-    builderPart.includes("mingw-w64-gcc"),
+    builderPart.includes("mingw-w64"),
     "Builder stage must contain MinGW-w64 toolchain"
   );
 
-  // Check runner stage includes MinGW cross-compiler for on-demand packaging, but not host build tools like g++
+  // Check runner stage includes MinGW cross-compiler and msitools (wixl) for on-demand packaging, but not host build tools like g++
   assert.ok(
-    runnerPart.includes("mingw-w64-gcc"),
+    runnerPart.includes("mingw-w64"),
     "Runner stage must include MinGW-w64 toolchain for on-demand packaging"
+  );
+  assert.ok(
+    runnerPart.includes("msitools"),
+    "Runner stage must include msitools (wixl) for MSI packaging"
   );
   assert.ok(
     !runnerPart.includes("g++"),
