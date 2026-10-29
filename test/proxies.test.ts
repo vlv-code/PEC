@@ -324,3 +324,32 @@ test("probeProxyTcp: verifies TCP connectivity with listening and non-listening 
   }
 });
 
+
+test("probeProxyTcp: concurrent multi-node caching keyed by host:port without eviction", async () => {
+  const net = await import("node:net");
+  const server1 = net.createServer((sock) => sock.end());
+  const server2 = net.createServer((sock) => sock.end());
+  await new Promise<void>((resolve) => server1.listen(0, "127.0.0.1", () => resolve()));
+  await new Promise<void>((resolve) => server2.listen(0, "127.0.0.1", () => resolve()));
+  const port1 = (server1.address() as any).port;
+  const port2 = (server2.address() as any).port;
+
+  try {
+    const res1 = await probeProxyTcp("127.0.0.1", port1, 1000);
+    const res2 = await probeProxyTcp("127.0.0.1", port2, 1000);
+    assert.strictEqual(res1, true);
+    assert.strictEqual(res2, true);
+
+    // Close server1 and server2: cached probes must still return true within TTL without evicting each other
+    await new Promise<void>((resolve) => server1.close(() => resolve()));
+    await new Promise<void>((resolve) => server2.close(() => resolve()));
+
+    const cached1 = await probeProxyTcp("127.0.0.1", port1, 1000);
+    const cached2 = await probeProxyTcp("127.0.0.1", port2, 1000);
+    assert.strictEqual(cached1, true, "port1 result should be cached");
+    assert.strictEqual(cached2, true, "port2 result should be cached independently");
+  } finally {
+    try { server1.close(); } catch {}
+    try { server2.close(); } catch {}
+  }
+});

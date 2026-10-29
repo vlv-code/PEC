@@ -7,7 +7,7 @@ import path from "node:path";
 import http from "node:http";
 import crypto from "node:crypto";
 import express from "express";
-import { createCredsRouter, getFallbackPacSecret, resetFallbackPacSecretForTest, resolvePacSecret } from "../src/routes/credsRoutes.js";
+import { createCredsRouter, getFallbackPacSecret, resetFallbackPacSecretForTest, resolvePacSecret, EnrollmentTracker } from "../src/routes/credsRoutes.js";
 import { signPacUrlParams } from "../src/pacSigner.js";
 import { enrollInstanceToken, revokeInstanceToken, deleteInstance, _clearPersistentMetaForTesting } from "../src/instances.js";
 import { atomicWriteCreds, getCredsStorePath } from "../src/rotate.js";
@@ -342,4 +342,19 @@ test("N-5: loadDockerSecrets reads secrets from *_FILE suffix paths into process
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+test("D15: EnrollmentTracker cleans up expired entries and enforces rate limits", async () => {
+  const tracker = new EnrollmentTracker(50, 2); // 50ms window, 2 requests max
+  assert.strictEqual(tracker.check("1.2.3.4"), true, "First request within window should pass");
+  assert.strictEqual(tracker.check("1.2.3.4"), true, "Second request within window should pass");
+  assert.strictEqual(tracker.check("1.2.3.4"), false, "Third request within window should be rate-limited");
+
+  // Other IP should not be affected
+  assert.strictEqual(tracker.check("5.6.7.8"), true, "Different IP should pass");
+
+  // Wait for window to expire
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.strictEqual(tracker.check("1.2.3.4"), true, "Request after resetTime should reset and pass");
+});
+
 

@@ -21,6 +21,7 @@ import { initDefaultProxyIfNeeded } from "./src/proxies.js";
 import { initDashboardCredentials } from "./src/auth.js";
 import { renderDashboardHtml } from "./src/views/dashboardView.js";
 import { getAppVersion } from "./src/version.js";
+import { getClientIp } from "./src/audit.js";
 
 // .env is loaded by the "./src/loadEnv.js" side-effect import above - before
 // any module body (scheduler, auth, packager...) reads env at load time.
@@ -135,7 +136,7 @@ startScheduler();
 // Request logging middleware for docker & container observability
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
-  const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "-";
+  const clientIp = getClientIp(req);
 
   res.on("finish", () => {
     const duration = Date.now() - start;
@@ -192,6 +193,9 @@ const adminAuth = createTokenAuthMiddleware(() => ADMIN_TOKEN, "x-admin-token", 
 
 // Route-specific large payload handler strictly behind adminAuth (Audit H-4)
 app.post("/api/routing/presets/import-file", adminAuth, express.json({ limit: "150mb" }));
+
+// Route-specific 16KB json body limit for sync endpoints before global 1MB parser (D8)
+app.use(["/api/sync", "/api/app/sync"], express.json({ limit: "16kb" }));
 
 // Enforce standard 1mb limit globally for all standard endpoints to prevent memory DoS
 app.use(express.json({ limit: "1mb" }));

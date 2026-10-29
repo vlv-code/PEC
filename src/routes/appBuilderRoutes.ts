@@ -211,7 +211,7 @@ export function createAppBuilderRouter(
             : computeCoreModulesIntegrity());
 
       if (info) {
-        const embeddedVersion = info.embeddedVersion ?? extractPeVersionFromFile() ?? info.version ?? "2.2.0";
+        const embeddedVersion = info.embeddedVersion ?? extractPeVersionFromFile() ?? info.version ?? DEFAULT_APP_VERSION;
         const binariesStale = typeof info.binariesStale === "boolean" ? info.binariesStale : (embeddedVersion !== info.version);
         const compilerStatus = info.compilerStatus ?? { compiled: true, compilerName: "Pre-compiled" };
 
@@ -235,7 +235,7 @@ export function createAppBuilderRouter(
         });
       }
 
-      const embeddedVersion = extractPeVersionFromFile() || "2.2.0";
+      const embeddedVersion = extractPeVersionFromFile() || DEFAULT_APP_VERSION;
       res.json({
         ok: true,
         info: null,
@@ -319,7 +319,7 @@ export function createAppBuilderRouter(
           info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
         } catch {}
       }
-      const embeddedVersion = extractPeVersionFromFile() || customVersion || "2.2.0";
+      const embeddedVersion = extractPeVersionFromFile() || customVersion || DEFAULT_APP_VERSION;
       const config = getAppBuildConfig();
       const binariesStale = embeddedVersion !== config.version;
       const enrichedInfo = {

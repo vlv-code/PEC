@@ -115,8 +115,8 @@ export function createReleasesRouter(
   router.post("/api/releases/set-active", adminAuthMiddleware, (req: Request, res: Response) => {
     try {
       const { type, version } = req.body || {};
-      if (type !== "extension" && type !== "app" && type !== "msi") {
-        return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension', 'app', or 'msi'" });
+      if (type !== "extension" && type !== "app") {
+        return res.status(400).json({ ok: false, error: "Invalid type: must be 'extension' or 'app'" });
       }
       if (!version || typeof version !== "string" || !VERSION_REGEX.test(version.trim())) {
         return res.status(400).json({ ok: false, error: "Invalid version format" });

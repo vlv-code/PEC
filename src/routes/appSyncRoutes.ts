@@ -18,6 +18,7 @@ import { ProxyNode } from "../types.js";
 import { getActiveRelease } from "../releases.js";
 import { resolveProfileForInstance, expandRuleDomains } from "../routing.js";
 import { getBuildConfig as getExtensionBuildConfig } from "../packager.js";
+import { DEFAULT_APP_VERSION } from "../appPackager.js";
 import { isNewerVersion } from "../utils/semver.js";
 import { getAppBuildInfoPath } from "../storage.js";
 
@@ -207,18 +208,20 @@ export function createAppSyncRouter(
             pass: "",
           };
 
-      const allProxiesList = getAllProxies(true).filter((p) => p.host && p.port && (p as any).enabled !== false);
+      const allProxiesList = getAllProxies(false).filter((p) => p.host && p.port && (p as any).enabled !== false);
       const availableProxies = allProxiesList.map((p) => ({
         id: p.id,
         name: p.name || `${p.host}:${p.port}`,
         protocol: p.protocol || "socks5",
         host: p.host,
         port: p.port,
+        user: p.username || "",
+        pass: p.password || "",
       }));
 
       const activeRelease = getActiveRelease("app");
       const clientVersion = String(version || "").trim();
-      const latestVersion = activeRelease?.version || "2.2.0";
+      const latestVersion = activeRelease?.version || DEFAULT_APP_VERSION;
       let hasUpdate = Boolean(activeRelease && isNewerVersion(activeRelease.version, clientVersion));
 
       let activeReleaseInfo: any = { ...(activeRelease || {}) };

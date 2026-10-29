@@ -290,9 +290,9 @@ test("App Sync API: availableProxies, proxy assignment, and instance deletion", 
     assert.strictEqual(syncBody.ok, true);
     assert.ok(Array.isArray(syncBody.availableProxies));
     for (const p of syncBody.availableProxies) {
-      assert.strictEqual((p as any).user, undefined, "availableProxies must not leak usernames");
-      assert.strictEqual((p as any).pass, undefined, "availableProxies must not leak passwords");
-      assert.strictEqual((p as any).password, undefined, "availableProxies must not leak passwords");
+      assert.strictEqual(typeof (p as any).user, "string", "availableProxies must include user for client nodes");
+      assert.strictEqual(typeof (p as any).pass, "string", "availableProxies must include pass for client nodes");
+      assert.strictEqual((p as any).password, undefined, "availableProxies must not expose raw password field name");
     }
 
     // Assign proxy to this desktop client
@@ -431,4 +431,47 @@ test("App Sync API: fallback version without active release is 2.2.0", async () 
     assert.strictEqual(body.update.latestVersion, "2.2.0", "Fallback version without active release must be 2.2.0");
   });
 });
+
+test("D7: availableProxies includes credentials user and pass for Windows C-client", async () => {
+  const { createProxy, deleteProxy } = await import("../src/proxies.js");
+  const testNode = createProxy({
+    name: "Corporate Node",
+    protocol: "socks5",
+    host: "10.50.0.1",
+    port: 1080,
+    username: "corp_user",
+    password: "corp_password_123",
+  });
+
+  try {
+    await withServer(async (base) => {
+      const res = await fetch(`${base}/api/app/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Fleet-Token": TEST_TOKEN,
+        },
+        body: JSON.stringify({
+          appInstanceId: "app_test_d7",
+          hostname: "WORKSTATION-D7",
+          username: "user_d7",
+          version: "2.1.0",
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.ok, true);
+      assert.ok(Array.isArray(body.availableProxies));
+      const found = body.availableProxies.find((p: any) => p.id === testNode.id);
+      assert.ok(found, "Created node must appear in availableProxies");
+      assert.strictEqual(found.user, "corp_user", "availableProxies must contain username in user field");
+      assert.strictEqual(found.pass, "corp_password_123", "availableProxies must contain password in pass field");
+      assert.strictEqual(found.password, undefined, "password field should not be present");
+    });
+  } finally {
+    deleteProxy(testNode.id);
+  }
+});
+
 

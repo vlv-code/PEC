@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import dns from "node:dns";
+import { Agent } from "undici";
 import { RotationConfig, RotationHistoryItem, Panel3xuiConfig } from "./types.js";
 import { writeJsonAtomic, readJsonStore } from "./jsonStore.js";
 import { getCredsStorePath, get3xuiPanelsPath, getRotationConfigPath } from "./storage.js";
@@ -229,12 +230,61 @@ function assertNoRedirect(res: Response, what: string): void {
  * - older panels accept a plain POST /login.
  * Returns the Cookie header value to authorize subsequent API calls.
  */
+
+function resolveInsecureTls(panelUrl?: string, explicit?: boolean): boolean {
+  if (explicit !== undefined) return Boolean(explicit);
+  if (panelUrl) {
+    try {
+      const cleanUrl = panelUrl.replace(/\/+$/, "");
+      const panelsFile = get3xuiPanelsPath();
+      const list = readJsonStore<Panel3xuiConfig[]>(panelsFile) || [];
+      const p = list.find((item) => item.panelUrl.replace(/\/+$/, "") === cleanUrl);
+      if (p && p.insecureTls !== undefined) {
+        return Boolean(p.insecureTls);
+      }
+    } catch {}
+  }
+  try {
+    const rotConfigFile = getRotationConfigPath();
+    if (fs.existsSync(rotConfigFile)) {
+      const rotData = JSON.parse(fs.readFileSync(rotConfigFile, "utf-8"));
+      if (rotData && rotData.insecureSkipVerify !== undefined) {
+        return Boolean(rotData.insecureSkipVerify);
+      }
+    }
+  } catch {}
+  return false;
+}
+
+function getFetchDispatcher(insecureTls?: boolean): Agent | undefined {
+  if (!insecureTls) return undefined;
+  const agent = new Agent({ connect: { rejectUnauthorized: false } });
+  const origDispatch = agent.dispatch.bind(agent);
+  agent.dispatch = function (opts: any, handler: any) {
+    if (handler && typeof handler.onResponseStart !== "function") {
+      const bridged = Object.create(handler);
+      bridged.onRequestStart = () => {};
+      bridged.onResponseError = (_ctrl: any, err: any) => handler.onError?.(err);
+      bridged.onResponseStart = (_ctrl: any, status: number, headers: any, statusText: string) =>
+        handler.onHeaders?.(status, headers, () => {}, statusText);
+      bridged.onResponseData = (_ctrl: any, chunk: any) => handler.onData?.(chunk);
+      bridged.onResponseEnd = (_ctrl: any, trailers: any) => handler.onComplete?.(trailers);
+      return origDispatch(opts, bridged);
+    }
+    return origDispatch(opts, handler);
+  };
+  return agent;
+}
+
 async function panelLogin(
   panel: string,
   username: string,
   password: string,
-  timeoutMs: number
+  timeoutMs: number,
+  insecureTls?: boolean
 ): Promise<{ cookie: string; csrfToken: string | null }> {
+  const isInsecure = resolveInsecureTls(panel, insecureTls);
+  const dispatcher = getFetchDispatcher(isInsecure);
   let cookie = "";
   let csrfToken: string | null = null;
 
@@ -244,6 +294,7 @@ async function panelLogin(
   const csrfRes = await fetch(`${panel}/csrf-token`, {
     redirect: "manual",
     signal: AbortSignal.timeout(timeoutMs),
+    ...(dispatcher ? { dispatcher } : {}),
   });
   assertNoRedirect(csrfRes, "csrf-token");
   if (csrfRes.ok) {
@@ -264,6 +315,7 @@ async function panelLogin(
     body: JSON.stringify({ username, password }),
     redirect: "manual",
     signal: AbortSignal.timeout(timeoutMs),
+    ...(dispatcher ? { dispatcher } : {}),
   });
   assertNoRedirect(loginRes, "login");
 
@@ -339,6 +391,7 @@ export async function sync3xuiInboundByTag(params: {
   targetUsername?: string;
   rotatePassword?: boolean;
   timeoutSec?: number;
+  insecureTls?: boolean;
 }): Promise<{
   ok: boolean;
   inboundId?: number;
@@ -357,15 +410,18 @@ export async function sync3xuiInboundByTag(params: {
 
   const panel = params.panelUrl.replace(/\/+$/, "");
   const timeoutMs = (params.timeoutSec || 10) * 1000;
+  const isInsecure = resolveInsecureTls(panel, params.insecureTls);
+  const dispatcher = getFetchDispatcher(isInsecure);
 
   try {
-    const auth = await panelLogin(panel, params.adminUser, params.adminPass, timeoutMs);
+    const auth = await panelLogin(panel, params.adminUser, params.adminPass, timeoutMs, isInsecure);
 
     // Fetch inbounds
     const inboundsRes = await fetch(`${panel}/panel/api/inbounds/list`, {
       headers: panelApiHeaders(auth),
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
+      ...(dispatcher ? { dispatcher } : {}),
     });
     assertNoRedirect(inboundsRes, "inbounds list");
     if (!inboundsRes.ok) {
@@ -452,6 +508,7 @@ export async function sync3xuiInboundByTag(params: {
         body: JSON.stringify(target),
         redirect: "manual",
         signal: AbortSignal.timeout(timeoutMs),
+        ...(dispatcher ? { dispatcher } : {}),
       });
       assertNoRedirect(updateRes, "inbound update");
 
@@ -501,6 +558,7 @@ export async function test3xuiConnection(config: {
   inboundRemark?: string;
   inboundTag?: string;
   timeoutSec?: number;
+  insecureTls?: boolean;
 }): Promise<{ ok: boolean; message: string; inboundFound?: boolean; inboundId?: number }> {
   const urlCheck = await validateSafeEndpointUrlAsync(config.panelUrl);
   if (!urlCheck.valid) {
@@ -509,15 +567,18 @@ export async function test3xuiConnection(config: {
 
   const panel = config.panelUrl.replace(/\/+$/, "");
   const timeoutMs = (config.timeoutSec || 8) * 1000;
+  const isInsecure = resolveInsecureTls(panel, config.insecureTls);
+  const dispatcher = getFetchDispatcher(isInsecure);
 
   try {
-    const auth = await panelLogin(panel, config.adminUser, config.adminPass, timeoutMs);
+    const auth = await panelLogin(panel, config.adminUser, config.adminPass, timeoutMs, isInsecure);
 
     // Check inbounds list
     const inboundsRes = await fetch(`${panel}/panel/api/inbounds/list`, {
       headers: panelApiHeaders(auth),
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
+      ...(dispatcher ? { dispatcher } : {}),
     });
     assertNoRedirect(inboundsRes, "inbounds list");
     if (!inboundsRes.ok) {
@@ -622,6 +683,7 @@ async function doExecuteRotation(customConfig?: Partial<RotationConfig>): Promis
         targetUsername: activeProxy?.username,
         rotatePassword: true,
         timeoutSec: Math.floor(timeoutMs / 1000),
+        insecureTls: customConfig?.insecureSkipVerify,
       });
 
       if (!syncResult.ok) {
@@ -819,9 +881,9 @@ export function delete3xuiPanel(id: string): boolean {
 }
 
 export async function fetch3xuiInbounds(
-  configOrId: { panelUrl: string; adminUser: string; adminPass: string; timeoutSec?: number } | string
+  configOrId: { panelUrl: string; adminUser: string; adminPass: string; timeoutSec?: number; insecureTls?: boolean } | string
 ): Promise<Array<any>> {
-  let targetConfig: { panelUrl: string; adminUser: string; adminPass: string; timeoutSec?: number };
+  let targetConfig: { panelUrl: string; adminUser: string; adminPass: string; timeoutSec?: number; insecureTls?: boolean };
 
   if (typeof configOrId === "string") {
     const p = get3xuiPanelById(configOrId);
@@ -831,6 +893,7 @@ export async function fetch3xuiInbounds(
       adminUser: p.adminUser,
       adminPass: p.adminPass,
       timeoutSec: 10,
+      insecureTls: p.insecureTls,
     };
   } else {
     targetConfig = configOrId;
@@ -843,12 +906,15 @@ export async function fetch3xuiInbounds(
 
   const panel = targetConfig.panelUrl.replace(/\/+$/, "");
   const timeoutMs = (targetConfig.timeoutSec || 10) * 1000;
+  const isInsecure = resolveInsecureTls(panel, targetConfig.insecureTls);
+  const dispatcher = getFetchDispatcher(isInsecure);
 
-  const auth = await panelLogin(panel, targetConfig.adminUser, targetConfig.adminPass, timeoutMs);
+  const auth = await panelLogin(panel, targetConfig.adminUser, targetConfig.adminPass, timeoutMs, isInsecure);
   const inboundsRes = await fetch(`${panel}/panel/api/inbounds/list`, {
     headers: panelApiHeaders(auth),
     redirect: "manual",
     signal: AbortSignal.timeout(timeoutMs),
+    ...(dispatcher ? { dispatcher } : {}),
   });
   assertNoRedirect(inboundsRes, "inbounds list");
   if (!inboundsRes.ok) {

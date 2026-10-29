@@ -464,7 +464,15 @@ test("setup.c extracts payload to a secure randomized temp directory with SYSTEM
 
   // If clang is present on the system, compile setup.c to ensure zero compilation or syntax errors
   try {
-    execSync("where.exe clang", { stdio: "ignore" });
+    const whichClang = process.platform === "win32" ? "where.exe clang" : "which clang";
+    let hasClang = false;
+    try {
+      execSync(whichClang, { stdio: "ignore" });
+      hasClang = true;
+    } catch {
+      hasClang = false;
+    }
+    if (!hasClang) return;
     const res = execSync("clang -fsyntax-only -Wall -Werror=comment client/Windows/installer/setup.c", {
       encoding: "utf-8",
     });
@@ -513,7 +521,15 @@ test("update.h enforces WinVerifyTrust Authenticode signature verification befor
 
   // If clang is present on the system, compile main.c (which includes update.h) to ensure zero compilation errors
   try {
-    execSync("where.exe clang", { stdio: "ignore" });
+    const whichClang = process.platform === "win32" ? "where.exe clang" : "which clang";
+    let hasClang = false;
+    try {
+      execSync(whichClang, { stdio: "ignore" });
+      hasClang = true;
+    } catch {
+      hasClang = false;
+    }
+    if (!hasClang) return;
     const res = execSync("clang -fsyntax-only -Wall -Wextra -I client/Windows/gui client/Windows/gui/main.c", {
       encoding: "utf-8",
     });

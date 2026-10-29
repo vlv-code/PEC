@@ -2,6 +2,10 @@
 // Features: Cyber Blue Dark Theme, Real-Time Connection Streaming, Rules Manager,
 // System Tray Integration, Profile Persistence, and PECAppCore Engine Hooks.
 
+#ifndef _CRT_RAND_S
+#define _CRT_RAND_S
+#endif
+
 #define _CRT_SECURE_NO_WARNINGS
 #ifndef UNICODE
 #define UNICODE

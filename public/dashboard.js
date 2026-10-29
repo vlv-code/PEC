@@ -6480,7 +6480,7 @@
       out.textContent = 'Executing GET /creds...';
       try {
         const start = performance.now();
-        const res = await fetch('/creds', {
+        const res = await fetch('/creds?instanceId=test-admin-probe', {
           headers: token ? { 'X-Ext-Token': token } : {}
         });
         const elapsed = Math.round(performance.now() - start);

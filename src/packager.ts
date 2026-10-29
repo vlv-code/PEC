@@ -20,6 +20,7 @@ import { writeJsonAtomic, writeFileAtomic } from "./jsonStore.js";
 import { getBuilderConfigPath, getReleasesDir } from "./storage.js";
 import { recordRelease } from "./releases.js";
 import type { ExtensionBuildConfig, ExtensionBuildInfo } from "./types.js";
+import { DEFAULT_APP_VERSION } from "./appPackager.js";
 
 const EXTENSION_DIR = path.resolve(process.env.PEC_EXTENSION_DIR || "./extension");
 const KEY_PATH = path.join(EXTENSION_DIR, "key.pem");
@@ -923,7 +924,7 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     extLog.push("[" + ts + "] " + msg);
   };
 
-  log("Starting PEC Extension package build v" + (buildConfigToPack.version || "1.2.0") + " (" + (buildConfigToPack.uiMode || "popup") + ")...");
+  log("Starting PEC Extension package build v" + (buildConfigToPack.version || currentBuildConfig.version) + " (" + (buildConfigToPack.uiMode || "popup") + ")...");
   log("Effective Base URL: " + effectiveBaseUrl);
   log("Generating MV3 manifest.json and background scripts...");
 
@@ -935,7 +936,7 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     ? path.join(UNPACKED_DIR, "manifest.json")
     : path.join(EXTENSION_DIR, "manifest.json");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-  const version = manifest.version || buildConfigToPack.version || "1.2.0";
+  const version = manifest.version || buildConfigToPack.version || currentBuildConfig.version;
   const name = manifest.name || buildConfigToPack.name || "Corp Proxy Auth & Sync";
 
   function isExcludedFromPackage(fileName: string): boolean {
@@ -1181,7 +1182,7 @@ export function getBuildInfo(serverUrl: string = ""): ExtensionBuildInfo {
   const extensionId = calculateExtensionId(spkiDer);
 
   const manifestPath = path.join(EXTENSION_DIR, "manifest.json");
-  let version = currentBuildConfig.version || "1.2.0";
+  let version = currentBuildConfig.version || DEFAULT_APP_VERSION;
   let name = currentBuildConfig.name || "Corp Proxy Auth & Sync";
   if (fs.existsSync(manifestPath)) {
     try {
@@ -1199,7 +1200,7 @@ export function getBuildInfo(serverUrl: string = ""): ExtensionBuildInfo {
     extensionId,
     version,
     name,
-    hasPrivateKey: fs.existsSync(KEY_PATH),
+    hasPrivateKey: Boolean(fs.existsSync(KEY_PATH) || (process.env.PEC_PRIVATE_KEY_PEM && process.env.PEC_PRIVATE_KEY_PEM.trim()) || (process.env.PEC_PRIVATE_KEY_PATH && fs.existsSync(process.env.PEC_PRIVATE_KEY_PATH.trim()))),
     crxExists: fs.existsSync(crxPath),
     zipExists: fs.existsSync(zipPath),
     updatesXmlExists: fs.existsSync(xmlPath),

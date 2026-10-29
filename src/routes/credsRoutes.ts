@@ -58,14 +58,30 @@ function authenticateExtRequest(
   return { authenticated: false, shouldEnroll: false };
 }
 
-class EnrollmentTracker {
+export class EnrollmentTracker {
   private store = new Map<string, { count: number; resetTime: number }>();
   private windowMs: number;
   private maxRequests: number;
+  private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(windowMs: number = 60_000, maxRequests: number = 10) {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
+    this.cleanupTimer = setInterval(() => {
+      this.cleanup();
+    }, 60_000);
+    if (this.cleanupTimer.unref) {
+      this.cleanupTimer.unref();
+    }
+  }
+
+  private cleanup(): void {
+    const now = Date.now();
+    for (const [ip, rec] of this.store.entries()) {
+      if (now > rec.resetTime) {
+        this.store.delete(ip);
+      }
+    }
   }
 
   check(ip: string): boolean {

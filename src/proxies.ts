@@ -261,7 +261,7 @@ export function initDefaultProxyIfNeeded(): void {
   syncActiveProxyToConfigAndCreds(defaultNode);
 }
 
-let lastProbeResult: { host: string; port: number; reachable: boolean; timestamp: number } | null = null;
+const probeCache = new Map<string, { reachable: boolean; timestamp: number }>();
 const PROBE_CACHE_TTL_MS = 10000;
 
 export async function probeProxyTcp(host: string, port: number, timeoutMs = 1500, bypassCache = false): Promise<boolean> {
@@ -276,15 +276,15 @@ export async function probeProxyTcp(host: string, port: number, timeoutMs = 1500
     return false;
   }
 
+  const cacheKey = `${cleanHost}:${cleanPort}`;
   const now = Date.now();
+  const cached = probeCache.get(cacheKey);
   if (
     !bypassCache &&
-    lastProbeResult &&
-    lastProbeResult.host === cleanHost &&
-    lastProbeResult.port === cleanPort &&
-    now - lastProbeResult.timestamp < PROBE_CACHE_TTL_MS
+    cached &&
+    now - cached.timestamp < PROBE_CACHE_TTL_MS
   ) {
-    return lastProbeResult.reachable;
+    return cached.reachable;
   }
 
   const reachable = await new Promise<boolean>((resolve) => {
@@ -310,7 +310,7 @@ export async function probeProxyTcp(host: string, port: number, timeoutMs = 1500
     }
   });
 
-  lastProbeResult = { host: cleanHost, port: cleanPort, reachable, timestamp: now };
+  probeCache.set(cacheKey, { reachable, timestamp: now });
   return reachable;
 }
 

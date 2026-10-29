@@ -164,6 +164,7 @@ let persistentMeta: Record<
     pairedAppId?: string;
     pairedHostname?: string;
     verifiedByApp?: boolean;
+    lastSeen?: number;
   }
 > = Object.create(null);
 try {
@@ -185,6 +186,7 @@ try {
 export function prunePersistentMeta(): void {
   const keys = Object.keys(persistentMeta);
   if (keys.length > MAX_PERSISTENT_META) {
+    keys.sort((a, b) => (persistentMeta[a]?.lastSeen || 0) - (persistentMeta[b]?.lastSeen || 0));
     const excess = keys.length - MAX_PERSISTENT_META;
     for (let i = 0; i < excess; i++) {
       delete persistentMeta[keys[i]];
@@ -236,6 +238,9 @@ export function registerHeartbeat(
 
   const existing = instancesMap.get(cleanId);
   const now = new Date().toISOString();
+  if (persistentMeta[cleanId]) {
+    persistentMeta[cleanId].lastSeen = Date.now();
+  }
   const meta = persistentMeta[cleanId] || {};
 
   const effectiveGroup = String(data.group || meta.group || existing?.group || "Default Fleet").slice(0, 64);
@@ -658,7 +663,7 @@ export function revokeInstanceToken(instanceId: string): boolean {
 /**
  * Retrieve persistent metadata (tokenHash, enrolledAt, revoked) for an instance.
  */
-export function getInstanceMeta(instanceId: string): { group?: string; assignedProfileId?: string; assignedProxyId?: string; tokenHash?: string; enrolledAt?: string; revoked?: boolean; pairedAppId?: string; pairedHostname?: string; verifiedByApp?: boolean } | undefined {
+export function getInstanceMeta(instanceId: string): { group?: string; assignedProfileId?: string; assignedProxyId?: string; tokenHash?: string; enrolledAt?: string; revoked?: boolean; pairedAppId?: string; pairedHostname?: string; verifiedByApp?: boolean; lastSeen?: number } | undefined {
   if (isUnsafeObjectId(instanceId)) return undefined;
   return persistentMeta[instanceId];
 }
