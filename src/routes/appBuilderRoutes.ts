@@ -295,6 +295,12 @@ export function createAppBuilderRouter(
       }
       const customVersion = typeof rawVersion === "string" && rawVersion.trim() ? rawVersion.trim() : undefined;
       const result = buildAppBinaries(customVersion);
+      if (Array.isArray(result.buildLog)) {
+        for (const logLine of result.buildLog) {
+          console.log(`[builder] ${logLine}`);
+        }
+      }
+
       const isMissingCompiler = result.compilerMissing || (!result.ok && result.compilerStatus?.compiled === false);
       const httpStatus = result.ok || isMissingCompiler ? 200 : 500;
 
@@ -306,10 +312,36 @@ export function createAppBuilderRouter(
         details: `${result.message} (version: ${customVersion || "default"})`,
       });
 
-      if (!result.ok && result.compilerStatus?.compiled !== false) {
-        return res.status(500).json(result);
+      const infoPath = getAppBuildInfoPath();
+      let info: any = null;
+      if (fs.existsSync(infoPath)) {
+        try {
+          info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
+        } catch {}
       }
-      res.status(200).json(result);
+      const embeddedVersion = extractPeVersionFromFile() || customVersion || "2.2.0";
+      const config = getAppBuildConfig();
+      const binariesStale = embeddedVersion !== config.version;
+      const enrichedInfo = {
+        ...(info || {}),
+        version: config.version,
+        embeddedVersion,
+        binariesStale,
+        toolchain: getToolchainDiagnostics(),
+        compilerStatus: result.compilerStatus,
+      };
+
+      const responsePayload = {
+        ...result,
+        info: enrichedInfo,
+        embeddedVersion,
+        binariesStale,
+      };
+
+      if (!result.ok && result.compilerStatus?.compiled !== false) {
+        return res.status(500).json(responsePayload);
+      }
+      res.status(200).json(responsePayload);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[appBuilderRoutes] build-binaries exception:", msg);

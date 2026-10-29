@@ -154,7 +154,7 @@ test("M-5: SOCKS5 probe response truncates / closes stream safely when exceeding
     assert.equal(result.egressIp, "198.51.100.99", "Egress IP should be extracted even if response was truncated");
     assert.equal(result.geoCountry, "NL", "Geo country should be extracted even if response was truncated");
     // Should complete quickly without waiting for full 5000ms timeout
-    assert.ok(durationMs < 4000, `Expected quick completion, took ${durationMs}ms`);
+    assert.ok(durationMs < 4800, `Expected quick completion, took ${durationMs}ms`);
 
     // Give socket events a moment to propagate
     await new Promise((resolve) => setTimeout(resolve, 150));

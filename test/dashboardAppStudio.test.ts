@@ -548,3 +548,48 @@ test("dashboard: buildAppBinariesAction shows success notification with executio
     "Toolchain diagnostics must be updated with success toolchain info"
   );
 });
+
+test("dashboard: buildAppBinariesAction shows exact compilation error and enables log button when compiler is present but build failed", async () => {
+  const fetchMock = async (url: string) => {
+    if (url.includes("/api/app-builder/build-binaries")) {
+      return {
+        ok: false,
+        status: 500,
+        json: async () => ({
+          ok: false,
+          compilerMissing: false,
+          compiler: "MinGW-w64 GCC (x86_64)",
+          message: "Ошибка сборки исходного кода: undefined reference to 'CryptProtectData'",
+          buildLog: [
+            "[00:00:01] Starting PEC-App binary build pipeline for v1.0.5...",
+            "[00:00:02] [ERROR] undefined reference to 'CryptProtectData'",
+          ],
+        }),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+
+  const { ctx, getEl } = createMockDashboardEnvironment(fetchMock);
+  getEl("appBuildVersion").value = "1.0.5";
+
+  await ctx.window.buildAppBinariesAction();
+
+  const statusEl = getEl("appBuildStatusMsg");
+  assert.equal(statusEl.style.display, "block");
+  assert.ok(
+    statusEl.textContent.includes("Ошибка сборки исходного кода: undefined reference to 'CryptProtectData'"),
+    "Status message must show the actual compiler error"
+  );
+  assert.ok(
+    !statusEl.textContent.includes("не обнаружен"),
+    "Must NOT falsely claim compiler is missing when compilation failed"
+  );
+
+  const modalEl = getEl("modalCompilerWarning");
+  assert.notEqual(modalEl.style.display, "flex", "Missing compiler modal must NOT be shown when compilation failed");
+
+  const logBtn = getEl("btnAppViewBuildLog");
+  assert.equal(logBtn.style.display, "inline-block", "Log button must be enabled to view build log");
+});
+

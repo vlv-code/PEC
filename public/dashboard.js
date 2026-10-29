@@ -3861,28 +3861,34 @@
         });
         const data = await res.json().catch(() => ({}));
 
-        const isMissingOrFailed = Boolean(
-          !res.ok ||
-          res.compilerMissing ||
-          data.compilerMissing ||
-          !data.ok
-        );
-
-        if (isMissingOrFailed) {
+        if (!data.ok) {
           const remVer = data.embeddedVersion || (data.info && data.info.embeddedVersion) || (data.info && data.info.version) || targetVer || '2.1.0';
-          const warnMsg = currentLang === 'ru'
-            ? `Компилятор C/C++ (MinGW / MSVC) не обнаружен. Сборка не производилась. В шаблонах остаются бинарники v${remVer}`
-            : `C/C++ compiler (MinGW / MSVC) not found. Compilation was not performed. Templates keep binaries v${remVer}`;
+          const isMissing = Boolean(data.compilerMissing || res.compilerMissing);
+          let warnMsg = '';
+          if (isMissing) {
+            warnMsg = currentLang === 'ru'
+              ? `Компилятор C/C++ (MinGW / MSVC) не обнаружен. Сборка не производилась. В шаблонах остаются бинарники v${remVer}`
+              : `C/C++ compiler (MinGW / MSVC) not found. Compilation was not performed. Templates keep binaries v${remVer}`;
+            showCompilerWarningModal(warnMsg);
+          } else {
+            warnMsg = data.message || (currentLang === 'ru' ? 'Ошибка компиляции бинарников' : 'Binary compilation failed');
+          }
+
+          if (Array.isArray(data.buildLog) && data.buildLog.length > 0) {
+            lastAppBuildLog = data.buildLog;
+            const logBtn = document.getElementById('btnAppViewBuildLog');
+            if (logBtn) logBtn.style.display = 'inline-block';
+          }
 
           if (data.info) {
             renderAppStudioBuildInfo(data.info);
-          } else if (res.compilerMissing || data.compilerMissing || !res.ok) {
+          } else if (isMissing || !res.ok) {
             renderAppStudioBuildInfo({
               version: targetVer || '2.2.0',
               embeddedVersion: remVer,
               binariesStale: true,
-              compilerMissing: true,
-              toolchain: { available: false, compilerMissing: true }
+              compilerMissing: isMissing,
+              toolchain: data.toolchain || { available: !isMissing, compilerMissing: isMissing }
             });
           }
 
@@ -3892,7 +3898,6 @@
             statusEl.textContent = warnMsg;
           }
           toast(warnMsg, 'error');
-          showCompilerWarningModal(warnMsg);
         } else {
           // Render build info first so it does not overwrite the statusEl build message
           if (data.info) {
@@ -3919,6 +3924,10 @@
             ? `Сборка бинарников v${compiledVer} успешно выполнена (${timeSec} с)`
             : `Binaries v${compiledVer} compiled successfully (${timeSec}s)`;
           toast(successMsg, 'success');
+
+          if (typeof loadAppStudioConfig === 'function') {
+            await loadAppStudioConfig();
+          }
         }
       } catch (e) {
         if (statusEl) {
