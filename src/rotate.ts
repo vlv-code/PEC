@@ -3,7 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import dns from "node:dns";
-import { Agent } from "undici";
+import { createRequire } from "node:module";
+import type { Agent } from "undici";
+
+const requireCompat = typeof require === "function" ? require : createRequire(path.resolve("package.json"));
 import { RotationConfig, RotationHistoryItem, Panel3xuiConfig } from "./types.js";
 import { writeJsonAtomic, readJsonStore } from "./jsonStore.js";
 import { getCredsStorePath, get3xuiPanelsPath, getRotationConfigPath } from "./storage.js";
@@ -256,24 +259,37 @@ function resolveInsecureTls(panelUrl?: string, explicit?: boolean): boolean {
   return false;
 }
 
+let CachedUndiciAgent: any = null;
+
 function getFetchDispatcher(insecureTls?: boolean): Agent | undefined {
   if (!insecureTls) return undefined;
-  const agent = new Agent({ connect: { rejectUnauthorized: false } });
-  const origDispatch = agent.dispatch.bind(agent);
-  agent.dispatch = function (opts: any, handler: any) {
-    if (handler && typeof handler.onResponseStart !== "function") {
-      const bridged = Object.create(handler);
-      bridged.onRequestStart = () => {};
-      bridged.onResponseError = (_ctrl: any, err: any) => handler.onError?.(err);
-      bridged.onResponseStart = (_ctrl: any, status: number, headers: any, statusText: string) =>
-        handler.onHeaders?.(status, headers, () => {}, statusText);
-      bridged.onResponseData = (_ctrl: any, chunk: any) => handler.onData?.(chunk);
-      bridged.onResponseEnd = (_ctrl: any, trailers: any) => handler.onComplete?.(trailers);
-      return origDispatch(opts, bridged);
+  try {
+    if (!CachedUndiciAgent) {
+      // Lazy load to prevent crashes if undici package is not installed in runtime
+      const undiciMod = requireCompat("undici");
+      CachedUndiciAgent = undiciMod?.Agent || null;
     }
-    return origDispatch(opts, handler);
-  };
-  return agent;
+    if (!CachedUndiciAgent) return undefined;
+    const agent = new CachedUndiciAgent({ connect: { rejectUnauthorized: false } });
+    const origDispatch = agent.dispatch.bind(agent);
+    agent.dispatch = function (opts: any, handler: any) {
+      if (handler && typeof handler.onResponseStart !== "function") {
+        const bridged = Object.create(handler);
+        bridged.onRequestStart = () => {};
+        bridged.onResponseError = (_ctrl: any, err: any) => handler.onError?.(err);
+        bridged.onResponseStart = (_ctrl: any, status: number, headers: any, statusText: string) =>
+          handler.onHeaders?.(status, headers, () => {}, statusText);
+        bridged.onResponseData = (_ctrl: any, chunk: any) => handler.onData?.(chunk);
+        bridged.onResponseEnd = (_ctrl: any, trailers: any) => handler.onComplete?.(trailers);
+        return origDispatch(opts, bridged);
+      }
+      return origDispatch(opts, handler);
+    };
+    return agent;
+  } catch (e: any) {
+    console.warn("[rotate] Unable to load undici.Agent for insecureTls:", e?.message || e);
+    return undefined;
+  }
 }
 
 async function panelLogin(
