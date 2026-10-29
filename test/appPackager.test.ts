@@ -646,6 +646,10 @@ test("getToolchainDiagnostics returns structured diagnostic object with compiler
   assert.strictEqual(typeof diag.hasWindres, "boolean");
   assert.strictEqual(typeof diag.hasWixl, "boolean");
   assert.strictEqual(typeof diag.hasMakensis, "boolean");
+  assert.ok(diag.tools && typeof diag.tools === "object", "diag.tools must be provided");
+  assert.strictEqual(typeof diag.wixl?.available, "boolean");
+  assert.strictEqual(typeof diag.gcc?.available, "boolean");
+  assert.strictEqual(typeof diag.windres?.available, "boolean");
 
   if (diag.available) {
     assert.ok(diag.compilerName !== "None", "compilerName should identify available compiler");

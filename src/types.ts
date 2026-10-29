@@ -276,6 +276,15 @@ export interface ToolchainDiagnostics {
   hasWindres: boolean;
   hasWixl: boolean;
   hasMakensis: boolean;
+  tools?: {
+    gcc?: { available: boolean; version?: string };
+    windres?: { available: boolean };
+    wixl?: { available: boolean; version?: string };
+    makensis?: { available: boolean };
+  };
+  gcc?: { available: boolean; version?: string };
+  windres?: { available: boolean };
+  wixl?: { available: boolean; version?: string };
 }
 
 export interface AppBuildInfo {

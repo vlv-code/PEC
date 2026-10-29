@@ -3598,7 +3598,12 @@
 
           function parseToolInfo(toolKey, defaultAvail) {
             if (!tc) return { available: defaultAvail, text: '' };
-            const raw = tc[toolKey] !== undefined ? tc[toolKey] : (tc.tools && tc.tools[toolKey]);
+            const hasKey = 'has' + toolKey.charAt(0).toUpperCase() + toolKey.slice(1);
+            const raw = tc[toolKey] !== undefined
+              ? tc[toolKey]
+              : (tc[hasKey] !== undefined
+                  ? tc[hasKey]
+                  : (tc.tools && tc.tools[toolKey]));
             if (typeof raw === 'boolean') return { available: raw, text: '' };
             if (typeof raw === 'string') return { available: true, text: raw };
             if (raw && typeof raw === 'object') {
@@ -3609,9 +3614,9 @@
             return { available: defaultAvail, text: '' };
           }
 
-          const gccInfo = parseToolInfo('gcc', isAvailable);
-          const windresInfo = parseToolInfo('windres', isAvailable);
-          const wixlInfo = parseToolInfo('wixl', Boolean(tc && tc.wixl && (tc.wixl === true || tc.wixl.available)));
+          const gccInfo = parseToolInfo('gcc', Boolean(tc && (tc.hasGcc !== undefined ? tc.hasGcc : isAvailable)));
+          const windresInfo = parseToolInfo('windres', Boolean(tc && (tc.hasWindres !== undefined ? tc.hasWindres : isAvailable)));
+          const wixlInfo = parseToolInfo('wixl', Boolean(tc && (tc.hasWixl || (tc.wixl && (tc.wixl === true || tc.wixl.available)))));
 
           const mainBadgeText = isAvailable
             ? ('✓ Тулчейн компиляции: ' + (tc.compilerName || (info.compilerStatus && info.compilerStatus.compilerName) || 'MinGW-w64 GCC'))

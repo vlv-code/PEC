@@ -418,6 +418,33 @@ test("dashboard: dashboard.js renders toolchain diagnostics badge when toolchain
   );
 });
 
+test("dashboard: dashboard.js renders toolchain badges correctly from flat backend format (hasWixl, hasGcc, hasWindres)", () => {
+  const { ctx, getEl } = createMockDashboardEnvironment();
+  const info = {
+    version: "2.2.0",
+    embeddedVersion: "2.2.0",
+    binariesStale: false,
+    toolchain: {
+      available: true,
+      compilerName: "MinGW-w64 GCC (x86_64)",
+      compilerVersion: "12.2.0",
+      hasGcc: true,
+      hasGxx: true,
+      hasWindres: true,
+      hasWixl: true,
+      hasMakensis: false,
+    },
+  };
+
+  ctx.window.renderAppStudioBuildInfo(info);
+
+  const toolchainEl = getEl("appToolchainDiagnostics");
+  assert.equal(toolchainEl.style.display, "flex");
+  assert.ok(toolchainEl.innerHTML.includes("✓ GCC"), "Must display GCC badge");
+  assert.ok(toolchainEl.innerHTML.includes("✓ Windres"), "Must display Windres badge");
+  assert.ok(toolchainEl.innerHTML.includes("✓ Wixl"), "Must display Wixl badge from hasWixl");
+});
+
 test("dashboard: dashboard.js renders amber badge when toolchain is missing or compilerMissing", () => {
   const { ctx, getEl } = createMockDashboardEnvironment();
   const info = {

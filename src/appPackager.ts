@@ -1815,6 +1815,22 @@ export function getToolchainDiagnostics(): ToolchainDiagnostics {
       hasWixl = true;
     } catch {}
   }
+  if (!hasWixl && process.platform !== "win32") {
+    if (fs.existsSync("/usr/bin/wixl") || fs.existsSync("/usr/local/bin/wixl")) {
+      hasWixl = true;
+    }
+  }
+
+  let wixlVersion: string | undefined = undefined;
+  if (hasWixl) {
+    try {
+      const out = child_process
+        .execSync("wixl --version", { encoding: "utf-8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] })
+        .trim();
+      const m = out.match(/([\d.]+)/);
+      if (m) wixlVersion = m[1];
+    } catch {}
+  }
 
   const hasGcc = Boolean(mingw?.gcc);
   const hasGxx = Boolean(mingw?.gxx);
@@ -1861,6 +1877,15 @@ export function getToolchainDiagnostics(): ToolchainDiagnostics {
     hasWindres,
     hasWixl,
     hasMakensis,
+    tools: {
+      gcc: { available: hasGcc, version: compilerVersion },
+      windres: { available: hasWindres },
+      wixl: { available: hasWixl, version: wixlVersion },
+      makensis: { available: hasMakensis },
+    },
+    gcc: { available: hasGcc, version: compilerVersion },
+    windres: { available: hasWindres },
+    wixl: { available: hasWixl, version: wixlVersion },
   };
 }
 
