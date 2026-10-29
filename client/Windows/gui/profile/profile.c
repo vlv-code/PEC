@@ -341,7 +341,13 @@ void PB_GetLogFilePath(wchar_t* out, int cch)
 static CRITICAL_SECTION g_appLogCs;
 static BOOL g_appLogCsInit = FALSE;
 static PB_AppLogUiCallback g_appLogUiCallback = NULL;
+#if defined(__GNUC__)
+static __thread int s_inAppLogUi = 0;
+#elif defined(_MSC_VER)
 static __declspec(thread) int s_inAppLogUi = 0;
+#else
+static int s_inAppLogUi = 0;
+#endif
 
 void PB_SetAppLogUiCallback(PB_AppLogUiCallback cb)
 {

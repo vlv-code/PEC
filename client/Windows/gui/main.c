@@ -27,6 +27,7 @@
 #include <uxtheme.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strsafe.h>
 #include "res/resource.h"
 #include "api/pb_api.h"
 #include "api/pb_ipc.h"
@@ -1891,9 +1892,9 @@ static BOOL ConnectEngine(void)
         const wchar_t* detail = PB_GetLastErrorMsg();
         wchar_t msg[1024];
         if (detail && detail[0]) {
-            wsprintfW(msg, L"%ls", detail);
+            StringCchPrintfW(msg, sizeof(msg) / sizeof(msg[0]), L"%ls", detail);
         } else {
-            wsprintfW(msg, L"Could not load PECAppCore.dll.\nMake sure it is in the same folder as this executable.");
+            StringCchCopyW(msg, sizeof(msg) / sizeof(msg[0]), L"Could not load PECAppCore.dll.\nMake sure it is in the same folder as this executable.");
         }
         MessageBoxW(NULL, msg, APP_TITLE, MB_OK | MB_ICONERROR);
         return FALSE;

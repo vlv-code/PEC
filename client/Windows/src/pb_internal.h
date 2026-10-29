@@ -214,7 +214,13 @@ extern volatile LONG port_direct_bitmap[2048];  // 8 KB
 extern UINT16 g_local_relay_port;
 // Set by match_rule*_inner on the calling thread: the "localhost via proxy" flag of the rule that
 // produced the last verdict (FALSE when nothing matched). Read right after check_process_rule*().
+#if defined(__GNUC__)
+extern __thread BOOL g_tl_rule_localhost;
+#elif defined(_MSC_VER)
 extern __declspec(thread) BOOL g_tl_rule_localhost;
+#else
+extern _Thread_local BOOL g_tl_rule_localhost;
+#endif
 extern LogCallback g_log_callback;
 extern ConnectionCallback g_connection_callback;
 extern char  *g_pidtbl_buf;

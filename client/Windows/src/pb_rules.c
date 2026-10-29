@@ -136,7 +136,13 @@ static DWORD retry_tcp_pid(DWORD pid, BOOL ipv6, UINT32 src_ip, const UINT8 *src
     return pid;
 }
 
+#if defined(__GNUC__)
+__thread BOOL g_tl_rule_localhost = FALSE;
+#elif defined(_MSC_VER)
 __declspec(thread) BOOL g_tl_rule_localhost = FALSE;
+#else
+_Thread_local BOOL g_tl_rule_localhost = FALSE;
+#endif
 
 RuleAction check_process_rule_v6(const UINT8 src_ip6[16], UINT16 src_port, const UINT8 dest_ip6[16], UINT16 dest_port, BOOL is_udp, DWORD *out_pid, UINT32 *out_proxy_config_id)
 {
