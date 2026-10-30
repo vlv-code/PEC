@@ -148,12 +148,22 @@ cp .env.example .env
 | `RELEASES_META_PATH` | `./data/releases_meta.json` | Path to releases and version history store |
 | `PROXY_HOST` | `10.0.0.1` | Default proxy host IP or domain name |
 | `PROXY_PORT` | `10809` | Default proxy port |
+| `PROBE_INSECURE_TLS` | `false` | Ignore TLS certificate errors when probe-checking proxy node availability |
+| `PEC_SYNC_INTERVAL_MIN` | `15` | Background periodic sync interval for extension and desktop app in minutes |
 | `ROTATION_INTERVAL_MIN` | `1440` | Default interval for proxy credential rotation in minutes (24 hours) |
 | `XUI_PANEL_URL` | `https://3xui-host:2053/basepath` | Base URL of the 3x-ui management panel |
 | `XUI_ADMIN_USER` | `admin` | Admin username for 3x-ui panel login |
 | `XUI_ADMIN_PASS` | `change-me` | Admin password for 3x-ui panel login |
 | `XUI_INBOUND_REMARK` | `squid-in` | Remark of the inbound proxy to rotate |
 | `UPDATE_CHECK_REPO` | `vlv-code/PEC` | GitHub repository used for version update checks |
+| `CODE_SIGN_DIR` | `./certs` | Directory storing code signing certificates and keys |
+| `CODE_SIGN_PFX_PATH` | *(empty)* | Optional path to Authenticode PFX/P12 certificate for signing Windows binaries |
+| `CODE_SIGN_PASSWORD` | *(empty)* | Password for Authenticode PFX certificate |
+| `CODE_SIGN_MASTER_KEY` | *(empty)* | Master key for AES encryption of certificate passwords at rest |
+| `CODE_SIGN_TYPE` | `commercial` | Certificate authority type: `commercial` or `internal` |
+| `CODE_SIGN_SUBJECT` | `"Corporate Proxy Code Signing"` | Subject name used during certificate generation or display |
+| `CODE_SIGN_ISSUER` | `"Corporate CA"` | Certificate issuer organization name |
+| `CODE_SIGN_TIMESTAMP_URL` | `http://timestamp.digicert.com` | RFC 3161 Authenticode timestamp server URL |
 
 > ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` and set a distinct `ADMIN_TOKEN` before deploying to a production or public environment! The dashboard login password and the management APIs authenticate with `ADMIN_TOKEN`, not with the fleet token.
 >

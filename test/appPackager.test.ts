@@ -312,6 +312,9 @@ test("ImGui DirectX 11 compilation commands: MinGW and MSVC use exact DirectX 11
   // Verify MinGW command structure
   assert.ok(MINGW_GUI_CMD.includes("x86_64-w64-mingw32-g++"));
   assert.ok(MINGW_GUI_CMD.includes("-mwindows"));
+  assert.ok(MINGW_GUI_CMD.includes("-static"));
+  assert.ok(MINGW_GUI_CMD.includes("-static-libgcc"));
+  assert.ok(MINGW_GUI_CMD.includes("-static-libstdc++"));
   assert.ok(MINGW_GUI_CMD.includes("main_imgui.cpp"));
   assert.ok(MINGW_GUI_CMD.includes("imgui/imgui*.cpp"));
   assert.ok(MINGW_GUI_CMD.includes("imgui/backends/imgui_impl_win32.cpp"));

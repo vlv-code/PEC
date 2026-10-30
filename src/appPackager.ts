@@ -1694,7 +1694,7 @@ export function findMsvcVcvars(): string | null {
 }
 
 export const MINGW_GUI_CMD =
-  "x86_64-w64-mingw32-g++ -O2 -std=c++17 -s -mwindows -DUNICODE -D_UNICODE -DNDEBUG -D_WIN32_WINNT=0x0601 main_imgui.cpp imgui/imgui*.cpp imgui/backends/imgui_impl_win32.cpp imgui/backends/imgui_impl_dx11.cpp profile/profile.c profile/json.c res.res -o PEC-App.exe -ld3d11 -ldxgi -ld3dcompiler -ldwmapi -lshlwapi -lshell32 -ladvapi32 -lole32 -luser32 -lgdi32 -lws2_32 -lwinhttp -lcomctl32 -lcrypt32 -luxtheme -lwintrust";
+  "x86_64-w64-mingw32-g++ -O2 -std=c++17 -s -mwindows -static -static-libgcc -static-libstdc++ -DUNICODE -D_UNICODE -DNDEBUG -D_WIN32_WINNT=0x0601 main_imgui.cpp imgui/imgui*.cpp imgui/backends/imgui_impl_win32.cpp imgui/backends/imgui_impl_dx11.cpp profile/profile.c profile/json.c res.res -o PEC-App.exe -ld3d11 -ldxgi -ld3dcompiler -ldwmapi -lshlwapi -lshell32 -ladvapi32 -lole32 -luser32 -lgdi32 -lws2_32 -lwinhttp -lcomctl32 -lcrypt32 -luxtheme -lwintrust";
 
 export const MSVC_GUI_CMD =
   "cl.exe /O2 /std:c++17 /EHsc /DUNICODE /D_UNICODE /DNDEBUG /D_WIN32_WINNT=0x0601 /utf-8 main_imgui.cpp imgui\\imgui*.cpp imgui\\backends\\imgui_impl_win32.cpp imgui\\backends\\imgui_impl_dx11.cpp profile\\profile.c profile\\json.c res\\app.res /Fe:PEC-App.exe /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib shlwapi.lib shell32.lib advapi32.lib ole32.lib user32.lib gdi32.lib ws2_32.lib winhttp.lib comctl32.lib";
@@ -1973,14 +1973,14 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
         const guiDetails = (guiErr?.stderr?.toString() || "") + " " + (guiErr?.stdout?.toString() || "");
         log(`[GUI] DirectX 11 ImGui build note: ${guiDetails.trim()}. Falling back to native Win32 GUI...`);
         child_process.execSync(
-          `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi -lwintrust`,
+          `"${mingw.gcc}" -O2 -s -mwindows -static -static-libgcc -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi -lwintrust`,
           { cwd: guiDir, stdio: "pipe" }
         );
       }
     } else {
       log("[GUI] Compiling PEC-App.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi -lwintrust`,
+        `"${mingw.gcc}" -O2 -s -mwindows -static -static-libgcc -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi -lwintrust`,
         { cwd: guiDir, stdio: "pipe" }
       );
     }
@@ -1998,7 +1998,7 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
 
       log("[CLI] Compiling PEC-CLI.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I gui/res -I cli cli/main.c cli/cli.res -o PEC-CLI.exe -lwinhttp -lshell32 -ladvapi32 -lws2_32`,
+        `"${mingw.gcc}" -O2 -s -static -static-libgcc -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I gui/res -I cli cli/main.c cli/cli.res -o PEC-CLI.exe -lwinhttp -lshell32 -ladvapi32 -lws2_32`,
         { cwd: clientWinDir, stdio: "pipe" }
       );
 
@@ -2017,7 +2017,7 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
 
       log("[Service] Compiling PECAppSvc.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -mconsole -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I . -I ../../gui/res pb_service.c svc.res -o PECAppSvc.exe -ladvapi32 -lnetapi32 -lwtsapi32 -luser32 -lshell32`,
+        `"${mingw.gcc}" -O2 -s -static -static-libgcc -mconsole -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I . -I ../../gui/res pb_service.c svc.res -o PECAppSvc.exe -ladvapi32 -lnetapi32 -lwtsapi32 -luser32 -lshell32`,
         { cwd: svcDir, stdio: "pipe" }
       );
 
@@ -2036,7 +2036,7 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
 
       log("[Installer] Compiling PEC-App-Setup.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I . -I ../gui/res setup.c setup.res -o PEC-App-Setup.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -ladvapi32 -lole32 -luuid -lwintrust`,
+        `"${mingw.gcc}" -O2 -s -static -static-libgcc -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I . -I ../gui/res setup.c setup.res -o PEC-App-Setup.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -ladvapi32 -lole32 -luuid -lwintrust`,
         { cwd: instDir, stdio: "pipe" }
       );
 

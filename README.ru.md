@@ -150,12 +150,22 @@ cp .env.example .env
 | `RELEASES_META_PATH` | `./data/releases_meta.json` | Путь к метаданным релизов и журналам версий |
 | `PROXY_HOST` | `10.0.0.1` | Хост/IP корпоративного прокси по умолчанию |
 | `PROXY_PORT` | `10809` | Порт корпоративного прокси по умолчанию |
+| `PROBE_INSECURE_TLS` | `false` | Игнорировать ошибки TLS-сертификатов при probe-проверке доступности прокси-узлов |
+| `PEC_SYNC_INTERVAL_MIN` | `15` | Интервал фоновой периодической синхронизации расширения и десктопного приложения в минутах |
 | `ROTATION_INTERVAL_MIN` | `1440` | Интервал автоматической ротации учетных данных прокси в минутах (24 часа) |
 | `XUI_PANEL_URL` | `https://3xui-host:2053/basepath` | URL панели управления 3x-ui |
 | `XUI_ADMIN_USER` | `admin` | Логин администратора 3x-ui |
 | `XUI_ADMIN_PASS` | `change-me` | Пароль администратора 3x-ui |
 | `XUI_INBOUND_REMARK` | `squid-in` | Примечание (Remark) целевого инбаунда для ротации |
 | `UPDATE_CHECK_REPO` | `vlv-code/PEC` | Репозиторий GitHub для проверки обновлений версий |
+| `CODE_SIGN_DIR` | `./certs` | Каталог для хранения сертификатов и ключей подписи кода |
+| `CODE_SIGN_PFX_PATH` | *(пусто)* | Путь к PFX/P12 сертификату Authenticode для подписи Windows EXE/MSI |
+| `CODE_SIGN_PASSWORD` | *(пусто)* | Пароль к PFX-сертификату подписи кода |
+| `CODE_SIGN_MASTER_KEY` | *(пусто)* | Мастер-ключ для AES шифрования паролей сертификатов на диске |
+| `CODE_SIGN_TYPE` | `commercial` | Тип сертификата: `commercial` (доверенный УЦ) или `internal` (корпоративный) |
+| `CODE_SIGN_SUBJECT` | `"Corporate Proxy Code Signing"` | Имя субъекта сертификата при генерации или отображении |
+| `CODE_SIGN_ISSUER` | `"Corporate CA"` | Издатель сертификата |
+| `CODE_SIGN_TIMESTAMP_URL` | `http://timestamp.digicert.com` | URL сервера меток времени RFC 3161 |
 
 > ⚠️ **Предупреждение по безопасности:** Обязательно замените `EXT_SHARED_TOKEN` и задайте отдельный `ADMIN_TOKEN` перед запуском в рабочей среде! Дашборд и management-API авторизуются через `ADMIN_TOKEN` (заголовок `X-Admin-Token`), а не через fleet-токен.
 >
