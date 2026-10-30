@@ -41,6 +41,7 @@
 #pragma comment(lib, "comdlg32.lib")
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "uxtheme.lib")
+#pragma comment(lib, "wintrust.lib")
 
 // dynamic theme
 static COLORREF g_colBg      = RGB(0x0B, 0x11, 0x20);   // window / edit background (default Cyber Blue)

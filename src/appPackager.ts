@@ -1694,7 +1694,7 @@ export function findMsvcVcvars(): string | null {
 }
 
 export const MINGW_GUI_CMD =
-  "x86_64-w64-mingw32-g++ -O2 -std=c++17 -s -mwindows -DUNICODE -D_UNICODE -DNDEBUG -D_WIN32_WINNT=0x0601 main_imgui.cpp imgui/imgui*.cpp imgui/backends/imgui_impl_win32.cpp imgui/backends/imgui_impl_dx11.cpp profile/profile.c profile/json.c res.res -o PEC-App.exe -ld3d11 -ldxgi -ld3dcompiler -ldwmapi -lshlwapi -lshell32 -ladvapi32 -lole32 -luser32 -lgdi32 -lws2_32 -lwinhttp -lcomctl32 -lcrypt32 -luxtheme";
+  "x86_64-w64-mingw32-g++ -O2 -std=c++17 -s -mwindows -DUNICODE -D_UNICODE -DNDEBUG -D_WIN32_WINNT=0x0601 main_imgui.cpp imgui/imgui*.cpp imgui/backends/imgui_impl_win32.cpp imgui/backends/imgui_impl_dx11.cpp profile/profile.c profile/json.c res.res -o PEC-App.exe -ld3d11 -ldxgi -ld3dcompiler -ldwmapi -lshlwapi -lshell32 -ladvapi32 -lole32 -luser32 -lgdi32 -lws2_32 -lwinhttp -lcomctl32 -lcrypt32 -luxtheme -lwintrust";
 
 export const MSVC_GUI_CMD =
   "cl.exe /O2 /std:c++17 /EHsc /DUNICODE /D_UNICODE /DNDEBUG /D_WIN32_WINNT=0x0601 /utf-8 main_imgui.cpp imgui\\imgui*.cpp imgui\\backends\\imgui_impl_win32.cpp imgui\\backends\\imgui_impl_dx11.cpp profile\\profile.c profile\\json.c res\\app.res /Fe:PEC-App.exe /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib shlwapi.lib shell32.lib advapi32.lib ole32.lib user32.lib gdi32.lib ws2_32.lib winhttp.lib comctl32.lib";
@@ -1973,14 +1973,14 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
         const guiDetails = (guiErr?.stderr?.toString() || "") + " " + (guiErr?.stdout?.toString() || "");
         log(`[GUI] DirectX 11 ImGui build note: ${guiDetails.trim()}. Falling back to native Win32 GUI...`);
         child_process.execSync(
-          `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi`,
+          `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi -lwintrust`,
           { cwd: guiDir, stdio: "pipe" }
         );
       }
     } else {
       log("[GUI] Compiling PEC-App.exe with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
-        `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi`,
+        `"${mingw.gcc}" -O2 -s -mwindows -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi -lwintrust`,
         { cwd: guiDir, stdio: "pipe" }
       );
     }
@@ -2279,7 +2279,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
         child_process.execSync(guiCmd, { shell: "cmd.exe", windowsHide: true, stdio: "pipe" });
       } else {
         log(`[GUI] Compiling PEC-App GUI v${appVer.version} with MSVC (rc.exe + cl.exe)...`);
-        const guiCmd = `call "${vcvars}" x64 >nul && cd /d "${guiDir}" && pushd res && rc /nologo ${msvcRcAppDefines} /fo ..\\app.res app.rc && popd && cl.exe /nologo /utf-8 /O1 /Os /MT /GL /Gy /GS /guard:cf /sdl /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /DUNICODE /D_UNICODE ${msvcGuiDefines} main.c profile\\profile.c app.res /Fe:PEC-App.exe /link /LTCG /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /RELEASE /DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /guard:cf /CETCOMPAT user32.lib gdi32.lib comctl32.lib shell32.lib comdlg32.lib winhttp.lib advapi32.lib ws2_32.lib`;
+        const guiCmd = `call "${vcvars}" x64 >nul && cd /d "${guiDir}" && pushd res && rc /nologo ${msvcRcAppDefines} /fo ..\\app.res app.rc && popd && cl.exe /nologo /utf-8 /O1 /Os /MT /GL /Gy /GS /guard:cf /sdl /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /DUNICODE /D_UNICODE ${msvcGuiDefines} main.c profile\\profile.c app.res /Fe:PEC-App.exe /link /LTCG /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /RELEASE /DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /guard:cf /CETCOMPAT user32.lib gdi32.lib comctl32.lib shell32.lib comdlg32.lib winhttp.lib advapi32.lib ws2_32.lib wintrust.lib`;
         child_process.execSync(guiCmd, { shell: "cmd.exe", windowsHide: true, stdio: "pipe" });
       }
 

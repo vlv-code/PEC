@@ -332,6 +332,7 @@ test("ImGui DirectX 11 compilation commands: MinGW and MSVC use exact DirectX 11
   assert.ok(MINGW_GUI_CMD.includes("-lgdi32"));
   assert.ok(MINGW_GUI_CMD.includes("-lcrypt32"));
   assert.ok(MINGW_GUI_CMD.includes("-luxtheme"));
+  assert.ok(MINGW_GUI_CMD.includes("-lwintrust"));
 
   // Verify MSVC command structure
   assert.ok(MSVC_GUI_CMD.includes("cl.exe"));
