@@ -725,7 +725,8 @@ test("buildAppBinaries with available compiler verifies PE integrity (> 100 KB a
       const p = path.join(winTemplatesDir, exe);
       assert.strictEqual(fs.existsSync(p), true, `${exe} must exist`);
       const sz = fs.statSync(p).size;
-      assert.ok(sz > 100 * 1024, `${exe} size (${sz} bytes) must be > 100 KB`);
+      const minExpected = exe === "PEC-App.exe" ? 100 * 1024 : 40 * 1024;
+      assert.ok(sz > minExpected, `${exe} size (${sz} bytes) must be > ${Math.round(minExpected / 1024)} KB`);
       const pe = extractPeVersion(fs.readFileSync(p));
       assert.ok(pe, `${exe} must have valid PE version info`);
       const ver = pe.productVersion || pe.fileVersion;

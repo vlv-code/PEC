@@ -11,6 +11,10 @@
 
 #include <windows.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define PB_MAX_CFG     32
 #define PB_MAX_RULE    128
 #define PB_MAX_FILTER  64
@@ -129,5 +133,9 @@ void PB_WriteAppLog(const char* fmt, ...);
 // App log UI callback bridge
 typedef void (*PB_AppLogUiCallback)(const char* msg, int level);
 void PB_SetAppLogUiCallback(PB_AppLogUiCallback cb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // PB_PROFILE_H

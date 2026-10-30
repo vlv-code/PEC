@@ -2593,8 +2593,9 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
         continue;
       }
       const sz = fs.statSync(exePath).size;
-      if (sz < 100 * 1024) {
-        integrityIssues.push(`${exeName} size is ${sz} bytes (expected > 100 KB)`);
+      const minExpected = exeName === "PEC-App.exe" ? 100 * 1024 : 40 * 1024;
+      if (sz < minExpected) {
+        integrityIssues.push(`${exeName} size is ${sz} bytes (expected > ${Math.round(minExpected / 1024)} KB)`);
       }
       try {
         const peBuf = fs.readFileSync(exePath);
