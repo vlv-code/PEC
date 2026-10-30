@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <strsafe.h>
 #include "pb_proto.h"
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "netapi32.lib")
@@ -480,7 +481,11 @@ static int SetupUsers(void)
         { if (user) WTSFreeMemory(user); return 0; }
     WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, sess, WTSDomainName, &domain, &n);
     wchar_t full[512];
-    if (domain && domain[0]) swprintf(full, 512, L"%s\\%s", domain, user); else wcscpy_s(full, 512, user);
+    if (domain && domain[0]) {
+        StringCchPrintfW(full, sizeof(full) / sizeof(full[0]), L"%ls\\%ls", domain, user);
+    } else {
+        StringCchCopyW(full, sizeof(full) / sizeof(full[0]), user);
+    }
     if (domain) WTSFreeMemory(domain);
     WTSFreeMemory(user);
 

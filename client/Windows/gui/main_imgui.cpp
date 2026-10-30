@@ -29,7 +29,7 @@
 #include <vector>
 #include <deque>
 #include <chrono>
-#include <thread>
+#include <memory>
 #include <algorithm>
 #include <mutex>
 #include <cstdio>
@@ -721,76 +721,104 @@ struct ProxyLatencyState {
 };
 static ProxyLatencyState g_proxyLatencies[PB_MAX_CFG];
 
+struct LatencyTestArgs {
+    int cfgIdx;
+    std::string host;
+    std::string port;
+};
+
+static DWORD WINAPI LatencyTestThreadProc(LPVOID param)
+{
+    std::unique_ptr<LatencyTestArgs> args(static_cast<LatencyTestArgs*>(param));
+    int cfgIdx = args->cfgIdx;
+    std::string host = args->host;
+    std::string port = args->port;
+
+    struct addrinfo hints = {};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    struct addrinfo* res = nullptr;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    int rc = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
+    if (rc != 0 || !res) {
+        snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "DNS ошибка");
+        g_proxyLatencies[cfgIdx].testing = false;
+        return 0;
+    }
+
+    SOCKET s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (s == INVALID_SOCKET) {
+        freeaddrinfo(res);
+        snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Socket ошибка");
+        g_proxyLatencies[cfgIdx].testing = false;
+        return 0;
+    }
+
+    u_long mode = 1;
+    ioctlsocket(s, FIONBIO, &mode);
+    connect(s, res->ai_addr, (int)res->ai_addrlen);
+
+    fd_set writeSet;
+    FD_ZERO(&writeSet);
+    FD_SET(s, &writeSet);
+    timeval tv;
+    tv.tv_sec = 3;
+    tv.tv_usec = 0;
+
+    int sel = select(0, nullptr, &writeSet, nullptr, &tv);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+    if (sel > 0 && FD_ISSET(s, &writeSet)) {
+        int err = 0;
+        int errLen = sizeof(err);
+        getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&err, &errLen);
+        if (err == 0) {
+            g_proxyLatencies[cfgIdx].ms = (int)ms;
+            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "%d ms (OK)", (int)ms);
+        } else {
+            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Ошибка соединения");
+        }
+    } else {
+        snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Таймаут (3с)");
+    }
+
+    closesocket(s);
+    freeaddrinfo(res);
+    g_proxyLatencies[cfgIdx].testing = false;
+    return 0;
+}
+
 static void TestProxyLatencyAsync(int cfgIdx)
 {
-    std::string host, port;
+    auto* args = new LatencyTestArgs();
     {
         ProfileLock lock;
-        if (cfgIdx < 0 || cfgIdx >= g_profile.cfgCount) return;
-        if (g_proxyLatencies[cfgIdx].testing) return;
+        if (cfgIdx < 0 || cfgIdx >= g_profile.cfgCount) {
+            delete args;
+            return;
+        }
+        if (g_proxyLatencies[cfgIdx].testing) {
+            delete args;
+            return;
+        }
         g_proxyLatencies[cfgIdx].testing = true;
         snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Проверка...");
 
-        host = WToUtf8(g_profile.cfg[cfgIdx].host);
-        port = WToUtf8(g_profile.cfg[cfgIdx].port);
+        args->cfgIdx = cfgIdx;
+        args->host = WToUtf8(g_profile.cfg[cfgIdx].host);
+        args->port = WToUtf8(g_profile.cfg[cfgIdx].port);
     }
 
-    std::thread([cfgIdx, host, port]() {
-        struct addrinfo hints = {};
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = IPPROTO_TCP;
-        struct addrinfo* res = nullptr;
-
-        auto start = std::chrono::high_resolution_clock::now();
-        int rc = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
-        if (rc != 0 || !res) {
-            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "DNS ошибка");
-            g_proxyLatencies[cfgIdx].testing = false;
-            return;
-        }
-
-        SOCKET s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        if (s == INVALID_SOCKET) {
-            freeaddrinfo(res);
-            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Socket ошибка");
-            g_proxyLatencies[cfgIdx].testing = false;
-            return;
-        }
-
-        u_long mode = 1;
-        ioctlsocket(s, FIONBIO, &mode);
-        connect(s, res->ai_addr, (int)res->ai_addrlen);
-
-        fd_set writeSet;
-        FD_ZERO(&writeSet);
-        FD_SET(s, &writeSet);
-        timeval tv;
-        tv.tv_sec = 3;
-        tv.tv_usec = 0;
-
-        int sel = select(0, nullptr, &writeSet, nullptr, &tv);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
-        if (sel > 0 && FD_ISSET(s, &writeSet)) {
-            int err = 0;
-            int errLen = sizeof(err);
-            getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&err, &errLen);
-            if (err == 0) {
-                g_proxyLatencies[cfgIdx].ms = (int)ms;
-                snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "%d ms (OK)", (int)ms);
-            } else {
-                snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Ошибка соединения");
-            }
-        } else {
-            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Таймаут (3с)");
-        }
-
-        closesocket(s);
-        freeaddrinfo(res);
+    HANDLE hThread = CreateThread(nullptr, 0, LatencyTestThreadProc, args, 0, nullptr);
+    if (hThread) {
+        CloseHandle(hThread);
+    } else {
         g_proxyLatencies[cfgIdx].testing = false;
-    }).detach();
+        delete args;
+    }
 }
 
 // -----------------------------------------------------------------------------
