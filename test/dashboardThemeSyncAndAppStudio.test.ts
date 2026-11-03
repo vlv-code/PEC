@@ -56,8 +56,17 @@ test("Dashboard Theme Modes & Corporate Sync UI elements exist", () => {
 
   // Global Brand Icon & Sync Checkbox
   assert.ok(html.includes('id="globalBrandIconSelect"'), 'globalBrandIconSelect must exist');
+  assert.ok(html.includes('id="globalBrandIconFileInput"'), 'globalBrandIconFileInput must exist');
+  assert.ok(html.includes('id="globalBrandCustomPreviewBox"'), 'globalBrandCustomPreviewBox must exist');
+  assert.ok(html.includes('id="globalBrandCustomPreviewImg"'), 'globalBrandCustomPreviewImg must exist');
   assert.ok(html.includes('id="chkSyncThemeWithApps"'), 'chkSyncThemeWithApps must exist');
   assert.ok(html.includes('toggleSyncThemeWithApps(this.checked)'), 'toggleSyncThemeWithApps call must exist');
+
+  // App Studio custom icon elements
+  assert.ok(html.includes('id="appIconFileInput"'), 'appIconFileInput must exist');
+  assert.ok(html.includes('id="btnAppUploadIcon"'), 'btnAppUploadIcon must exist');
+  assert.ok(html.includes('id="appCustomIconPreviewBox"'), 'appCustomIconPreviewBox must exist');
+  assert.ok(html.includes('id="appCustomIconPreviewImg"'), 'appCustomIconPreviewImg must exist');
 
   // Lock banners in constructors
   assert.ok(html.includes('id="builderThemeLockedNotice"'), 'builderThemeLockedNotice must exist');
@@ -83,10 +92,15 @@ test("dashboard.js exports and functions for theme mode and sync are defined", (
 
   assert.ok(js.includes('function setServerThemeMode('), 'setServerThemeMode function must exist');
   assert.ok(js.includes('function setGlobalBrandIcon('), 'setGlobalBrandIcon function must exist');
+  assert.ok(js.includes('function setGlobalBrandCustomIcon('), 'setGlobalBrandCustomIcon function must exist');
+  assert.ok(js.includes('function onGlobalBrandIconFileSelected('), 'onGlobalBrandIconFileSelected function must exist');
+  assert.ok(js.includes('function setAppCustomIconDataUrl('), 'setAppCustomIconDataUrl function must exist');
+  assert.ok(js.includes('function onAppIconFileSelected('), 'onAppIconFileSelected function must exist');
   assert.ok(js.includes('function toggleSyncThemeWithApps('), 'toggleSyncThemeWithApps function must exist');
   assert.ok(js.includes('function applyThemeSyncToConstructors('), 'applyThemeSyncToConstructors function must exist');
   assert.ok(js.includes('window.setServerThemeMode = setServerThemeMode'), 'window export for setServerThemeMode must exist');
   assert.ok(js.includes('window.setGlobalBrandIcon = setGlobalBrandIcon'), 'window export for setGlobalBrandIcon must exist');
+  assert.ok(js.includes('window.setGlobalBrandCustomIcon = setGlobalBrandCustomIcon'), 'window export for setGlobalBrandCustomIcon must exist');
   assert.ok(js.includes('window.toggleSyncThemeWithApps = toggleSyncThemeWithApps'), 'window export for toggleSyncThemeWithApps must exist');
   assert.ok(js.includes('window.applyThemeSyncToConstructors = applyThemeSyncToConstructors'), 'window export for applyThemeSyncToConstructors must exist');
 });
@@ -119,7 +133,8 @@ test("appBuilderRoutes: validates and persists syncIntervalMinutes", async () =>
     });
     assert.equal(tooHighRes.status, 400);
 
-    // 3. Valid syncIntervalMinutes
+    // 3. Valid syncIntervalMinutes and customIconDataUrl
+    const samplePng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     const validRes = await fetch(`${baseUrl}/api/app-builder/config`, {
       method: "POST",
       headers: {
@@ -128,15 +143,18 @@ test("appBuilderRoutes: validates and persists syncIntervalMinutes", async () =>
       },
       body: JSON.stringify({
         syncIntervalMinutes: 30,
+        customIconDataUrl: samplePng,
       }),
     });
     assert.equal(validRes.status, 200);
     const body = await validRes.json();
     assert.equal(body.ok, true);
     assert.equal(body.syncIntervalMinutes, 30);
+    assert.equal(body.customIconDataUrl, samplePng);
 
     // Verify persisted
     const cfg = getAppBuildConfig();
     assert.equal(cfg.syncIntervalMinutes, 30);
+    assert.equal(cfg.customIconDataUrl, samplePng);
   });
 });

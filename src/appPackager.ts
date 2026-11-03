@@ -385,6 +385,10 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
       background: cfg.themeBackground || "#0b1120",
       card: cfg.themeCard || "#131d36",
     },
+    Icon: {
+      type: cfg.iconType || "shield",
+      customDataUrl: cfg.customIconDataUrl || "",
+    },
   };
 }
 
@@ -1122,6 +1126,16 @@ export function assembleAppPackage(
   const noticesFile = path.resolve("./assets/licenses/THIRD-PARTY-NOTICES.txt");
   if (fs.existsSync(noticesFile)) {
     winZip.addFile("THIRD-PARTY-NOTICES.txt", fs.readFileSync(noticesFile));
+  }
+
+  if (cfg.customIconDataUrl) {
+    try {
+      const match = cfg.customIconDataUrl.match(/^data:image\/[a-zA-Z+]+;base64,(.+)$/);
+      if (match) {
+        const iconBuf = Buffer.from(match[1], "base64");
+        winZip.addFile("app_icon.png", iconBuf);
+      }
+    } catch {}
   }
 
   // Cleanup staging directory

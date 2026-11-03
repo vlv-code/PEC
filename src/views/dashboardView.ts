@@ -111,13 +111,26 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- 4. Global Corporate Brand Icon & Sync With Apps -->
             <div style="margin-bottom: 10px; padding-top: 8px; border-top: 1px dashed var(--border);">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;" data-i18n="lblGlobalBrandIcon">Корпоративный значок:</div>
-              <select id="globalBrandIconSelect" onchange="setGlobalBrandIcon(this.value)" style="width: 100%; font-size: 11.5px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card-inner); color: var(--text); margin-bottom: 8px;">
+              <select id="globalBrandIconSelect" onchange="setGlobalBrandIcon(this.value)" style="width: 100%; font-size: 11.5px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card-inner); color: var(--text); margin-bottom: 6px;">
                 <option value="shield">🛡️ Щит (Защита)</option>
                 <option value="network">🌐 Сеть (Сфера)</option>
                 <option value="terminal">💻 Терминал (Консоль)</option>
                 <option value="lock">🔒 Замок (VPN / Безопасность)</option>
                 <option value="rocket">🚀 Ракета (Скорость)</option>
               </select>
+
+              <!-- Custom PNG / Image Upload (По аналогии с расширением) -->
+              <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px;">
+                <input type="file" id="globalBrandIconFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;" onchange="onGlobalBrandIconFileSelected(event)" />
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('globalBrandIconFileInput').click()" style="font-size: 11px; padding: 4px 8px; height: 28px; flex: 1; justify-content: center; display: inline-flex; align-items: center; gap: 5px;">
+                  <img src="/icons/folder.png" class="icon-inline" alt="folder">
+                  <span data-i18n="btnUploadCorporateIcon">Загрузить логотип (PNG / SVG)</span>
+                </button>
+                <div id="globalBrandCustomPreviewBox" style="display: none; align-items: center; gap: 4px;">
+                  <img id="globalBrandCustomPreviewImg" src="" alt="Icon preview" style="width: 24px; height: 24px; border-radius: 4px; object-fit: contain; border: 1px solid var(--border); background: rgba(0,0,0,0.2);" />
+                  <button type="button" class="btn btn-sm" onclick="clearGlobalBrandCustomIcon()" title="Удалить логотип" style="padding: 2px 5px; font-size: 10px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;"><img src="/icons/cross.png" class="icon-inline-sm" alt="del"></button>
+                </div>
+              </div>
 
               <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 11px; color: var(--text); user-select: none;">
                 <input type="checkbox" id="chkSyncThemeWithApps" checked onchange="toggleSyncThemeWithApps(this.checked)" style="margin-top: 2px;" />
@@ -1003,14 +1016,24 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <input type="text" id="appBuildVersion" value="2.2.0" oninput="onAppConfigChangeLive()" placeholder="2.2.0" />
               </div>
               <div>
-                <label data-i18n="lblAppIconType">Иконка приложения</label>
-                <select id="appIconType" onchange="onAppConfigChangeLive()">
-                  <option value="shield">🛡️ Shield (Щит безопасности)</option>
-                  <option value="lock">🔒 Lock (Замок шифрования)</option>
-                  <option value="globe">🌐 Globe (Глобальная сеть)</option>
-                  <option value="server">🖥️ Server (Прокси-шлюз)</option>
-                  <option value="key">🔑 Key (Ключ доступа)</option>
-                </select>
+                <label data-i18n="lblAppIconType">Иконка приложения (Эмодзи или PNG)</label>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                  <select id="appIconType" onchange="onAppConfigChangeLive()" style="margin-bottom: 0; flex: 1;">
+                    <option value="shield">🛡️ Shield (Щит безопасности)</option>
+                    <option value="lock">🔒 Lock (Замок шифрования)</option>
+                    <option value="globe">🌐 Globe (Глобальная сеть)</option>
+                    <option value="server">🖥️ Server (Прокси-шлюз)</option>
+                    <option value="key">🔑 Key (Ключ доступа)</option>
+                  </select>
+                  <input type="file" id="appIconFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;" onchange="onAppIconFileSelected(event)" />
+                  <button type="button" class="btn btn-secondary btn-sm" id="btnAppUploadIcon" onclick="document.getElementById('appIconFileInput').click()" title="Загрузить изображение (PNG / SVG)" style="padding: 6px 10px; height: 36px; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;">
+                    <img src="/icons/folder.png" class="icon-inline" alt="folder">
+                  </button>
+                  <div id="appCustomIconPreviewBox" style="display: none; align-items: center; gap: 4px;">
+                    <img id="appCustomIconPreviewImg" src="" alt="App icon" style="width: 26px; height: 26px; border-radius: 4px; object-fit: contain; border: 1px solid var(--border); background: rgba(0,0,0,0.2);" />
+                    <button type="button" class="btn btn-sm" id="btnAppClearIcon" onclick="clearAppCustomIcon()" title="Удалить иконку" style="padding: 2px 5px; font-size: 10px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;"><img src="/icons/cross.png" class="icon-inline-sm" alt="del"></button>
+                  </div>
+                </div>
               </div>
             </div>
 

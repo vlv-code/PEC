@@ -398,6 +398,132 @@
       }
     }
 
+    let currentGlobalBrandCustomDataUrl = '';
+    let isGlobalBrandCustomUploaded = false;
+    try {
+      currentGlobalBrandCustomDataUrl = localStorage.getItem('pec_global_brand_custom_data_url') || '';
+      isGlobalBrandCustomUploaded = Boolean(currentGlobalBrandCustomDataUrl);
+    } catch(e) {}
+
+    function setGlobalBrandCustomIcon(dataUrl, isUploaded = false, triggerSync = true) {
+      currentGlobalBrandCustomDataUrl = dataUrl || '';
+      isGlobalBrandCustomUploaded = Boolean(isUploaded && dataUrl);
+      try {
+        if (isGlobalBrandCustomUploaded) {
+          localStorage.setItem('pec_global_brand_custom_data_url', currentGlobalBrandCustomDataUrl);
+        } else {
+          localStorage.removeItem('pec_global_brand_custom_data_url');
+        }
+      } catch(e) {}
+
+      const previewBox = document.getElementById('globalBrandCustomPreviewBox');
+      const previewImg = document.getElementById('globalBrandCustomPreviewImg');
+      if (currentGlobalBrandCustomDataUrl && isGlobalBrandCustomUploaded) {
+        if (previewImg) previewImg.src = currentGlobalBrandCustomDataUrl;
+        if (previewBox) previewBox.style.display = 'inline-flex';
+      } else {
+        if (previewImg) previewImg.src = '';
+        if (previewBox) previewBox.style.display = 'none';
+        const fileInput = document.getElementById('globalBrandIconFileInput');
+        if (fileInput) fileInput.value = '';
+      }
+
+      if (triggerSync) {
+        applyThemeSyncToConstructors();
+      }
+    }
+
+    function clearGlobalBrandCustomIcon() {
+      setGlobalBrandCustomIcon('', false, true);
+    }
+
+    function onGlobalBrandIconFileSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const rawUrl = evt.target.result;
+        const img = new Image();
+        img.onload = function() {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 128, 128);
+            const pngDataUrl = canvas.toDataURL('image/png');
+            setGlobalBrandCustomIcon(pngDataUrl, true, true);
+          } catch(err) {
+            setGlobalBrandCustomIcon(rawUrl, true, true);
+          }
+        };
+        img.onerror = function() {
+          setGlobalBrandCustomIcon(rawUrl, true, true);
+        };
+        img.src = rawUrl;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    let currentAppCustomIconDataUrl = '';
+    let isAppCustomIconUploaded = false;
+
+    function setAppCustomIconDataUrl(dataUrl, isUploaded = false, triggerSave = false) {
+      currentAppCustomIconDataUrl = dataUrl || '';
+      isAppCustomIconUploaded = Boolean(isUploaded && dataUrl);
+
+      const previewBox = document.getElementById('appCustomIconPreviewBox');
+      const previewImg = document.getElementById('appCustomIconPreviewImg');
+      if (currentAppCustomIconDataUrl && isAppCustomIconUploaded) {
+        if (previewImg) previewImg.src = currentAppCustomIconDataUrl;
+        if (previewBox) previewBox.style.display = 'inline-flex';
+      } else {
+        if (previewImg) previewImg.src = '';
+        if (previewBox) previewBox.style.display = 'none';
+        const fileInput = document.getElementById('appIconFileInput');
+        if (fileInput) fileInput.value = '';
+      }
+
+      if (typeof updateAppLivePreview === 'function') {
+        updateAppLivePreview();
+      }
+      if (triggerSave && typeof onAppConfigChangeLive === 'function') {
+        onAppConfigChangeLive();
+      }
+    }
+
+    function clearAppCustomIcon() {
+      setAppCustomIconDataUrl('', false, true);
+    }
+
+    function onAppIconFileSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const rawUrl = evt.target.result;
+        const img = new Image();
+        img.onload = function() {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 128, 128);
+            const pngDataUrl = canvas.toDataURL('image/png');
+            setAppCustomIconDataUrl(pngDataUrl, true, true);
+          } catch(err) {
+            setAppCustomIconDataUrl(rawUrl, true, true);
+          }
+        };
+        img.onerror = function() {
+          setAppCustomIconDataUrl(rawUrl, true, true);
+        };
+        img.src = rawUrl;
+      };
+      reader.readAsDataURL(file);
+    }
+
     function setGlobalBrandIcon(icon) {
       const valid = ['shield', 'network', 'terminal', 'lock', 'rocket'];
       if (!valid.includes(icon)) icon = 'shield';
@@ -427,6 +553,7 @@
       const currentTheme = document.body.getAttribute('data-theme') || 'cyber';
       const currentMode = document.body.getAttribute('data-theme-mode') || 'dark';
       const currentIcon = localStorage.getItem('pec_global_brand_icon') || 'shield';
+      const globalCustomPng = localStorage.getItem('pec_global_brand_custom_data_url') || currentGlobalBrandCustomDataUrl || '';
 
       const iconMapEmoji = {
         shield: '🛡️',
@@ -446,12 +573,28 @@
 
       const dashBrandIcon = document.getElementById('dashboardBrandIcon');
       if (dashBrandIcon) {
-        dashBrandIcon.textContent = iconMapEmoji[currentIcon] || '🛡️';
+        if (globalCustomPng) {
+          dashBrandIcon.innerHTML = `<img src="${globalCustomPng}" style="width: 24px; height: 24px; border-radius: 4px; vertical-align: middle; object-fit: contain;" alt="logo" />`;
+        } else {
+          dashBrandIcon.textContent = iconMapEmoji[currentIcon] || '🛡️';
+        }
       }
 
       const globalIconSelect = document.getElementById('globalBrandIconSelect');
       if (globalIconSelect && globalIconSelect.value !== currentIcon) {
         globalIconSelect.value = currentIcon;
+      }
+
+      const gBox = document.getElementById('globalBrandCustomPreviewBox');
+      const gImg = document.getElementById('globalBrandCustomPreviewImg');
+      if (gBox && gImg) {
+        if (globalCustomPng) {
+          gImg.src = globalCustomPng;
+          gBox.style.display = 'inline-flex';
+        } else {
+          gImg.src = '';
+          gBox.style.display = 'none';
+        }
       }
 
       const builderThemeCard = document.getElementById('builderThemeCardContainer');
@@ -470,6 +613,18 @@
         }
         const iconUploadBtn = document.getElementById('iconFileInput');
         if (iconUploadBtn) iconUploadBtn.disabled = true;
+        const bldUploadBtn = document.querySelector('button[onclick*="iconFileInput"]');
+        if (bldUploadBtn) bldUploadBtn.disabled = true;
+
+        if (globalCustomPng) {
+          if (typeof setCustomIconDataUrl === 'function') {
+            setCustomIconDataUrl(globalCustomPng, true, false);
+          }
+        } else {
+          if (typeof setCustomIconDataUrl === 'function') {
+            setCustomIconDataUrl('', false, false);
+          }
+        }
 
         if (typeof setStudioPalette === 'function') {
           setStudioPalette(currentTheme, true);
@@ -486,6 +641,16 @@
           appIconEl.value = iconMapAppType[currentIcon] || 'shield';
           appIconEl.disabled = true;
         }
+        const appUploadBtn = document.getElementById('btnAppUploadIcon');
+        if (appUploadBtn) appUploadBtn.disabled = true;
+        const appClearBtn = document.getElementById('btnAppClearIcon');
+        if (appClearBtn) appClearBtn.disabled = true;
+
+        if (globalCustomPng) {
+          setAppCustomIconDataUrl(globalCustomPng, true, false);
+        } else {
+          setAppCustomIconDataUrl('', false, false);
+        }
 
         if (typeof setAppPalette === 'function') {
           setAppPalette(currentTheme);
@@ -501,12 +666,18 @@
         if (bldEmoji) bldEmoji.disabled = false;
         const iconUploadBtn = document.getElementById('iconFileInput');
         if (iconUploadBtn) iconUploadBtn.disabled = false;
+        const bldUploadBtn = document.querySelector('button[onclick*="iconFileInput"]');
+        if (bldUploadBtn) bldUploadBtn.disabled = false;
 
         if (appThemeCard) appThemeCard.classList.remove('locked-by-sync');
         if (appLockedNotice) appLockedNotice.style.display = 'none';
 
         const appIconEl = document.getElementById('appIconType');
         if (appIconEl) appIconEl.disabled = false;
+        const appUploadBtn = document.getElementById('btnAppUploadIcon');
+        if (appUploadBtn) appUploadBtn.disabled = false;
+        const appClearBtn = document.getElementById('btnAppClearIcon');
+        if (appClearBtn) appClearBtn.disabled = false;
       }
     }
 
@@ -692,6 +863,7 @@
         lblThemeDark: '🌙 Dark',
         lblThemeLight: '☀️ Light',
         lblGlobalBrandIcon: 'Corporate Brand Icon:',
+        btnUploadCorporateIcon: 'Upload Logo (PNG / SVG)',
         lblSyncThemeWithApps: 'Synchronize theme and icon with extensions & apps',
         msgThemeLockedBySync: 'Synchronized with corporate dashboard appearance',
         lblAppSyncInterval: 'Server Auto-sync Interval (minutes):',
@@ -1094,6 +1266,7 @@
         lblThemeDark: '🌙 Темная',
         lblThemeLight: '☀️ Светлая',
         lblGlobalBrandIcon: 'Корпоративный значок:',
+        btnUploadCorporateIcon: 'Загрузить логотип (PNG / SVG)',
         lblSyncThemeWithApps: 'Синхронизировать тему и значок с расширениями и приложениями',
         msgThemeLockedBySync: 'Синхронизировано с корпоративным оформлением панели',
         lblAppSyncInterval: 'Интервал автосинхронизации с сервером (минуты):',
@@ -3604,6 +3777,11 @@
         if (verEl) verEl.value = cfg.version || '2.2.0';
         if (descEl) descEl.value = cfg.description || '';
         if (iconEl) iconEl.value = cfg.iconType || 'shield';
+        if (cfg.customIconDataUrl) {
+          setAppCustomIconDataUrl(cfg.customIconDataUrl, true, false);
+        } else {
+          setAppCustomIconDataUrl('', false, false);
+        }
         if (presetEl) presetEl.value = cfg.presetStyle || 'cyber-blue';
         if (colorEl) colorEl.value = cfg.themeColor || '#0284c7';
         if (bgEl) bgEl.value = cfg.themeBackground || '#0b1120';
@@ -3955,6 +4133,7 @@
         version: verEl ? verEl.value.trim() : '2.2.0',
         description: descEl ? descEl.value.trim() : '',
         iconType: iconEl ? iconEl.value : 'shield',
+        customIconDataUrl: (isAppCustomIconUploaded && currentAppCustomIconDataUrl) ? currentAppCustomIconDataUrl : undefined,
         presetStyle: presetEl ? presetEl.value : 'cyber-blue',
         uiLayout: currentAppLayout,
         inheritRoutingProfileId: (document.getElementById('branchAppInheritProfileSelect')?.value || document.getElementById('appRoutingProfileSelect')?.value || '').trim() || undefined,
@@ -4477,14 +4656,18 @@
       const iconEl = document.getElementById('appIconType');
       const prevIconEl = document.getElementById('appPreviewIcon');
       if (prevIconEl && iconEl) {
-        const iconMap = {
-          shield: '🛡️',
-          lock: '🔒',
-          globe: '🌐',
-          server: '🖥️',
-          key: '🔑'
-        };
-        prevIconEl.textContent = iconMap[iconEl.value] || '🛡️';
+        if (currentAppCustomIconDataUrl) {
+          prevIconEl.innerHTML = `<img src="${currentAppCustomIconDataUrl}" style="width: 14px; height: 14px; border-radius: 2px; vertical-align: middle; object-fit: contain;" alt="icon" />`;
+        } else {
+          const iconMap = {
+            shield: '🛡️',
+            lock: '🔒',
+            globe: '🌐',
+            server: '🖥️',
+            key: '🔑'
+          };
+          prevIconEl.textContent = iconMap[iconEl.value] || '🛡️';
+        }
       }
 
       const colorEl = document.getElementById('appThemeColor');
@@ -5051,6 +5234,12 @@
     window.setServerTheme = setServerTheme;
     window.setServerThemeMode = setServerThemeMode;
     window.setGlobalBrandIcon = setGlobalBrandIcon;
+    window.setGlobalBrandCustomIcon = setGlobalBrandCustomIcon;
+    window.clearGlobalBrandCustomIcon = clearGlobalBrandCustomIcon;
+    window.onGlobalBrandIconFileSelected = onGlobalBrandIconFileSelected;
+    window.setAppCustomIconDataUrl = setAppCustomIconDataUrl;
+    window.clearAppCustomIcon = clearAppCustomIcon;
+    window.onAppIconFileSelected = onAppIconFileSelected;
     window.toggleSyncThemeWithApps = toggleSyncThemeWithApps;
     window.applyThemeSyncToConstructors = applyThemeSyncToConstructors;
     window.toggleVersionPopover = toggleVersionPopover;

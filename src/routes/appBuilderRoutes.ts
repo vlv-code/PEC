@@ -190,6 +190,13 @@ export function createAppBuilderRouter(
         }
         updates.syncIntervalMinutes = Math.round(sim);
       }
+      if (updates.customIconDataUrl !== undefined) {
+        if (typeof updates.customIconDataUrl !== "string" || (updates.customIconDataUrl && !updates.customIconDataUrl.startsWith("data:image/"))) {
+          if (updates.customIconDataUrl !== "") {
+            return res.status(400).json({ ok: false, error: "Invalid customIconDataUrl: must be a data:image URI or empty" });
+          }
+        }
+      }
 
       const updated = saveAppBuildConfig(updates);
       res.json({ ok: true, ...updated });
