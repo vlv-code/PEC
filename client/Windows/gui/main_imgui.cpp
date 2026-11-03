@@ -1260,9 +1260,9 @@ static void RenderRulesTab()
             // Column 2: Rule Target / Name with corporate / custom indicator
             ImGui::TableSetColumnIndex(2);
             if (r->isCorporate) {
-                ImGui::TextColored(PecTheme::Primary, u8"[Корп]");
+                ImGui::TextColored(PecTheme::PrimaryAccent, u8"[Корп]");
             } else {
-                ImGui::TextColored(PecTheme::Success, u8"[Польз]");
+                ImGui::TextColored(PecTheme::SuccessDirect, u8"[Польз]");
             }
             ImGui::SameLine(0, 6.0f);
 
@@ -1330,9 +1330,9 @@ static void RenderRulesTab()
 
         if (g_isEditRule && g_editRuleIdx >= 0 && g_editRuleIdx < g_profile.ruleCount) {
             if (g_profile.rule[g_editRuleIdx].isCorporate) {
-                ImGui::TextColored(PecTheme::Primary, u8"ℹ Корпоративное правило (синхронизируется с сервера)");
+                ImGui::TextColored(PecTheme::PrimaryAccent, u8"ℹ Корпоративное правило (синхронизируется с сервера)");
             } else {
-                ImGui::TextColored(PecTheme::Success, u8"ℹ Пользовательское правило (локальное)");
+                ImGui::TextColored(PecTheme::SuccessDirect, u8"ℹ Пользовательское правило (локальное)");
             }
             ImGui::Spacing();
         }
@@ -2299,7 +2299,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     }
 
     CheckAndRotateAppLog();
-    PB_WriteAppLog("=== PEC-App ImGui GUI started (ActiveProfile: %ws) ===", g_activeProfile);
+    PB_WriteAppLog("=== PEC-App ImGui GUI started (ActiveProfile: %ls) ===", g_activeProfile);
 
     // Register Win32 Window Class
     WNDCLASSEXW wc;

@@ -948,7 +948,7 @@ static void MainServerSetActive(void)
 
     // Save and notify sync client
     PecSyncSetSelectedProxy(g_profile.cfg[0].host, _wtoi(g_profile.cfg[0].port));
-    PB_WriteAppLog("User switched primary proxy to [%ws] %ws:%ws",
+    PB_WriteAppLog("User switched primary proxy to [%ls] %ls:%ls",
         g_profile.cfg[0].name, g_profile.cfg[0].host, g_profile.cfg[0].port);
 
     PB_ProfileSave(g_activeProfile, &g_profile);
@@ -1966,7 +1966,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show)
     else
     {
         PB_ProfileLoad(g_activeProfile, &g_profile);
-        if (g_profile.cfgCount == 0 && g_profile.ruleCount == 0)
         {
             wchar_t exeDir[MAX_PATH];
             GetModuleFileNameW(NULL, exeDir, MAX_PATH);
@@ -1982,14 +1981,29 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show)
                 }
                 if (GetFileAttributesW(cand) != INVALID_FILE_ATTRIBUTES)
                 {
-                    PB_ProfileLoad(cand, &g_profile);
-                    lstrcpynW(g_activeProfile, L"PEC-Default", PB_NAME_MAX);
-                    PB_SetActiveProfile(g_activeProfile);
-                    PB_ProfileSave(g_activeProfile, &g_profile);
-                    PB_ProfileSave(L"Default", &g_profile);
+                    BOOL shouldLoad = (g_profile.cfgCount == 0 || g_profile.ruleCount == 0);
+                    if (shouldLoad)
+                    {
+                        PB_ProfileLoad(cand, &g_profile);
+                        lstrcpynW(g_activeProfile, L"Default", PB_NAME_MAX);
+                        PB_SetActiveProfile(g_activeProfile);
+                        PB_ProfileSave(g_activeProfile, &g_profile);
+                    }
                 }
             }
         }
+#if defined(PEC_DEFAULT_SERVER_URL_W)
+        if ((g_profile.pecSync.serverUrl[0] == 0 || wcscmp(g_profile.pecSync.serverUrl, L"http://127.0.0.1:3000") == 0) &&
+            PEC_DEFAULT_SERVER_URL_W[0] != 0 && wcscmp(PEC_DEFAULT_SERVER_URL_W, L"http://127.0.0.1:3000") != 0)
+        {
+            lstrcpynW(g_profile.pecSync.serverUrl, PEC_DEFAULT_SERVER_URL_W, 512);
+#if defined(PEC_DEFAULT_FLEET_TOKEN_W)
+            lstrcpynW(g_profile.pecSync.fleetToken, PEC_DEFAULT_FLEET_TOKEN_W, 256);
+#endif
+            g_profile.pecSync.enabled = 1;
+            PB_ProfileSave(g_activeProfile, &g_profile);
+        }
+#endif
     }
 
     g_trafficLog  = g_profile.trafficLogging;
@@ -2013,7 +2027,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show)
     if (!ConnectEngine())
         return 1;
 
-    PB_WriteAppLog("=== PEC-App GUI v" PB_VER_STR " started (ActiveProfile: %ws) ===", g_activeProfile);
+    PB_WriteAppLog("=== PEC-App GUI v" PB_VER_STR " started (ActiveProfile: %ls) ===", g_activeProfile);
 
     g_autoClear   = g_profile.autoClearLogs;
     g_logEvery    = g_profile.logEveryConnection != 0;

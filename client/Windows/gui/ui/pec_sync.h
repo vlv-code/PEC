@@ -818,90 +818,93 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                                 JVal* avList = json_get(respRoot, "availableProxies");
                                                 if (avList && avList->type == J_ARR && avList->child)
                                                 {
-                                                    PBConfig newConfigs[PB_MAX_CFG];
-                                                    int newCount = 0;
-                                                    ZeroMemory(newConfigs, sizeof(newConfigs));
-
-                                                    // Active proxy goes to slot 0 if valid
-                                                    if (wHost[0] && _wtoi(wPort) > 0)
+                                                    PBConfig* newConfigs = (PBConfig*)calloc(PB_MAX_CFG, sizeof(PBConfig));
+                                                    if (newConfigs)
                                                     {
-                                                        newConfigs[0].storedId = 1;
-                                                        const char* aName = json_str(actProxy, "name", "Corporate Proxy");
-                                                        MultiByteToWideChar(CP_UTF8, 0, aName, -1, newConfigs[0].name, 128);
-                                                        lstrcpynW(newConfigs[0].host, wHost, 128);
-                                                        lstrcpynW(newConfigs[0].port, wPort, 16);
-                                                        lstrcpynW(newConfigs[0].user, wUser, 128);
-                                                        lstrcpynW(newConfigs[0].pass, wPass, 128);
-                                                        lstrcpynW(newConfigs[0].type, wProto, 16);
-                                                        newConfigs[0].sendDomain = 1;
-                                                        newCount = 1;
-                                                    }
+                                                        int newCount = 0;
 
-                                                    for (JVal* c = avList->child; c && newCount < PB_MAX_CFG; c = c->next)
-                                                    {
-                                                        if (c->type != J_OBJ) continue;
-                                                        const char* chHost = json_str(c, "host", "");
-                                                        long chPort = json_long(c, "port", 0);
-                                                        const char* chUser = json_str(c, "user", "");
-                                                        const char* chPass = json_str(c, "pass", "");
-                                                        const char* chProto = json_str(c, "protocol", "socks5");
-                                                        const char* chName = json_str(c, "name", "Proxy Node");
-
-                                                        if (!chHost[0] || chPort <= 0) continue;
-
-                                                        wchar_t wh[128], wp[16];
-                                                        MultiByteToWideChar(CP_UTF8, 0, chHost, -1, wh, 128);
-                                                        _snwprintf_s(wp, 16, _TRUNCATE, L"%ld", chPort);
-
-                                                        // Skip if matches newConfigs[0]
-                                                        if (newCount > 0 && wcscmp(newConfigs[0].host, wh) == 0 && wcscmp(newConfigs[0].port, wp) == 0)
-                                                            continue;
-
-                                                        PBConfig* cf = &newConfigs[newCount];
-                                                        cf->storedId = (UINT32)(newCount + 1);
-                                                        cf->sendDomain = 1;
-                                                        MultiByteToWideChar(CP_UTF8, 0, chName, -1, cf->name, 128);
-                                                        lstrcpynW(cf->host, wh, 128);
-                                                        lstrcpynW(cf->port, wp, 16);
-                                                        MultiByteToWideChar(CP_UTF8, 0, chUser, -1, cf->user, 128);
-                                                        MultiByteToWideChar(CP_UTF8, 0, chPass, -1, cf->pass, 128);
-                                                        MultiByteToWideChar(CP_UTF8, 0, chProto, -1, cf->type, 16);
-                                                        newCount++;
-                                                    }
-
-                                                    if (newCount > 0)
-                                                    {
-                                                        if (g_profile.cfgCount != newCount)
+                                                        // Active proxy goes to slot 0 if valid
+                                                        if (wHost[0] && _wtoi(wPort) > 0)
                                                         {
-                                                            needsUpdate = TRUE;
+                                                            newConfigs[0].storedId = 1;
+                                                            const char* aName = json_str(actProxy, "name", "Corporate Proxy");
+                                                            MultiByteToWideChar(CP_UTF8, 0, aName, -1, newConfigs[0].name, 128);
+                                                            lstrcpynW(newConfigs[0].host, wHost, 128);
+                                                            lstrcpynW(newConfigs[0].port, wPort, 16);
+                                                            lstrcpynW(newConfigs[0].user, wUser, 128);
+                                                            lstrcpynW(newConfigs[0].pass, wPass, 128);
+                                                            lstrcpynW(newConfigs[0].type, wProto, 16);
+                                                            newConfigs[0].sendDomain = 1;
+                                                            newCount = 1;
                                                         }
-                                                        else
+
+                                                        for (JVal* c = avList->child; c && newCount < PB_MAX_CFG; c = c->next)
                                                         {
-                                                            for (int i = 0; i < newCount; i++)
+                                                            if (c->type != J_OBJ) continue;
+                                                            const char* chHost = json_str(c, "host", "");
+                                                            long chPort = json_long(c, "port", 0);
+                                                            const char* chUser = json_str(c, "user", "");
+                                                            const char* chPass = json_str(c, "pass", "");
+                                                            const char* chProto = json_str(c, "protocol", "socks5");
+                                                            const char* chName = json_str(c, "name", "Proxy Node");
+
+                                                            if (!chHost[0] || chPort <= 0) continue;
+
+                                                            wchar_t wh[128], wp[16];
+                                                            MultiByteToWideChar(CP_UTF8, 0, chHost, -1, wh, 128);
+                                                            _snwprintf_s(wp, 16, _TRUNCATE, L"%ld", chPort);
+
+                                                            // Skip if matches newConfigs[0]
+                                                            if (newCount > 0 && wcscmp(newConfigs[0].host, wh) == 0 && wcscmp(newConfigs[0].port, wp) == 0)
+                                                                continue;
+
+                                                            PBConfig* cf = &newConfigs[newCount];
+                                                            cf->storedId = (UINT32)(newCount + 1);
+                                                            cf->sendDomain = 1;
+                                                            MultiByteToWideChar(CP_UTF8, 0, chName, -1, cf->name, 128);
+                                                            lstrcpynW(cf->host, wh, 128);
+                                                            lstrcpynW(cf->port, wp, 16);
+                                                            MultiByteToWideChar(CP_UTF8, 0, chUser, -1, cf->user, 128);
+                                                            MultiByteToWideChar(CP_UTF8, 0, chPass, -1, cf->pass, 128);
+                                                            MultiByteToWideChar(CP_UTF8, 0, chProto, -1, cf->type, 16);
+                                                            newCount++;
+                                                        }
+
+                                                        if (newCount > 0)
+                                                        {
+                                                            if (g_profile.cfgCount != newCount)
                                                             {
-                                                                if (wcscmp(g_profile.cfg[i].host, newConfigs[i].host) != 0 ||
-                                                                    wcscmp(g_profile.cfg[i].port, newConfigs[i].port) != 0 ||
-                                                                    wcscmp(g_profile.cfg[i].user, newConfigs[i].user) != 0 ||
-                                                                    wcscmp(g_profile.cfg[i].pass, newConfigs[i].pass) != 0 ||
-                                                                    _wcsicmp(g_profile.cfg[i].type, newConfigs[i].type) != 0 ||
-                                                                    wcscmp(g_profile.cfg[i].name, newConfigs[i].name) != 0)
+                                                                needsUpdate = TRUE;
+                                                            }
+                                                            else
+                                                            {
+                                                                for (int i = 0; i < newCount; i++)
                                                                 {
-                                                                    needsUpdate = TRUE;
-                                                                    break;
+                                                                    if (wcscmp(g_profile.cfg[i].host, newConfigs[i].host) != 0 ||
+                                                                        wcscmp(g_profile.cfg[i].port, newConfigs[i].port) != 0 ||
+                                                                        wcscmp(g_profile.cfg[i].user, newConfigs[i].user) != 0 ||
+                                                                        wcscmp(g_profile.cfg[i].pass, newConfigs[i].pass) != 0 ||
+                                                                        _wcsicmp(g_profile.cfg[i].type, newConfigs[i].type) != 0 ||
+                                                                        wcscmp(g_profile.cfg[i].name, newConfigs[i].name) != 0)
+                                                                    {
+                                                                        needsUpdate = TRUE;
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                            if (needsUpdate)
+                                                            {
+                                                                g_profile.cfgCount = newCount;
+                                                                for (int i = 0; i < newCount; i++)
+                                                                    g_profile.cfg[i] = newConfigs[i];
+                                                                PB_ProfileSave(g_activeProfile, &g_profile);
+                                                                if (g_hSyncMainWnd)
+                                                                {
+                                                                    PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);
                                                                 }
                                                             }
                                                         }
-                                                        if (needsUpdate)
-                                                        {
-                                                            g_profile.cfgCount = newCount;
-                                                            for (int i = 0; i < newCount; i++)
-                                                                g_profile.cfg[i] = newConfigs[i];
-                                                            PB_ProfileSave(g_activeProfile, &g_profile);
-                                                            if (g_hSyncMainWnd)
-                                                            {
-                                                                PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);
-                                                            }
-                                                        }
+                                                        free(newConfigs);
                                                     }
                                                 }
                                                 else
@@ -943,125 +946,131 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                             JVal* sRules = json_get(respRoot, "serverRules");
                                             if (sRules && sRules->type == J_ARR && sRules->child)
                                             {
-                                                PBRule newRules[PB_MAX_RULE];
-                                                int newRuleCount = 0;
-                                                ZeroMemory(newRules, sizeof(newRules));
-
-                                                for (JVal* r = sRules->child; r && newRuleCount < PB_MAX_RULE; r = r->next)
+                                                PBRule* newRules = (PBRule*)calloc(PB_MAX_RULE, sizeof(PBRule));
+                                                if (newRules)
                                                 {
-                                                    if (r->type != J_OBJ) continue;
-                                                    PBRule* ru = &newRules[newRuleCount++];
-                                                    const char* rName = json_str(r, "name", json_str(r, "id", "PEC Rule"));
-                                                    const char* rProc = json_str(r, "process", json_str(r, "ProcessName", "*"));
-                                                    const char* rHosts = json_str(r, "hosts", json_str(r, "TargetHosts", "*"));
-                                                    const char* rDoms = json_str(r, "domains", json_str(r, "TargetDomains", "*"));
-                                                    const char* rPorts = json_str(r, "ports", json_str(r, "TargetPorts", "*"));
-                                                    const char* rProto = json_str(r, "protocol", json_str(r, "Protocol", "BOTH"));
-                                                    const char* rAction = json_str(r, "action", json_str(r, "Action", "PROXY"));
-                                                    int rEnabled = json_bool(r, "enabled", json_bool(r, "IsEnabled", 1));
+                                                    int newRuleCount = 0;
 
-                                                    MultiByteToWideChar(CP_UTF8, 0, rName, -1, ru->name, 128);
-                                                    MultiByteToWideChar(CP_UTF8, 0, rProc, -1, ru->proc, PB_APPS_MAX);
-                                                    MultiByteToWideChar(CP_UTF8, 0, rPorts, -1, ru->ports, 128);
-                                                    MultiByteToWideChar(CP_UTF8, 0, rProto, -1, ru->proto, 8);
-                                                    MultiByteToWideChar(CP_UTF8, 0, rAction, -1, ru->action, 16);
-                                                    ru->enabled = rEnabled;
-                                                    ru->localhost = 0;
-                                                    ru->cfgStoredId = 1;
-                                                    ru->isCorporate = 1;
-
-                                                    wchar_t* wi = (wchar_t*)malloc(PB_HOSTS_MAX * sizeof(wchar_t));
-                                                    wchar_t* wd = (wchar_t*)malloc(PB_HOSTS_MAX * sizeof(wchar_t));
-                                                    if (wi && wd)
+                                                    for (JVal* r = sRules->child; r && newRuleCount < PB_MAX_RULE; r = r->next)
                                                     {
-                                                        MultiByteToWideChar(CP_UTF8, 0, rHosts, -1, wi, PB_HOSTS_MAX);
-                                                        MultiByteToWideChar(CP_UTF8, 0, rDoms, -1, wd, PB_HOSTS_MAX);
-                                                        PB_ListNormalize(wi);
-                                                        PB_ListNormalize(wd);
-                                                        PB_HostsMerge(wi, wd, ru->hosts, PB_HOSTS_MAX);
-                                                    }
-                                                    else
-                                                    {
-                                                        lstrcpynW(ru->hosts, L"*", PB_HOSTS_MAX);
-                                                    }
-                                                    free(wi);
-                                                    free(wd);
-                                                }
+                                                        if (r->type != J_OBJ) continue;
+                                                        PBRule* ru = &newRules[newRuleCount++];
+                                                        const char* rName = json_str(r, "name", json_str(r, "id", "PEC Rule"));
+                                                        const char* rProc = json_str(r, "process", json_str(r, "ProcessName", "*"));
+                                                        const char* rHosts = json_str(r, "hosts", json_str(r, "TargetHosts", "*"));
+                                                        const char* rDoms = json_str(r, "domains", json_str(r, "TargetDomains", "*"));
+                                                        const char* rPorts = json_str(r, "ports", json_str(r, "TargetPorts", "*"));
+                                                        const char* rProto = json_str(r, "protocol", json_str(r, "Protocol", "BOTH"));
+                                                        const char* rAction = json_str(r, "action", json_str(r, "Action", "PROXY"));
+                                                        int rEnabled = json_bool(r, "enabled", json_bool(r, "IsEnabled", 1));
 
-                                                if (newRuleCount > 0)
-                                                {
-                                                    // Merge:
-                                                    // 1. Corporate rules from server always take precedence (slots 0 .. newRuleCount - 1).
-                                                    // 2. Custom local user rules (!isCorporate) are preserved after corporate rules.
-                                                    PBRule mergedRules[PB_MAX_RULE];
-                                                    int mergedCount = 0;
-                                                    ZeroMemory(mergedRules, sizeof(mergedRules));
+                                                        MultiByteToWideChar(CP_UTF8, 0, rName, -1, ru->name, 128);
+                                                        MultiByteToWideChar(CP_UTF8, 0, rProc, -1, ru->proc, PB_APPS_MAX);
+                                                        MultiByteToWideChar(CP_UTF8, 0, rPorts, -1, ru->ports, 128);
+                                                        MultiByteToWideChar(CP_UTF8, 0, rProto, -1, ru->proto, 8);
+                                                        MultiByteToWideChar(CP_UTF8, 0, rAction, -1, ru->action, 16);
+                                                        ru->enabled = rEnabled;
+                                                        ru->localhost = 0;
+                                                        ru->cfgStoredId = 1;
+                                                        ru->isCorporate = 1;
 
-                                                    for (int i = 0; i < newRuleCount && mergedCount < PB_MAX_RULE; i++)
-                                                    {
-                                                        mergedRules[mergedCount] = newRules[i];
-                                                        mergedRules[mergedCount].isCorporate = 1;
-                                                        mergedCount++;
-                                                    }
-
-                                                    for (int i = 0; i < g_profile.ruleCount && mergedCount < PB_MAX_RULE; i++)
-                                                    {
-                                                        if (!g_profile.rule[i].isCorporate)
+                                                        wchar_t* wi = (wchar_t*)malloc(PB_HOSTS_MAX * sizeof(wchar_t));
+                                                        wchar_t* wd = (wchar_t*)malloc(PB_HOSTS_MAX * sizeof(wchar_t));
+                                                        if (wi && wd)
                                                         {
-                                                            // Deduplicate if user rule exactly matches a corporate rule definition
-                                                            BOOL dupOfCorp = FALSE;
-                                                            for (int c = 0; c < newRuleCount; c++)
+                                                            MultiByteToWideChar(CP_UTF8, 0, rHosts, -1, wi, PB_HOSTS_MAX);
+                                                            MultiByteToWideChar(CP_UTF8, 0, rDoms, -1, wd, PB_HOSTS_MAX);
+                                                            PB_ListNormalize(wi);
+                                                            PB_ListNormalize(wd);
+                                                            PB_HostsMerge(wi, wd, ru->hosts, PB_HOSTS_MAX);
+                                                        }
+                                                        else
+                                                        {
+                                                            lstrcpynW(ru->hosts, L"*", PB_HOSTS_MAX);
+                                                        }
+                                                        free(wi);
+                                                        free(wd);
+                                                    }
+
+                                                    if (newRuleCount > 0)
+                                                    {
+                                                        // Merge:
+                                                        // 1. Corporate rules from server always take precedence (slots 0 .. newRuleCount - 1).
+                                                        // 2. Custom local user rules (!isCorporate) are preserved after corporate rules.
+                                                        PBRule* mergedRules = (PBRule*)calloc(PB_MAX_RULE, sizeof(PBRule));
+                                                        if (mergedRules)
+                                                        {
+                                                            int mergedCount = 0;
+
+                                                            for (int i = 0; i < newRuleCount && mergedCount < PB_MAX_RULE; i++)
                                                             {
-                                                                if (wcscmp(g_profile.rule[i].proc, newRules[c].proc) == 0 &&
-                                                                    wcscmp(g_profile.rule[i].hosts, newRules[c].hosts) == 0 &&
-                                                                    wcscmp(g_profile.rule[i].ports, newRules[c].ports) == 0 &&
-                                                                    _wcsicmp(g_profile.rule[i].proto, newRules[c].proto) == 0 &&
-                                                                    _wcsicmp(g_profile.rule[i].action, newRules[c].action) == 0)
+                                                                mergedRules[mergedCount] = newRules[i];
+                                                                mergedRules[mergedCount].isCorporate = 1;
+                                                                mergedCount++;
+                                                            }
+
+                                                            for (int i = 0; i < g_profile.ruleCount && mergedCount < PB_MAX_RULE; i++)
+                                                            {
+                                                                if (!g_profile.rule[i].isCorporate)
                                                                 {
-                                                                    dupOfCorp = TRUE;
-                                                                    break;
+                                                                    // Deduplicate if user rule exactly matches a corporate rule definition
+                                                                    BOOL dupOfCorp = FALSE;
+                                                                    for (int c = 0; c < newRuleCount; c++)
+                                                                    {
+                                                                        if (wcscmp(g_profile.rule[i].proc, newRules[c].proc) == 0 &&
+                                                                            wcscmp(g_profile.rule[i].hosts, newRules[c].hosts) == 0 &&
+                                                                            wcscmp(g_profile.rule[i].ports, newRules[c].ports) == 0 &&
+                                                                            _wcsicmp(g_profile.rule[i].proto, newRules[c].proto) == 0 &&
+                                                                            _wcsicmp(g_profile.rule[i].action, newRules[c].action) == 0)
+                                                                        {
+                                                                            dupOfCorp = TRUE;
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                    if (!dupOfCorp)
+                                                                    {
+                                                                        mergedRules[mergedCount++] = g_profile.rule[i];
+                                                                    }
                                                                 }
                                                             }
-                                                            if (!dupOfCorp)
-                                                            {
-                                                                mergedRules[mergedCount++] = g_profile.rule[i];
-                                                            }
-                                                        }
-                                                    }
 
-                                                    BOOL rulesDiffer = (g_profile.ruleCount != mergedCount);
-                                                    if (!rulesDiffer)
-                                                    {
-                                                        for (int i = 0; i < mergedCount; i++)
-                                                        {
-                                                            if (wcscmp(g_profile.rule[i].proc, mergedRules[i].proc) != 0 ||
-                                                                wcscmp(g_profile.rule[i].hosts, mergedRules[i].hosts) != 0 ||
-                                                                wcscmp(g_profile.rule[i].ports, mergedRules[i].ports) != 0 ||
-                                                                _wcsicmp(g_profile.rule[i].proto, mergedRules[i].proto) != 0 ||
-                                                                _wcsicmp(g_profile.rule[i].action, mergedRules[i].action) != 0 ||
-                                                                g_profile.rule[i].enabled != mergedRules[i].enabled ||
-                                                                g_profile.rule[i].isCorporate != mergedRules[i].isCorporate)
+                                                            BOOL rulesDiffer = (g_profile.ruleCount != mergedCount);
+                                                            if (!rulesDiffer)
                                                             {
-                                                                rulesDiffer = TRUE;
-                                                                break;
+                                                                for (int i = 0; i < mergedCount; i++)
+                                                                {
+                                                                    if (wcscmp(g_profile.rule[i].proc, mergedRules[i].proc) != 0 ||
+                                                                        wcscmp(g_profile.rule[i].hosts, mergedRules[i].hosts) != 0 ||
+                                                                        wcscmp(g_profile.rule[i].ports, mergedRules[i].ports) != 0 ||
+                                                                        _wcsicmp(g_profile.rule[i].proto, mergedRules[i].proto) != 0 ||
+                                                                        _wcsicmp(g_profile.rule[i].action, mergedRules[i].action) != 0 ||
+                                                                        g_profile.rule[i].enabled != mergedRules[i].enabled ||
+                                                                        g_profile.rule[i].isCorporate != mergedRules[i].isCorporate)
+                                                                    {
+                                                                        rulesDiffer = TRUE;
+                                                                        break;
+                                                                    }
+                                                                }
                                                             }
+                                                            if (rulesDiffer)
+                                                            {
+                                                                g_profile.ruleCount = mergedCount;
+                                                                for (int i = 0; i < mergedCount; i++)
+                                                                {
+                                                                    g_profile.rule[i] = mergedRules[i];
+                                                                }
+                                                                PB_ProfileSave(g_activeProfile, &g_profile);
+                                                                PB_WriteAppLog("PecSync: Правила маршрутизации синхронизированы (%d корп., %d польз.)",
+                                                                    newRuleCount, mergedCount - newRuleCount);
+                                                                if (g_hSyncMainWnd)
+                                                                {
+                                                                    PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);
+                                                                }
+                                                            }
+                                                            free(mergedRules);
                                                         }
                                                     }
-                                                    if (rulesDiffer)
-                                                    {
-                                                        g_profile.ruleCount = mergedCount;
-                                                        for (int i = 0; i < mergedCount; i++)
-                                                        {
-                                                            g_profile.rule[i] = mergedRules[i];
-                                                        }
-                                                        PB_ProfileSave(g_activeProfile, &g_profile);
-                                                        PB_WriteAppLog("PecSync: Правила маршрутизации синхронизированы (%d корп., %d польз.)",
-                                                            newRuleCount, mergedCount - newRuleCount);
-                                                        if (g_hSyncMainWnd)
-                                                        {
-                                                            PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);
-                                                        }
-                                                    }
+                                                    free(newRules);
                                                 }
                                             }
 
@@ -1198,7 +1207,7 @@ static void PecSyncStart(HWND hwndMain)
     g_hSyncWakeEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     g_hLoopbackThread = CreateThread(NULL, 0, PecLoopbackThreadProc, NULL, 0, NULL);
-    g_hSyncThread = CreateThread(NULL, 0, PecSyncThreadProc, NULL, 0, NULL);
+    g_hSyncThread = CreateThread(NULL, 1024 * 1024 * 2, PecSyncThreadProc, NULL, 0, NULL);
 }
 
 static void PecSyncStop(void)
