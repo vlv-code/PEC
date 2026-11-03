@@ -95,6 +95,7 @@ export const DEFAULT_APP_BUILD_CONFIG: AppBuildConfig = {
   installAsService: false,
   trafficLogging: true,
   defaultProxyId: "",
+  includeExtensionRules: false,
   processRules: [
     {
       id: "rule_blocked_sites",

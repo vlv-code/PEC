@@ -16,7 +16,7 @@ import {
 import { getActiveProxy, getProxyById, getAllProxies } from "../proxies.js";
 import { ProxyNode } from "../types.js";
 import { getActiveRelease } from "../releases.js";
-import { resolveProfileForInstance, expandRuleDomains } from "../routing.js";
+import { resolveProfileForInstance, expandRuleDomains, getProfileById } from "../routing.js";
 import { getBuildConfig as getExtensionBuildConfig } from "../packager.js";
 import { DEFAULT_APP_VERSION, getAppBuildConfig } from "../appPackager.js";
 import { isNewerVersion } from "../utils/semver.js";
@@ -294,23 +294,33 @@ export function createAppSyncRouter(
         }
       }
 
-      // 2. Domain rules from assigned routing profile (if any)
-      if (assignedProfile && Array.isArray(assignedProfile.rules)) {
-        for (let i = 0; i < assignedProfile.rules.length; i++) {
-          const r = assignedProfile.rules[i];
-          if (!r.enabled) continue;
-          const expanded = expandRuleDomains(r);
-          serverRules.push({
-            id: r.id || `rule_${serverRules.length + 1}`,
-            process: "*",
-            hosts: "*",
-            ports: "*",
-            domains: expanded.join("; ") || "*",
-            protocol: "BOTH",
-            action: r.action === "block" ? "BLOCK" : (r.action === "direct" ? "DIRECT" : "PROXY"),
-            enabled: true,
-            isCorporate: true,
-          });
+      // 2. Extension routing rules are strictly optional for desktop clients (default: false).
+      // Only include if explicitly enabled in app configuration.
+      const shouldIncludeExtRules = Boolean(
+        appBldCfg.includeExtensionRules && (appBldCfg.inheritRoutingProfileId || assignedProfile)
+      );
+      if (shouldIncludeExtRules) {
+        const extProfile = appBldCfg.inheritRoutingProfileId
+          ? getProfileById(appBldCfg.inheritRoutingProfileId) || assignedProfile
+          : assignedProfile;
+
+        if (extProfile && Array.isArray(extProfile.rules)) {
+          for (let i = 0; i < extProfile.rules.length; i++) {
+            const r = extProfile.rules[i];
+            if (!r.enabled) continue;
+            const expanded = expandRuleDomains(r);
+            serverRules.push({
+              id: r.id?.startsWith("ext_rule_") ? r.id : `ext_rule_${r.id || i + 1}`,
+              process: "*",
+              hosts: "*",
+              ports: "*",
+              domains: expanded.join("; ") || "*",
+              protocol: "BOTH",
+              action: r.action === "block" ? "BLOCK" : (r.action === "direct" ? "DIRECT" : "PROXY"),
+              enabled: true,
+              isCorporate: true,
+            });
+          }
         }
       }
 

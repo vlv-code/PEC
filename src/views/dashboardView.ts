@@ -173,6 +173,20 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
     <!-- ==================== TAB 1: ROUTING & GEOBASES ==================== -->
     <div id="tab-routing" class="tab-pane active">
+      <!-- Routing Branch Switcher (Extensions vs Desktop App) -->
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; background: var(--bg-card-subtle, rgba(255,255,255,0.03)); padding: 6px; border-radius: 8px; border: 1px solid var(--border);">
+        <button type="button" id="btnBranchExt" class="tab-btn active" onclick="switchRoutingBranch('ext')" style="flex: 1; justify-content: center; font-size: 13px; font-weight: 600; padding: 8px 16px;">
+          <img src="/icons/palette.png" class="icon-inline" alt="ext">
+          <span data-i18n="branchExtTitle">Ветка 1: Правила расширений браузера (Домены, URL, Геобазы)</span>
+        </button>
+        <button type="button" id="btnBranchApp" class="tab-btn" onclick="switchRoutingBranch('app')" style="flex: 1; justify-content: center; font-size: 13px; font-weight: 600; padding: 8px 16px;">
+          <img src="/icons/desktop.png" class="icon-inline" alt="app">
+          <span data-i18n="branchAppTitle">Ветка 2: Правила приложения PEC-App (Процессы, L3/L4, WinDivert)</span>
+        </button>
+      </div>
+
+      <!-- ==================== BRANCH 1: EXTENSION ROUTING MATRIX ==================== -->
+      <div id="branchExtView">
       <div class="card">
         <h2>
           <span data-i18n="titleRoutingMatrix">Routing Profiles & Geo-Rules Matrix</span>
@@ -305,6 +319,83 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               <tr><td colspan="6" style="text-align: center; color: var(--text-muted);" data-i18n="txtNoRules">No rules defined for this profile.</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+      </div>
+
+      <!-- ==================== BRANCH 2: DESKTOP APP PROCESS & L3/L4 RULES ==================== -->
+      <div id="branchAppView" style="display: none;">
+        <div class="card">
+          <h2>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span data-i18n="titleAppRoutingBranch">Ветка правил приложения PEC-App (L3/L4 & Процессы)</span>
+              <span class="badge badge-active" style="font-size: 11px;">WinDivert / Packet Filter</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" id="btnSaveAppRulesBranch" onclick="saveAppRulesBranch()" style="font-size: 12px; background: var(--primary);" data-i18n="btnSaveAppRules">
+                💾 Сохранить правила десктоп-агента
+              </button>
+            </div>
+          </h2>
+
+          <div style="background: var(--card-inner); padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 16px;">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 280px;">
+                <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                  <input type="checkbox" id="branchAppIncludeExtensionRules" style="margin: 0; width: 16px; height: 16px;" onchange="onBranchAppIncludeExtRulesChange()" />
+                  <span data-i18n="lblIncludeExtensionRules">Опционально подмешивать доменные правила расширений в десктоп-агент</span>
+                </label>
+                <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.4;">
+                  По умолчанию правила браузерных расширений <strong>отключены</strong> для десктопного приложения. В десктопе действуют изолированные правила фильтрации процессов и портов (L3/L4). При включении доменные правила расширений будут дополнительно транслироваться в приложение при синхронизации.
+                </div>
+              </div>
+              <div id="branchAppInheritProfileContainer" style="min-width: 240px; display: none;">
+                <label style="font-size: 12px; font-weight: 600;" data-i18n="lblBranchAppInheritProfile">Профиль расширений для подмешивания:</label>
+                <select id="branchAppInheritProfileSelect" style="font-size: 12px; margin-bottom: 0;" onchange="onBranchAppInheritProfileChange()">
+                  <option value="">-- Наследовать по назначению флота --</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Add / Actions -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+              <span style="font-size: 11px; color: var(--text-muted);" data-i18n="lblQuickRules">Быстрые пресеты для десктопа:</span>
+              <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="applyAppRulePreset('blocked_sites')">🌐 Сайты через прокси (*.youtube.com, x.com)</button>
+              <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="applyAppRulePreset('browsers')">Браузеры Direct</button>
+              <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="applyAppRulePreset('devtools')">Разработка (curl, git, docker)</button>
+              <button type="button" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="applyAppRulePreset('tunnel')">Полный туннель (*)</button>
+            </div>
+            <button type="button" onclick="addNewAppProcessRule()" class="btn-secondary" style="font-size: 12px; padding: 4px 10px;" data-i18n="btnAddAppRule">
+              + Добавить правило процесса
+            </button>
+          </div>
+
+          <!-- Desktop App Rules Table -->
+          <div class="table-container">
+            <table id="branchAppProcessRulesTable" style="width: 100%; font-size: 12px;">
+              <thead>
+                <tr>
+                  <th style="width: 18%;">Процессы (Process)</th>
+                  <th style="width: 26%;">Сайты / Домены (Target Domains)</th>
+                  <th style="width: 18%;">IP / Сети (Target Hosts)</th>
+                  <th style="width: 12%;">Порты (Ports)</th>
+                  <th style="width: 10%;">Протокол</th>
+                  <th style="width: 10%;">Действие</th>
+                  <th style="width: 6%; text-align: center;">Удалить</th>
+                </tr>
+              </thead>
+              <tbody id="branchAppProcessRulesBody">
+                <!-- Dynamically rendered -->
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top: 12px; font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
+            <span>ℹ️ Правила десктопного агента автоматически синхронизируются с запущенными клиентами PEC-App и службой PECAppSvc каждые 30 секунд.</span>
+            <span id="branchAppSaveStatus" style="font-weight: 600;"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -959,6 +1050,14 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">
                 Загружает сайты и пресеты из центрального профиля и преобразует их в правила процессов PEC-App (с портами и протоколами).
               </div>
+            </div>
+
+            <!-- Optional extension rules mixing toggle -->
+            <div style="background: var(--bg-card-subtle, rgba(255,255,255,0.02)); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; margin: 0;">
+                <input type="checkbox" id="appIncludeExtensionRules" onchange="onAppConfigChangeLive()" style="margin: 0; width: 16px; height: 16px;" />
+                <span data-i18n="lblIncludeExtensionRules">Опционально подмешивать доменные правила расширений в десктоп-агент (по умолчанию отключено)</span>
+              </label>
             </div>
 
             <!-- Quick Rule Presets -->

@@ -2203,7 +2203,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
             if (candProf) {
                 PB_ProfileLoad(cand, candProf);
                 bool candHasUrl = (candProf->pecSync.serverUrl[0] != 0 &&
-                                   wcscmp(candProf->pecSync.serverUrl, L"http://127.0.0.1:3000") != 0);
+                                   wcscmp(candProf->pecSync.serverUrl, L"http://127.0.0.1:3000") != 0 &&
+                                   (wcsncmp(candProf->pecSync.serverUrl, L"https://", 8) == 0 ||
+                                    wcsncmp(candProf->pecSync.serverUrl, L"http://", 7) == 0));
                 if (candHasUrl) {
                     lstrcpynW(g_profile.pecSync.serverUrl, candProf->pecSync.serverUrl, 512);
                     lstrcpynW(g_profile.pecSync.fleetToken, candProf->pecSync.fleetToken, 256);

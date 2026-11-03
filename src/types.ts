@@ -263,6 +263,7 @@ export interface AppBuildConfig {
   trafficLogging: boolean;
   defaultProxyId: string;
   inheritRoutingProfileId?: string;
+  includeExtensionRules?: boolean;
   processRules: AppProcessRule[];
   updatedAt?: string;
 }

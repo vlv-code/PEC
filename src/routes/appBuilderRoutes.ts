@@ -192,6 +192,42 @@ export function createAppBuilderRouter(
     }
   });
 
+  // Dedicated REST endpoint for desktop application rules branch
+  router.get("/api/app-rules", (_req: Request, res: Response) => {
+    const cfg = getAppBuildConfig();
+    res.json({
+      ok: true,
+      rules: cfg.processRules || [],
+      includeExtensionRules: Boolean(cfg.includeExtensionRules),
+      inheritRoutingProfileId: cfg.inheritRoutingProfileId || "",
+    });
+  });
+
+  router.post("/api/app-rules", (req: Request, res: Response) => {
+    try {
+      const updates: any = {};
+      if (req.body?.rules !== undefined) {
+        updates.processRules = validateProcessRules(req.body.rules);
+      }
+      if (req.body?.includeExtensionRules !== undefined) {
+        updates.includeExtensionRules = Boolean(req.body.includeExtensionRules);
+      }
+      if (req.body?.inheritRoutingProfileId !== undefined) {
+        updates.inheritRoutingProfileId = String(req.body.inheritRoutingProfileId || "").trim();
+      }
+      const updated = saveAppBuildConfig(updates);
+      res.json({
+        ok: true,
+        rules: updated.processRules,
+        includeExtensionRules: updated.includeExtensionRules,
+        inheritRoutingProfileId: updated.inheritRoutingProfileId,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ ok: false, error: msg });
+    }
+  });
+
   router.get("/api/app-builder/info", (_req: Request, res: Response) => {
     try {
       const infoPath = getAppBuildInfoPath();

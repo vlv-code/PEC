@@ -695,6 +695,12 @@
         lblAppThemeColor: 'Accent Color',
         lblAppThemeBg: 'Window Background',
         lblAppThemeCard: 'Card Background',
+        branchExtTitle: 'Branch 1: Browser Extensions (Domains, URLs, GeoBases)',
+        branchAppTitle: 'Branch 2: PEC-App Desktop (Processes, L3/L4, WinDivert)',
+        titleAppRoutingBranch: 'Desktop App Routing Rules (L3/L4 & Process Filtering)',
+        btnSaveAppRules: 'Save Desktop App Rules',
+        lblIncludeExtensionRules: 'Optionally inject extension domain rules into desktop client (disabled by default)',
+        lblBranchAppInheritProfile: 'Extension Profile for Rule Injection:',
         titleAppRoutingRules: 'Process Routing Rules',
         lblQuickRules: 'Quick Presets:',
         titleAppBehavior: 'System Services & Startup',
@@ -1083,6 +1089,12 @@
         lblAppThemeColor: 'Акцентный цвет',
         lblAppThemeBg: 'Фон окна',
         lblAppThemeCard: 'Фон карточек',
+        branchExtTitle: 'Ветка 1: Правила расширений браузера (Домены, URL, Геобазы)',
+        branchAppTitle: 'Ветка 2: Правила приложения PEC-App (Процессы, L3/L4, WinDivert)',
+        titleAppRoutingBranch: 'Ветка правил десктоп-приложения PEC-App (L3/L4 и процессы)',
+        btnSaveAppRules: 'Сохранить правила десктоп-агента',
+        lblIncludeExtensionRules: 'Опционально подмешивать доменные правила расширений в десктоп-агент (по умолчанию отключено)',
+        lblBranchAppInheritProfile: 'Профиль расширений для подмешивания:',
         titleAppRoutingRules: 'Правила маршрутизации процессов',
         lblQuickRules: 'Быстрые пресеты:',
         titleAppBehavior: 'Системные службы и запуск',
@@ -3304,21 +3316,26 @@
 
     async function loadAppRoutingProfilesDropdown() {
       const sel = document.getElementById('appRoutingProfileSelect');
-      if (!sel) return;
+      const branchSel = document.getElementById('branchAppInheritProfileSelect');
+      const targets = [sel, branchSel].filter(Boolean);
+      if (targets.length === 0) return;
       try {
         const res = await adminFetch('/api/routing/profiles');
         if (!res.ok) return;
         const profiles = await res.json();
         if (!Array.isArray(profiles)) return;
-        const currentVal = sel.value || (currentAppConfig && currentAppConfig.inheritRoutingProfileId) || '';
-        sel.innerHTML = '<option value="">-- ' + (currentLang === 'ru' ? 'Выберите профиль маршрутизации' : 'Select routing profile') + ' --</option>';
-        profiles.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.id;
-          opt.textContent = p.name + ' (' + (p.rules || []).length + ' ' + (currentLang === 'ru' ? 'правил' : 'rules') + ')';
-          sel.appendChild(opt);
+        targets.forEach(targetSel => {
+          const isBranch = targetSel.id === 'branchAppInheritProfileSelect';
+          const currentVal = targetSel.value || (currentAppConfig && currentAppConfig.inheritRoutingProfileId) || '';
+          targetSel.innerHTML = '<option value="">-- ' + (isBranch ? (currentLang === 'ru' ? 'Наследовать по назначению флота' : 'Inherit fleet assigned profile') : (currentLang === 'ru' ? 'Выберите профиль маршрутизации' : 'Select routing profile')) + ' --</option>';
+          profiles.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name + ' (' + (p.rules || []).length + ' ' + (currentLang === 'ru' ? 'правил' : 'rules') + ')';
+            targetSel.appendChild(opt);
+          });
+          if (currentVal) targetSel.value = currentVal;
         });
-        if (currentVal) sel.value = currentVal;
       } catch (e) {
         console.warn('Error loading routing profiles for App Studio:', e);
       }
@@ -3440,12 +3457,23 @@
         if (serviceEl) serviceEl.checked = cfg.installAsService === true;
         if (logEl) logEl.checked = cfg.trafficLogging !== false;
 
+        const inclExtEl = document.getElementById('branchAppIncludeExtensionRules');
+        if (inclExtEl) {
+          inclExtEl.checked = Boolean(cfg.includeExtensionRules);
+          const container = document.getElementById('branchAppInheritProfileContainer');
+          if (container) container.style.display = cfg.includeExtensionRules ? 'block' : 'none';
+        }
+        const appInclExtEl = document.getElementById('appIncludeExtensionRules');
+        if (appInclExtEl) appInclExtEl.checked = Boolean(cfg.includeExtensionRules);
+
         currentAppLayout = cfg.uiLayout || 'console';
         setAppLayout(currentAppLayout);
         await loadAppRoutingProfilesDropdown();
         if (cfg.inheritRoutingProfileId) {
           const rSel = document.getElementById('appRoutingProfileSelect');
           if (rSel) rSel.value = cfg.inheritRoutingProfileId;
+          const bSel = document.getElementById('branchAppInheritProfileSelect');
+          if (bSel) bSel.value = cfg.inheritRoutingProfileId;
         }
         currentAppThemeMode = cfg.defaultThemeMode || 'dark';
         const btnDark = document.getElementById('btnAppModeDark');
@@ -3756,7 +3784,8 @@
         iconType: iconEl ? iconEl.value : 'shield',
         presetStyle: presetEl ? presetEl.value : 'cyber-blue',
         uiLayout: currentAppLayout,
-        inheritRoutingProfileId: (document.getElementById('appRoutingProfileSelect')?.value || '').trim() || undefined,
+        inheritRoutingProfileId: (document.getElementById('branchAppInheritProfileSelect')?.value || document.getElementById('appRoutingProfileSelect')?.value || '').trim() || undefined,
+        includeExtensionRules: Boolean(document.getElementById('branchAppIncludeExtensionRules')?.checked || document.getElementById('appIncludeExtensionRules')?.checked),
         defaultThemeMode: currentAppThemeMode || 'dark',
         themeColor: colorEl ? colorEl.value : '#0284c7',
         themeBackground: bgEl ? bgEl.value : '#0b1120',
@@ -4008,11 +4037,14 @@
     }
 
     function renderAppProcessRulesTable() {
-      const tbody = document.getElementById('appProcessRulesBody');
-      if (!tbody) return;
+      const tbody1 = document.getElementById('appProcessRulesBody');
+      const tbody2 = document.getElementById('branchAppProcessRulesBody');
+      const targets = [tbody1, tbody2].filter(Boolean);
+      if (targets.length === 0) return;
 
       if (!currentAppRules || currentAppRules.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 12px;">${currentLang === 'ru' ? 'Правила не настроены. Добавьте правило или примените пресет.' : 'No process rules defined. Add a rule or apply a preset.'}</td></tr>`;
+        const emptyHtml = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 12px;">${currentLang === 'ru' ? 'Правила не настроены. Добавьте правило или примените пресет.' : 'No process rules defined. Add a rule or apply a preset.'}</td></tr>`;
+        targets.forEach(t => t.innerHTML = emptyHtml);
         updateAppLivePreview();
         return;
       }
@@ -4060,7 +4092,7 @@
         </tr>`;
       });
 
-      tbody.innerHTML = html;
+      targets.forEach(t => t.innerHTML = html);
       updateAppLivePreview();
     }
 
@@ -4576,7 +4608,105 @@
     window.setAppLayout = setAppLayout;
     window.importSelectedRoutingProfileRules = importSelectedRoutingProfileRules;
     window.renderAppStudioBuildInfo = renderAppStudioBuildInfo;
+
+    function switchRoutingBranch(branch) {
+      const btnExt = document.getElementById('btnBranchExt');
+      const btnApp = document.getElementById('btnBranchApp');
+      const viewExt = document.getElementById('branchExtView');
+      const viewApp = document.getElementById('branchAppView');
+
+      if (branch === 'app') {
+        if (btnApp) btnApp.classList.add('active');
+        if (btnExt) btnExt.classList.remove('active');
+        if (viewApp) viewApp.style.display = 'block';
+        if (viewExt) viewExt.style.display = 'none';
+        renderAppProcessRulesTable();
+        loadAppRoutingProfilesDropdown();
+      } else {
+        if (btnExt) btnExt.classList.add('active');
+        if (btnApp) btnApp.classList.remove('active');
+        if (viewExt) viewExt.style.display = 'block';
+        if (viewApp) viewApp.style.display = 'none';
+      }
+    }
+
+    function onBranchAppIncludeExtRulesChange() {
+      const chk = document.getElementById('branchAppIncludeExtensionRules');
+      const container = document.getElementById('branchAppInheritProfileContainer');
+      if (container) {
+        container.style.display = chk && chk.checked ? 'block' : 'none';
+      }
+      const appChk = document.getElementById('appIncludeExtensionRules');
+      if (appChk && chk && appChk.checked !== chk.checked) {
+        appChk.checked = chk.checked;
+      }
+    }
+
+    function onBranchAppInheritProfileChange() {
+      const sel = document.getElementById('branchAppInheritProfileSelect');
+      const appSel = document.getElementById('appRoutingProfileSelect');
+      if (sel && appSel && appSel.value !== sel.value) {
+        appSel.value = sel.value;
+      }
+    }
+
+    async function saveAppRulesBranch() {
+      const btn = document.getElementById('btnSaveAppRulesBranch');
+      const statusEl = document.getElementById('branchAppSaveStatus');
+      if (btn) btn.disabled = true;
+      if (statusEl) {
+        statusEl.textContent = currentLang === 'ru' ? 'Сохранение...' : 'Saving...';
+        statusEl.style.color = 'var(--text-muted)';
+      }
+
+      const includeExt = Boolean(document.getElementById('branchAppIncludeExtensionRules')?.checked);
+      const inheritProfileId = document.getElementById('branchAppInheritProfileSelect')?.value || '';
+
+      try {
+        const res = await adminFetch('/api/app-rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rules: currentAppRules || [],
+            includeExtensionRules: includeExt,
+            inheritRoutingProfileId: inheritProfileId
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          if (currentAppConfig) {
+            currentAppConfig.processRules = data.rules;
+            currentAppConfig.includeExtensionRules = data.includeExtensionRules;
+            currentAppConfig.inheritRoutingProfileId = data.inheritRoutingProfileId;
+          }
+          isAppStudioDirty = false;
+          toast(currentLang === 'ru' ? 'Правила десктоп-клиента успешно сохранены и применены!' : 'Desktop app rules saved and applied!', 'success');
+          if (statusEl) {
+            statusEl.textContent = (currentLang === 'ru' ? 'Сохранено: ' : 'Saved: ') + new Date().toLocaleTimeString();
+            statusEl.style.color = 'var(--success, #10b981)';
+          }
+        } else {
+          toast(currentLang === 'ru' ? 'Ошибка сохранения: ' + (data.error || res.status) : 'Save error: ' + (data.error || res.status), 'error');
+          if (statusEl) {
+            statusEl.textContent = currentLang === 'ru' ? 'Ошибка' : 'Error';
+            statusEl.style.color = 'var(--danger, #ef4444)';
+          }
+        }
+      } catch (err) {
+        toast('Error saving desktop rules: ' + err.message, 'error');
+        if (statusEl) {
+          statusEl.textContent = currentLang === 'ru' ? 'Сбой' : 'Failed';
+          statusEl.style.color = 'var(--danger, #ef4444)';
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
     window.loadAppStudioConfig = loadAppStudioConfig;
+    window.switchRoutingBranch = switchRoutingBranch;
+    window.onBranchAppIncludeExtRulesChange = onBranchAppIncludeExtRulesChange;
+    window.onBranchAppInheritProfileChange = onBranchAppInheritProfileChange;
+    window.saveAppRulesBranch = saveAppRulesBranch;
     window.saveAppStudioConfigAction = saveAppStudioConfigAction;
     window.cleanAppBinariesAction = cleanAppBinariesAction;
     window.buildAppBinariesAction = buildAppBinariesAction;
