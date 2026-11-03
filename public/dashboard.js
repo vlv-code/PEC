@@ -5141,7 +5141,7 @@
       closeCustomizationPopover();
       popover.style.display = isVisible ? 'none' : 'block';
       if (!isVisible) {
-        checkGitHubReleasesNow();
+        refreshGitHubReleasesNow();
       }
     }
 
@@ -5162,7 +5162,10 @@
       }
 
       try {
-        const res = await adminFetch('/api/releases/github');
+        let res = await adminFetch('/api/github/releases');
+        if (res.status === 404) {
+          res = await adminFetch('/api/releases/github');
+        }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         cachedReleases = data;
