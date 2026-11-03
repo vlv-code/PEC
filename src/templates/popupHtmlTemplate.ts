@@ -492,6 +492,30 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
     }
 
+    /* Accessibility: Focus-visible states */
+    .btn-action:focus-visible,
+    .btn-icon-minimal:focus-visible,
+    .btn-primary-sm:focus-visible,
+    .tab-btn:focus-visible,
+    .btn-theme-toggle:focus-visible,
+    .form-input:focus-visible,
+    .form-select:focus-visible,
+    .btn-quick-add:focus-visible,
+    .btn-sm:focus-visible {
+      outline: 2px solid var(--primary) !important;
+      outline-offset: 2px !important;
+      box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.25) !important;
+    }
+    [data-layout="terminal"] .btn-action:focus-visible,
+    [data-layout="terminal"] .btn-icon-minimal:focus-visible,
+    [data-layout="terminal"] .btn-primary-sm:focus-visible,
+    [data-layout="terminal"] .tab-btn:focus-visible,
+    [data-layout="terminal"] .btn-theme-toggle:focus-visible {
+      outline: 2px solid var(--primary) !important;
+      outline-offset: 1px !important;
+      box-shadow: none !important;
+    }
+
     /* Inline PNG icon pack */
     .icon-inline {
       width: 14px;

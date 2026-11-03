@@ -147,7 +147,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 </div>
               </div>
 
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 11px; color: var(--text); user-select: none;">
+              <label for="chkSyncThemeWithApps" style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 11px; color: var(--text); user-select: none;">
                 <input type="checkbox" id="chkSyncThemeWithApps" checked onchange="toggleSyncThemeWithApps(this.checked)" style="margin-top: 2px;" />
                 <span data-i18n="lblSyncThemeWithApps">Синхронизировать тему и значок с расширениями и приложениями</span>
               </label>
@@ -245,14 +245,14 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
     <!-- Navigation Tabs -->
     <div class="tabs-nav">
-      <button id="tabBtnRouting" class="tab-btn active" onclick="switchTab('routing')" data-i18n="tabBtnRouting"><img src="/icons/routing.png" class="icon-inline" alt="routing"> Routing & GeoBases</button>
-      <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings"><img src="/icons/server.png" class="icon-inline" alt="proxy"> Proxy Settings</button>
-      <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder"><img src="/icons/palette.png" class="icon-inline" alt="builder"> Extension Constructor Studio</button>
+      <button id="tabBtnRouting" class="tab-btn active" onclick="switchTab('routing')" data-i18n="tabBtnRouting"><img src="/icons/routing.png" class="icon-inline" alt="routing"> Маршрутизация и геобазы</button>
+      <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings"><img src="/icons/server.png" class="icon-inline" alt="proxy"> Настройки прокси</button>
+      <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder"><img src="/icons/palette.png" class="icon-inline" alt="builder"> Конструктор расширения</button>
       <button id="tabBtnAppStudio" class="tab-btn" onclick="switchTab('app-studio')" data-i18n="tabBtnAppStudio"><img src="/icons/desktop.png" class="icon-inline" alt="app"> Конструктор приложения</button>
       <button id="tabBtnInstances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances"><img src="/icons/devices.png" class="icon-inline" alt="fleet"> Флот</button>
-      <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo"><img src="/icons/building.png" class="icon-inline" alt="gpo"> GPO Deployment</button>
+      <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo"><img src="/icons/building.png" class="icon-inline" alt="gpo"> Развертывание GPO</button>
       <button id="tabBtnReleases" class="tab-btn" onclick="switchTab('releases')" data-i18n="tabBtnReleases"><img src="/icons/package.png" class="icon-inline" alt="releases"> Релизы и версионирование</button>
-      <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs"><img src="/icons/logs.png" class="icon-inline" alt="logs"> Audit & Tester</button>
+      <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs"><img src="/icons/logs.png" class="icon-inline" alt="logs"> Аудит и тестирование</button>
     </div>
 
     <!-- ==================== TAB 1: ROUTING & GEOBASES ==================== -->
@@ -284,20 +284,20 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
         <!-- Profile Metadata & Default Policy -->
         <div style="background: var(--card-inner); padding: 16px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 16px;">
-          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+          <div class="grid-routing-matrix-header">
             <div>
-              <label data-i18n="lblProfName">Profile Name</label>
+              <label for="profName" data-i18n="lblProfName">Profile Name</label>
               <input type="text" id="profName" style="margin-bottom: 0;" />
             </div>
             <div>
-              <label data-i18n="lblDefaultPolicy">Default Traffic Policy</label>
+              <label for="profDefaultPolicy" data-i18n="lblDefaultPolicy">Default Traffic Policy</label>
               <select id="profDefaultPolicy" style="margin-bottom: 0;">
                 <option value="direct" data-i18n="optPolicyDirect">DIRECT by Default (Selective Proxy)</option>
                 <option value="proxy" data-i18n="optPolicyProxy">PROXY by Default (Full Tunnel)</option>
               </select>
             </div>
             <div>
-              <label data-i18n="lblTargetScope">Deployment Target Scope</label>
+              <label for="profTargetGroup" data-i18n="lblTargetScope">Deployment Target Scope</label>
               <select id="profTargetScope" style="margin-bottom: 0;">
                 <option value="all" data-i18n="optScopeAll">All Devices (Global Default)</option>
                 <option value="group" data-i18n="optScopeGroup">Target AD / Device Group</option>
@@ -307,19 +307,19 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </div>
 
           <div id="groupTargetRow" style="display: none; margin-bottom: 10px;">
-            <label data-i18n="lblTargetGroup">Target Group Name</label>
+            <label for="profTargetGroup" data-i18n="lblTargetGroup">Target Group Name</label>
             <input type="text" id="profTargetGroup" placeholder="e.g. SEC-Proxy-VPN-VIP or Dev-Team" data-i18n-ph="phTargetGroup" style="margin-bottom: 0;" />
           </div>
 
           <div id="instancesTargetRow" style="display: none; margin-bottom: 10px;">
-            <label data-i18n="lblTargetInstances">Target Instances</label>
+            <label for="profFailClosed" data-i18n="lblTargetInstances">Target Instances</label>
             <div id="profTargetInstancesList" style="max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; background: var(--bg-card-subtle);">
               <!-- Checkboxes for available instances rendered dynamically -->
             </div>
           </div>
 
           <div style="margin-bottom: 12px;">
-            <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;">
+            <label for="profFailClosed" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;">
               <input type="checkbox" id="profFailClosed" style="margin: 0; width: 16px; height: 16px;" />
               <span data-i18n="lblFailClosed">Fail-Closed: Prevent direct fallback (DIRECT) if proxy drops (avoids IP leak)</span>
             </label>
@@ -354,17 +354,17 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         <!-- Custom Rule Adder -->
         <div style="background: var(--card-inner); padding: 14px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 16px;">
           <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 10px;" data-i18n="titleCustomRule">Add Custom Domain / Subnet Rule</h4>
-          <div style="display: grid; grid-template-columns: 2fr 3fr 1fr auto; gap: 10px; align-items: flex-end;">
+          <div class="grid-routing-rule-form">
             <div>
-              <label data-i18n="lblRuleName">Rule Name</label>
+              <label for="newRuleName" data-i18n="lblRuleName">Rule Name</label>
               <input type="text" id="newRuleName" placeholder="My Custom Rule" data-i18n-ph="phRuleName" style="margin-bottom: 0;" />
             </div>
             <div>
-              <label data-i18n="lblRulePattern">Pattern (comma separated domains or CIDRs)</label>
+              <label for="newRulePattern" data-i18n="lblRulePattern">Pattern (comma separated domains or CIDRs)</label>
               <input type="text" id="newRulePattern" placeholder="*.example.com, target-domain.org, 10.50.0.0/16" data-i18n-ph="phRulePattern" style="margin-bottom: 0;" />
             </div>
             <div>
-              <label data-i18n="lblRuleAction">Action</label>
+              <label for="newRuleAction" data-i18n="lblRuleAction">Action</label>
               <select id="newRuleAction" style="margin-bottom: 0;">
                 <option value="proxy" data-i18n="optActionProxy">PROXY</option>
                 <option value="direct" data-i18n="optActionDirect">DIRECT</option>
@@ -425,7 +425,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           <div style="background: var(--card-inner); padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 16px;">
             <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
               <div style="flex: 1; min-width: 280px;">
-                <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                <label for="branchAppIncludeExtensionRules" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
                   <input type="checkbox" id="branchAppIncludeExtensionRules" style="margin: 0; width: 16px; height: 16px;" onchange="onBranchAppIncludeExtRulesChange()" />
                   <span data-i18n="lblIncludeExtensionRules">Опционально подмешивать доменные правила расширений в десктоп-агент</span>
                 </label>
@@ -435,7 +435,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </div>
               <div id="branchAppInheritProfileContainer" style="min-width: 300px; display: none;">
                 <div style="margin-bottom: 8px;">
-                  <label style="font-size: 12px; font-weight: 600;" data-i18n="lblBranchAppInheritProfile">Профиль расширений для подмешивания:</label>
+                  <label for="appRuleInheritModeAll" style="font-size: 12px; font-weight: 600;" data-i18n="lblBranchAppInheritProfile">Профиль расширений для подмешивания:</label>
                   <select id="branchAppInheritProfileSelect" style="font-size: 12px; margin-bottom: 6px; width: 100%;" onchange="onBranchAppInheritProfileChange()">
                     <option value="">-- Наследовать по назначению флота --</option>
                   </select>
@@ -444,11 +444,11 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <div style="margin-bottom: 6px;">
                   <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Режим применения правил:</div>
                   <div style="display: flex; gap: 14px; font-size: 11.5px;">
-                    <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <label for="appRuleInheritModeAll" style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
                       <input type="radio" name="appRuleInheritMode" id="appRuleInheritModeAll" value="all" checked onchange="onAppRuleInheritModeChange()" />
                       <span>Целиком весь профиль</span>
                     </label>
-                    <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <label for="appRuleInheritModeSpecific" style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
                       <input type="radio" name="appRuleInheritMode" id="appRuleInheritModeSpecific" value="specific" onchange="onAppRuleInheritModeChange()" />
                       <span>Выбрать конкретные правила</span>
                     </label>
@@ -593,26 +593,26 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <div class="grid-2">
         <div class="card">
           <h2 data-i18n="title3xuiCreds">3x-ui API Credentials & Timing Scheduler</h2>
-          <label data-i18n="lbl3xuiPanelUrl">3x-ui Panel URL</label>
+          <label for="rotPanelUrl" data-i18n="lbl3xuiPanelUrl">3x-ui Panel URL</label>
           <input type="text" id="rotPanelUrl" placeholder="https://3xui-host:2053/basepath" data-i18n-ph="phRotPanelUrl" />
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="grid-form-2col">
             <div>
-              <label data-i18n="lblAdminUser">Admin Username</label>
+              <label for="rotAdminUser" data-i18n="lblAdminUser">Admin Username</label>
               <input type="text" id="rotAdminUser" placeholder="admin" data-i18n-ph="phRotAdminUser" />
             </div>
             <div>
-              <label data-i18n="lblAdminPass">Admin Password</label>
+              <label for="rotAdminPass" data-i18n="lblAdminPass">Admin Password</label>
               <input type="password" id="rotAdminPass" placeholder="••••••••" /><span id="passwordSavedBadge" class="badge badge-success" style="display: none; margin-left: 8px;">(Пароль сохранён на сервере)</span>
             </div>
           </div>
 
-          <label data-i18n="lblInboundRemark">Target Inbound Remark</label>
+          <label for="rotRemark" data-i18n="lblInboundRemark">Target Inbound Remark</label>
           <input type="text" id="rotRemark" placeholder="squid-in" data-i18n-ph="phRotRemark" />
 
           <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
             <div>
-              <label data-i18n="lblRotInterval">Rotation Interval</label>
+              <label for="rotInterval" data-i18n="lblRotInterval">Rotation Interval</label>
               <select id="rotInterval">
                 <option value="15" data-i18n="optRot15">Every 15 minutes</option>
                 <option value="60" data-i18n="optRot60">Every 1 hour</option>
@@ -622,7 +622,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </select>
             </div>
             <div>
-              <label data-i18n="lblScheduler">Scheduler</label>
+              <label for="rotInsecureTls" data-i18n="lblScheduler">Scheduler</label>
               <select id="rotEnabled">
                 <option value="true" data-i18n="optSchedEnabled">Enabled (Auto)</option>
                 <option value="false" data-i18n="optSchedDisabled">Disabled</option>
@@ -630,7 +630,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
           </div>
 
-          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 8px; text-transform: none; font-weight: normal; cursor: pointer;">
+          <label for="rotInsecureTls" style="display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 8px; text-transform: none; font-weight: normal; cursor: pointer;">
             <input type="checkbox" id="rotInsecureTls" style="width: auto; margin-bottom: 0;" />
             <span data-i18n="lblInsecureTls">Allow Insecure / Self-Signed TLS</span>
           </label>
@@ -658,7 +658,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </div>
 
           <div id="rotHistoryList" style="margin-top: 16px;">
-            <label data-i18n="lblRecentRot">Recent Password Rotations</label>
+            <label for="rotHistoryTable" data-i18n="lblRecentRot">Recent Password Rotations</label>
             <div class="table-container">
               <table>
                 <thead>
@@ -681,7 +681,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
     <!-- ==================== TAB 3: EXTENSION CONSTRUCTOR STUDIO ==================== -->
     <div id="tab-builder" class="tab-pane">
-      <div style="display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; margin-bottom: 16px;">
+      <div class="grid-builder-columns">
         
         <!-- Left Column: Visual, Preset & Feature Customizer -->
         <div class="card" style="margin-bottom: 0;">
@@ -695,7 +695,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
           <!-- 1. Interface Mode -->
           <div style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px;">
-            <label style="margin-bottom: 8px;" data-i18n="lblArchetypePresets">1. Режим интерфейса</label>
+            <label for="chip-popup" style="margin-bottom: 8px;" data-i18n="lblArchetypePresets">1. Режим интерфейса</label>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button type="button" class="preset-chip active" id="chip-popup" onclick="applyUiModePreset('popup')">
                 <img src="/icons/user.png" class="icon-inline" alt="user">
@@ -716,7 +716,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div id="builderThemeLockedNotice" class="theme-sync-lock-banner" style="display: none;">
               <span>🔒 <strong data-i18n="msgThemeLockedBySync">Синхронизировано с корпоративным оформлением панели</strong></span>
             </div>
-            <label style="margin-bottom: 8px;" data-i18n="lblThemePalettes">2. Макет и цветовая палитра</label>
+            <label for="btnStudioLayoutConsole" style="margin-bottom: 8px;" data-i18n="lblThemePalettes">2. Макет и цветовая палитра</label>
 
             <!-- Layout selector: Console vs Terminal -->
             <div style="margin-bottom: 12px;">
@@ -780,22 +780,22 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           <input type="hidden" id="bldUiMode" value="popup" />
           <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
             <div>
-              <label data-i18n="lblExtName">Extension Name</label>
+              <label for="bldName" data-i18n="lblExtName">Extension Name</label>
               <input type="text" id="bldName" oninput="onConfigChangeLive()" placeholder="Corp Proxy Auth & Sync" data-i18n-ph="phExtName" />
             </div>
             <div>
-              <label data-i18n="lblShortName">Short Name</label>
+              <label for="bldShortName" data-i18n="lblShortName">Short Name</label>
               <input type="text" id="bldShortName" oninput="onConfigChangeLive()" placeholder="CorpProxy" data-i18n-ph="phShortName" />
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="grid-form-2col">
             <div>
-              <label data-i18n="lblVersion">Version</label>
+              <label for="bldVersion" data-i18n="lblVersion">Version</label>
               <input type="text" id="bldVersion" oninput="onConfigChangeLive()" placeholder="1.2.0" />
             </div>
             <div>
-              <label data-i18n="lblSyncInterval">Sync Interval</label>
+              <label for="bldSyncInterval" data-i18n="lblSyncInterval">Sync Interval</label>
               <select id="bldSyncInterval" onchange="onConfigChangeLive()">
                 <option value="1" data-i18n="optSync1">Every 1 minute (test)</option>
                 <option value="2" data-i18n="optSync2">Every 2 minutes</option>
@@ -812,11 +812,11 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
           <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; margin-top: 10px;">
             <div>
-              <label data-i18n="lblBrandColor">Brand Theme Color</label>
+              <label for="bldThemeColor" data-i18n="lblBrandColor">Brand Theme Color</label>
               <input type="text" id="bldThemeColor" oninput="onConfigChangeLive()" placeholder="#0284c7" />
             </div>
             <div>
-              <label data-i18n="lblIconCustom">Иконка расширения (Emoji или изображение)</label>
+              <label for="bldEmoji" data-i18n="lblIconCustom">Иконка расширения (Emoji или изображение)</label>
               <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <input type="text" id="bldEmoji" oninput="onConfigChangeLive()" placeholder="🛡️" style="width: 50px; text-align: center; font-size: 18px;" />
                 <input type="file" id="iconFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;" onchange="onIconFileSelected(event)" />
@@ -832,13 +832,13 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
           </div>
 
-          <label data-i18n="lblExtDesc">Enterprise Description</label>
+          <label for="bldDesc" data-i18n="lblExtDesc">Enterprise Description</label>
           <input type="text" id="bldDesc" oninput="onConfigChangeLive()" placeholder="Enterprise Chrome extension for automatic proxy synchronization" data-i18n-ph="phExtDesc" />
 
-          <label data-i18n="lblServerUrl">Sync Server Base URL (API Base URL)</label>
+          <label for="bldServerUrl" data-i18n="lblServerUrl">Sync Server Base URL (API Base URL)</label>
           <input type="text" id="bldServerUrl" oninput="onConfigChangeLive()" placeholder="https://pec.example.corp" data-i18n-ph="phServerUrl" />
 
-          <label data-i18n="lblUpdateUrl">Update Manifest XML URL (update_url)</label>
+          <label for="bldUpdateUrl" data-i18n="lblUpdateUrl">Update Manifest XML URL (update_url)</label>
           <input type="text" id="bldUpdateUrl" oninput="onConfigChangeLive()" placeholder="https://pec.example.corp/updates/updates.xml" data-i18n-ph="phUpdateUrl" />
           <div style="font-size: 11px; color: var(--text-muted); margin-top: -6px; margin-bottom: 10px;" data-i18n="hintUpdateUrl">Зашивается в manifest.json (update_url) и GPO. Если не заполнено, формируется автоматически как [Server URL]/updates/updates.xml</div>
 
@@ -851,21 +851,21 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
           <!-- 4. Security & User Feature Policies -->
           <div style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px;">
-            <label style="margin-bottom: 8px;" data-i18n="lblSecPolicies">Security & Leak Prevention Policies</label>
+            <label for="bldWebRtc" style="margin-bottom: 8px;" data-i18n="lblSecPolicies">Security & Leak Prevention Policies</label>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
-              <label style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
+              <label for="bldWebRtc" style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
                 <input type="checkbox" id="bldWebRtc" checked onchange="onConfigChangeLive()" style="width: auto; margin-bottom: 0;" />
                 <span data-i18n="lblWebrtcShield">WebRTC IP Shield (no UDP leak)</span>
               </label>
-              <label style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
+              <label for="bldDnsGuard" style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
                 <input type="checkbox" id="bldDnsGuard" checked onchange="onConfigChangeLive()" style="width: auto; margin-bottom: 0;" />
                 <span data-i18n="lblDnsGuard">DNS Leak Guard</span>
               </label>
-              <label style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
+              <label for="bldAutoProxy" style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
                 <input type="checkbox" id="bldAutoProxy" checked onchange="onConfigChangeLive()" style="width: auto; margin-bottom: 0;" />
                 <span data-i18n="lblAutoProxy">Dynamic Proxy Enforcement</span>
               </label>
-              <label style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
+              <label for="builderAllowUserProxySwitch" style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
                 <input type="checkbox" id="builderAllowUserProxySwitch" checked onchange="onConfigChangeLive()" style="width: auto; margin-bottom: 0;" />
                 <span data-i18n="lblAllowUserProxySwitch">Разрешить переключение прокси</span>
               </label>
@@ -873,7 +873,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             
             <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 10px;">
               <div>
-                <label style="font-size: 11px;" data-i18n="lblPauseTimeout">Таймаут паузы</label>
+                <label for="bldSupportUrl" style="font-size: 11px;" data-i18n="lblPauseTimeout">Таймаут паузы</label>
                 <select id="bldBypassTimeout" onchange="onConfigChangeLive()" style="margin-bottom: 0; font-size: 12px;">
                   <option value="10">10 minutes</option>
                   <option value="15" selected>15 minutes</option>
@@ -882,7 +882,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 </select>
               </div>
               <div>
-                <label style="font-size: 11px;" data-i18n="lblSupportUrl">IT Helpdesk Contact</label>
+                <label for="bldSupportUrl" style="font-size: 11px;" data-i18n="lblSupportUrl">IT Helpdesk Contact</label>
                 <input type="text" id="bldSupportUrl" oninput="onConfigChangeLive()" placeholder="mailto:it-support@corp.local" data-i18n-ph="phSupportUrl" style="margin-bottom: 0; font-size: 12px;" />
               </div>
             </div>
@@ -1015,22 +1015,22 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
               <div>
-                <label data-i18n="lblAppName">Название приложения</label>
+                <label for="appBuildName" data-i18n="lblAppName">Название приложения</label>
                 <input type="text" id="appBuildName" value="PEC - Proxy Client" oninput="onAppConfigChangeLive()" placeholder="PEC - Proxy Client" />
               </div>
               <div>
-                <label data-i18n="lblAppShortName">Короткое имя</label>
+                <label for="appBuildShortName" data-i18n="lblAppShortName">Короткое имя</label>
                 <input type="text" id="appBuildShortName" value="PEC Client" oninput="onAppConfigChangeLive()" placeholder="PEC Client" />
               </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="grid-form-2col">
               <div>
-                <label data-i18n="lblAppVersion">Версия</label>
+                <label for="appBuildVersion" data-i18n="lblAppVersion">Версия</label>
                 <input type="text" id="appBuildVersion" value="2.2.0" oninput="onAppConfigChangeLive()" placeholder="2.2.0" />
               </div>
               <div>
-                <label data-i18n="lblAppIconType">Иконка приложения (Эмодзи или PNG)</label>
+                <label for="appIconFileInput" data-i18n="lblAppIconType">Иконка приложения (Эмодзи или PNG)</label>
                 <div style="display: flex; gap: 6px; align-items: center;">
                   <select id="appIconType" onchange="onAppConfigChangeLive()" style="margin-bottom: 0; flex: 1;">
                     <option value="shield">🛡️ Shield (Щит безопасности)</option>
@@ -1052,7 +1052,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
 
             <div>
-              <label data-i18n="lblAppDescription">Описание</label>
+              <label for="appBuildDescription" data-i18n="lblAppDescription">Описание</label>
               <textarea id="appBuildDescription" oninput="onAppConfigChangeLive()" rows="2" style="width: 100%; font-size: 12px; margin-bottom: 0;">Корпоративный прозрачный прокси-клиент с фильтрацией процессов и автоматической синхронизацией.</textarea>
             </div>
           </div>
@@ -1125,17 +1125,17 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
 
             <!-- Custom Colors -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+            <div class="grid-form-3col">
               <div>
-                <label style="font-size: 11px;" data-i18n="lblAppThemeColor">Акцентный цвет</label>
+                <label for="appThemeColor" style="font-size: 11px;" data-i18n="lblAppThemeColor">Акцентный цвет</label>
                 <input type="color" id="appThemeColor" value="#38bdf8" onchange="onAppCustomColorChange()" style="height: 36px; padding: 2px; width: 100%; cursor: pointer;" />
               </div>
               <div>
-                <label style="font-size: 11px;" data-i18n="lblAppThemeBg">Фон окна</label>
+                <label for="appThemeBackground" style="font-size: 11px;" data-i18n="lblAppThemeBg">Фон окна</label>
                 <input type="color" id="appThemeBackground" value="#0b1120" onchange="onAppCustomColorChange()" style="height: 36px; padding: 2px; width: 100%; cursor: pointer;" />
               </div>
               <div>
-                <label style="font-size: 11px;" data-i18n="lblAppThemeCard">Фон карточек</label>
+                <label for="appThemeCard" style="font-size: 11px;" data-i18n="lblAppThemeCard">Фон карточек</label>
                 <input type="color" id="appThemeCard" value="#131d36" onchange="onAppCustomColorChange()" style="height: 36px; padding: 2px; width: 100%; cursor: pointer;" />
               </div>
             </div>
@@ -1148,26 +1148,26 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </h2>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+              <label for="appAutoStart" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                 <input type="checkbox" id="appAutoStart" checked onchange="onAppConfigChangeLive()" />
                 <span data-i18n="lblAppAutoStart">Автозапуск с Windows</span>
               </label>
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+              <label for="appStartMinimized" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                 <input type="checkbox" id="appStartMinimized" checked onchange="onAppConfigChangeLive()" />
                 <span data-i18n="lblAppStartMinimized">Сворачивать в системный трей</span>
               </label>
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+              <label for="appInstallService" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                 <input type="checkbox" id="appInstallService" onchange="onAppConfigChangeLive()" />
                 <span data-i18n="lblAppInstallService">Служба Windows (Background Service)</span>
               </label>
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+              <label for="appTrafficLogging" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                 <input type="checkbox" id="appTrafficLogging" onchange="onAppConfigChangeLive()" />
                 <span data-i18n="lblAppTrafficLogging">Логирование соединений</span>
               </label>
             </div>
 
             <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;" data-i18n="lblAppSyncInterval">Интервал автосинхронизации с сервером (минуты):</label>
+              <label for="appSyncIntervalMinutes" style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;" data-i18n="lblAppSyncInterval">Интервал автосинхронизации с сервером (минуты):</label>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <input type="number" id="appSyncIntervalMinutes" min="1" max="1440" value="15" onchange="onAppConfigChangeLive()" style="width: 120px; font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--card-inner); color: var(--text);" />
                 <span style="font-size: 11px; color: var(--text-muted);" data-i18n="hintAppSyncInterval">Периодичность синхронизации профиля, прокси и маршрутов в фоновом режиме (по умолчанию: 15 мин).</span>
@@ -1203,25 +1203,25 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div id="codeSignUploadView">
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
                 <div>
-                  <label style="font-size: 11px; font-weight: 600;">Тип сертификата</label>
+                  <label for="csTimestampUrl" style="font-size: 11px; font-weight: 600;">Тип сертификата</label>
                   <select id="csCertType" class="form-select" onchange="onCodeSignTypeChange()" style="font-size: 12px; margin-bottom: 0;">
                     <option value="commercial">Официальный / Коммерческий (с RFC 3161 Timestamp)</option>
                     <option value="internal">Внутридоменный CA (Active Directory CS, offline / без штампа времени)</option>
                   </select>
                 </div>
                 <div>
-                  <label style="font-size: 11px; font-weight: 600;">URL сервера штампа времени (RFC 3161)</label>
+                  <label for="csTimestampUrl" style="font-size: 11px; font-weight: 600;">URL сервера штампа времени (RFC 3161)</label>
                   <input type="text" id="csTimestampUrl" value="http://timestamp.digicert.com" placeholder="http://timestamp.digicert.com" style="font-size: 12px; margin-bottom: 0;" />
                 </div>
               </div>
 
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
                 <div>
-                  <label style="font-size: 11px; font-weight: 600;">Файл сертификата (.pfx / .p12)</label>
+                  <label for="csCertFile" style="font-size: 11px; font-weight: 600;">Файл сертификата (.pfx / .p12)</label>
                   <input type="file" id="csCertFile" accept=".pfx,.p12" style="font-size: 12px; padding: 4px;" />
                 </div>
                 <div>
-                  <label style="font-size: 11px; font-weight: 600;">Пароль закрытого ключа</label>
+                  <label for="csCertPassword" style="font-size: 11px; font-weight: 600;">Пароль закрытого ключа</label>
                   <input type="password" id="csCertPassword" placeholder="Оставьте пустым, если без пароля" style="font-size: 12px; margin-bottom: 0;" />
                 </div>
               </div>
@@ -1309,13 +1309,13 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <div id="prevTabMain" class="mockup-tab-content active">
                   <div style="background: var(--app-card); border-radius: 6px; padding: 10px; margin-bottom: 8px; border: 1px solid var(--border);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                      <span style="font-size: 11px; color: #94a3b8;">Состояние службы:</span>
+                      <span style="font-size: 11px; color: var(--text-muted);">Состояние службы:</span>
                       <span class="mockup-proxy-pill" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);">● Сервер: Активен (18 ms)</span>
                     </div>
                     <button type="button" style="width: 100%; padding: 8px; font-size: 12px; font-weight: 700; background: var(--app-accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;">
                       ⚡ Туннель активен (PROXY)
                     </button>
-                    <div style="margin-top: 8px; font-size: 10.5px; color: #94a3b8; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                    <div style="margin-top: 8px; font-size: 10.5px; color: var(--text-muted); display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
                       <div>Фильтр ядра: <strong style="color: #10b981;">WinDivert64.sys</strong></div>
                       <div>Локальный релей: <strong style="color: var(--app-accent);">127.0.0.1:34010</strong></div>
                     </div>
@@ -1324,18 +1324,18 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
                 <!-- Preview Window Tab Content: Traffic -->
                 <div id="prevTabTraffic" class="mockup-tab-content" style="display: none;">
-                  <div style="font-size: 10.5px; color: #94a3b8; margin-bottom: 4px;">Активные перехваты соединений L3/L4:</div>
+                  <div style="font-size: 10.5px; color: var(--text-muted); margin-bottom: 4px;">Активные перехваты соединений L3/L4:</div>
                   <div style="max-height: 140px; overflow-y: auto; background: var(--app-card); border: 1px solid var(--border); border-radius: 4px; font-size: 10.5px;">
-                    <div style="display: grid; grid-template-columns: 50px 70px 1fr 50px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 600; color: #94a3b8;">
+                    <div class="grid-preview-traffic-row" style="border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 600; color: var(--text-muted);">
                       <span>Время</span><span>Процесс</span><span>Назначение</span><span>Действие</span>
                     </div>
-                    <div style="display: grid; grid-template-columns: 50px 70px 1fr 50px; padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
+                    <div class="grid-preview-traffic-row" style="border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
                       <span style="color: #64748b;">13:40:02</span><span>curl.exe</span><span style="overflow:hidden; text-overflow:ellipsis;">api.github.com:443</span><span style="color: var(--app-accent); font-weight: 600;">PROXY</span>
                     </div>
-                    <div style="display: grid; grid-template-columns: 50px 70px 1fr 50px; padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
+                    <div class="grid-preview-traffic-row" style="border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
                       <span style="color: #64748b;">13:40:08</span><span>git.exe</span><span style="overflow:hidden; text-overflow:ellipsis;">github.com:22</span><span style="color: var(--app-accent); font-weight: 600;">PROXY</span>
                     </div>
-                    <div style="display: grid; grid-template-columns: 50px 70px 1fr 50px; padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
+                    <div class="grid-preview-traffic-row" style="border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
                       <span style="color: #64748b;">13:40:15</span><span>msedge.exe</span><span style="overflow:hidden; text-overflow:ellipsis;">internal.corp:80</span><span style="color: #10b981; font-weight: 600;">DIRECT</span>
                     </div>
                   </div>
@@ -1343,7 +1343,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
                 <!-- Preview Window Tab Content: Rules -->
                 <div id="prevTabRules" class="mockup-tab-content" style="display: none;">
-                  <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">Перехватываемые процессы:</div>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Перехватываемые процессы:</div>
                   <div id="mockupRulesList" class="mockup-rules-container">
                     <!-- Populated dynamically -->
                   </div>
@@ -1579,13 +1579,13 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <code id="gpoActiveRegKey" style="color: var(--primary); font-size: 11px; word-break: break-all;">HKEY_CURRENT_USER\Software\Policies\Google\Chrome</code>
           </div>
 
-          <label data-i18n="lblGpoForcelist">1. ExtensionInstallForcelist Entry</label>
+          <label for="gpoForcelist" data-i18n="lblGpoForcelist">1. ExtensionInstallForcelist Entry</label>
           <div style="display: flex; gap: 6px; align-items: stretch; margin-bottom: 10px;">
             <pre id="gpoForcelist" style="flex: 1; margin: 0; white-space: pre-wrap; word-break: break-all;">Loading...</pre>
             <button class="btn-secondary" style="font-size: 11px; padding: 0 10px;" onclick="copyGpoForcelist()" data-i18n="btnCopy">Copy</button>
           </div>
 
-          <label data-i18n="lblGpoSettings">2. ExtensionSettings (JSON)</label>
+          <label for="gpoSettings" data-i18n="lblGpoSettings">2. ExtensionSettings (JSON)</label>
           <div style="display: flex; gap: 6px; align-items: stretch; margin-bottom: 14px;">
             <pre id="gpoSettings" style="flex: 1; max-height: 120px; margin: 0; white-space: pre-wrap; word-break: break-all;">Loading...</pre>
             <div style="display: flex; flex-direction: column; gap: 4px;">
@@ -1608,7 +1608,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <div class="grid-2">
         <div class="card">
           <h2 data-i18n="titleCredsTester">Interactive /creds Tester</h2>
-          <label data-i18n="lblTestToken">X-Ext-Token Header Value</label>
+          <label for="testTokenInput" data-i18n="lblTestToken">X-Ext-Token Header Value</label>
           <input type="password" id="testTokenInput" value="" placeholder="paste token to test" autocomplete="off" />
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
             <button onclick="testCredsEndpoint()" data-i18n="btnSendCreds">Send GET /creds</button>
@@ -1757,11 +1757,11 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     <div class="modal-card-theme" style="max-width: 440px; width: 90%; padding: 28px;">
       <h2 style="margin: 0 0 8px 0; font-size: 17px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px;"><img src="/icons/key.png" class="icon-inline" alt="key"> <span>Учётная запись администратора</span></h2>
       <p style="color: var(--text-muted); font-size: 12px; margin: 0 0 16px 0; text-align: center;">Смена логина и/или пароля панели. Требуется текущий пароль; после сохранения все прочие сессии будут завершены.</p>
-      <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Текущий пароль</label>
+      <label for="credCurrentPassword" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Текущий пароль</label>
       <input type="password" id="credCurrentPassword" autocomplete="current-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
-      <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Новый логин</label>
+      <label for="credUsernameInput" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Новый логин</label>
       <input type="text" id="credUsernameInput" autocomplete="username" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
-      <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Новый пароль (мин. 8 символов, пусто = не менять)</label>
+      <label for="credNewPassword" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Новый пароль (мин. 8 символов, пусто = не менять)</label>
       <input type="password" id="credNewPassword" autocomplete="new-password" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
       <div id="credError" style="display: none; color: var(--danger); font-size: 12px; margin-bottom: 10px;"></div>
       <div style="display: flex; gap: 8px;">
@@ -1778,13 +1778,13 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <p style="color: var(--text-muted); font-size: 12px; margin: 0 0 16px 0;" data-i18n="subAdd3xui">Enter inbound tag configured in your 3x-ui panel to fetch and link credentials.</p>
 
       <div style="margin-bottom: 12px;">
-        <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Панель 3x-ui / Source Panel</label>
+        <label for="add3xuiTag" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Панель 3x-ui / Source Panel</label>
         <select id="add3xuiPanelSelect" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
           <option value="">По умолчанию (Настройки ротации)</option>
         </select>
       </div>
 
-      <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblAdd3xuiTag">Inbound Tag</label>
+      <label for="add3xuiTag" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblAdd3xuiTag">Inbound Tag</label>
       <div style="display: flex; gap: 8px; margin-bottom: 12px;">
         <input type="text" id="add3xuiTag" placeholder="corp-socks" data-i18n-ph="phAdd3xuiTag" style="flex: 1; margin-bottom: 0;" />
         <button type="button" id="btnAdd3xuiFetch" onclick="lookup3xuiInbound()" class="btn-secondary" style="font-size: 12px; white-space: nowrap;" data-i18n="btnFetchInbound">Fetch Info</button>
@@ -1795,13 +1795,13 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         <span data-i18n="txtInboundPreviewPlaceholder">Click "Fetch Info" to preview inbound parameters before adding.</span>
       </div>
 
-      <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblAdd3xuiName">Friendly Name (optional)</label>
+      <label for="add3xuiName" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblAdd3xuiName">Friendly Name (optional)</label>
       <input type="text" id="add3xuiName" placeholder="Production SOCKS5 Node" data-i18n-ph="phAdd3xuiName" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
 
-      <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblAdd3xuiHost">Host Override (optional)</label>
+      <label for="add3xuiHost" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblAdd3xuiHost">Host Override (optional)</label>
       <input type="text" id="add3xuiHost" placeholder="10.0.0.1 or proxy.corp.local" data-i18n-ph="phAdd3xuiHost" style="width: 100%; box-sizing: border-box; margin-bottom: 14px;" />
 
-      <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">
+      <label for="add3xuiIsActive" style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">
         <input type="checkbox" id="add3xuiIsActive" checked style="width: auto; margin-bottom: 0;" />
         <span data-i18n="lblMakeActive">Make this proxy active immediately</span>
       </label>
@@ -1821,24 +1821,24 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <h2 id="modal3xuiPanelTitle" style="margin: 0 0 12px 0; font-size: 17px;">Панель 3x-ui / 3x-ui Panel</h2>
       <input type="hidden" id="panelIdInput" value="" />
 
-      <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Название / Name</label>
+      <label for="panelName" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Название / Name</label>
       <input type="text" id="panelName" placeholder="Frankfurt Node" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
 
-      <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">URL панели / Panel URL</label>
+      <label for="panelUrl" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">URL панели / Panel URL</label>
       <input type="text" id="panelUrl" placeholder="https://3xui.example.corp:2053/path" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+      <div class="grid-form-2col" style="margin-bottom: 12px;">
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Admin User</label>
+          <label for="panelUser" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Admin User</label>
           <input type="text" id="panelUser" placeholder="admin" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Admin Pass</label>
+          <label for="panelPass" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Admin Pass</label>
           <input type="password" id="panelPass" placeholder="••••••••" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
       </div>
 
-      <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">
+      <label for="panelInsecureTls" style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">
         <input type="checkbox" id="panelInsecureTls" style="width: auto; margin-bottom: 0;" />
         <span>Разрешить самоподписанный / не доверенный TLS</span>
       </label>
@@ -1859,20 +1859,20 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <h2 id="proxyFormTitle" style="margin: 0 0 12px 0; font-size: 17px;" data-i18n="titleAddManualProxy">Add Manual Proxy Node</h2>
       <input type="hidden" id="proxyFormId" value="" />
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+      <div class="grid-form-2col" style="margin-bottom: 10px;">
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyTag">Tag</label>
+          <label for="proxyFormTag" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyTag">Tag</label>
           <input type="text" id="proxyFormTag" placeholder="manual-us-1" data-i18n-ph="phProxyTag" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyName">Friendly Name</label>
+          <label for="proxyFormName" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyName">Friendly Name</label>
           <input type="text" id="proxyFormName" placeholder="Backup US Gateway" data-i18n-ph="phProxyName" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 10px; margin-bottom: 10px;">
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyProtocol">Protocol</label>
+          <label for="proxyFormHost" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyProtocol">Protocol</label>
           <select id="proxyFormProtocol" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
             <option value="http">HTTP</option>
             <option value="socks5">SOCKS5</option>
@@ -1880,22 +1880,22 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </select>
         </div>
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyHost">Host / IP</label>
+          <label for="proxyFormHost" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyHost">Host / IP</label>
           <input type="text" id="proxyFormHost" placeholder="192.168.1.100" data-i18n-ph="phProxyHost" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyPort">Port</label>
+          <label for="proxyFormPort" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyPort">Port</label>
           <input type="number" id="proxyFormPort" placeholder="10809" data-i18n-ph="phProxyPort" min="1" max="65535" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+      <div class="grid-form-2col" style="margin-bottom: 12px;">
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyUser">Username</label>
+          <label for="proxyFormUser" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyUser">Username</label>
           <input type="text" id="proxyFormUser" placeholder="proxyuser" data-i18n-ph="phProxyUser" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;" data-i18n="lblProxyPass">Password</label>
+          <label for="proxyFormPass" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyPass">Password</label>
           <input type="password" id="proxyFormPass" placeholder="••••••••" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
       </div>
@@ -1905,7 +1905,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         <span data-i18n="warnChromiumSocks5Auth">Warning: Chromium browsers (Chrome, Edge, Yandex) do not support username/password authentication for SOCKS5. For Chrome with auth, use HTTP protocol.</span>
       </div>
 
-      <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">
+      <label for="proxyFormIsActive" style="display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: none; font-weight: normal; cursor: pointer; margin-bottom: 16px;">
         <input type="checkbox" id="proxyFormIsActive" checked style="width: auto; margin-bottom: 0;" />
         <span data-i18n="lblMakeActive">Make this proxy active immediately</span>
       </label>
@@ -1927,17 +1927,17 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <input type="hidden" id="editRuleIndex" value="" />
 
       <div style="margin-bottom: 12px;">
-        <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRuleName">Rule Name</label>
+        <label for="editRuleName" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRuleName">Rule Name</label>
         <input type="text" id="editRuleName" placeholder="My Custom Rule" data-i18n-ph="phRuleName" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
       </div>
 
       <div style="margin-bottom: 12px;">
-        <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRulePattern">Pattern (comma separated domains or CIDRs)</label>
+        <label for="editRulePattern" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRulePattern">Pattern (comma separated domains or CIDRs)</label>
         <input type="text" id="editRulePattern" placeholder="*.example.com, target-domain.org, 10.50.0.0/16" data-i18n-ph="phRulePattern" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
       </div>
 
       <div style="margin-bottom: 16px;">
-        <label style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRuleAction">Action</label>
+        <label for="editRuleAction" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblRuleAction">Action</label>
         <select id="editRuleAction" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
           <option value="proxy" data-i18n="optActionProxy">PROXY</option>
           <option value="direct" data-i18n="optActionDirect">DIRECT</option>
@@ -2002,7 +2002,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <!-- Action Footer -->
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <label style="margin: 0; font-size: 12px; font-weight: 600;">Действие:</label>
+          <label for="inspectorActionSelect" style="margin: 0; font-size: 12px; font-weight: 600;">Действие:</label>
           <select id="inspectorActionSelect" style="margin: 0; font-size: 12px; width: auto;">
             <option value="proxy">PROXY</option>
             <option value="direct">DIRECT</option>
@@ -2036,31 +2036,31 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
       <!-- Panel: URL Import -->
       <div id="panelImportUrl">
-        <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">URL Источника (.dat или .txt)</label>
+        <label for="importPresetUrl" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">URL Источника (.dat или .txt)</label>
         <input type="text" id="importPresetUrl" placeholder="https://raw.githubusercontent.com/.../geosite.dat" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
       </div>
 
       <!-- Panel: File Upload -->
       <div id="panelImportFile" style="display: none;">
-        <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Файл на диске (.dat или .txt)</label>
+        <label for="importPresetFileInput" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Файл на диске (.dat или .txt)</label>
         <input type="file" id="importPresetFileInput" accept=".dat,.txt,.list" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;" />
       </div>
 
       <!-- Common fields: Tag, Name, Category, Type -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+      <div class="grid-form-2col" style="margin-bottom: 12px;">
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Тег списка (для .dat, например RU, GOOGLE, TELEGRAM)</label>
+          <label for="importPresetTag" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Тег списка (для .dat, например RU, GOOGLE, TELEGRAM)</label>
           <input type="text" id="importPresetTag" placeholder="RU" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Название пресета (опционально)</label>
+          <label for="importPresetName" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Название пресета (опционально)</label>
           <input type="text" id="importPresetName" placeholder="My Imported Preset" style="width: 100%; box-sizing: border-box; margin-bottom: 0;" />
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+      <div class="grid-form-2col" style="margin-bottom: 14px;">
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Категория</label>
+          <label for="importPresetCategory" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Категория</label>
           <select id="importPresetCategory" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
             <option value="custom">Custom</option>
             <option value="ru">RU Services</option>
@@ -2070,7 +2070,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </select>
         </div>
         <div>
-          <label style="text-transform: uppercase; font-size: 10.5px; color: #94a3b8;">Тип записей</label>
+          <label for="importPresetType" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Тип записей</label>
           <select id="importPresetType" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
             <option value="domain">Домены (Domains)</option>
             <option value="cidr">IP / Подсети (CIDR)</option>

@@ -53,6 +53,12 @@ export interface RoutingProfile {
   targetGroup?: string;
   targetInstanceIds?: string[];
   isDefault?: boolean;
+  colorPalette?: string;
+  uiLayout?: string;
+  defaultThemeMode?: "light" | "dark";
+  themeColor?: string;
+  themeBackground?: string;
+  themeCard?: string;
   updatedAt: string;
 }
 

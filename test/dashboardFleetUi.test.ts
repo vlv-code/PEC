@@ -289,7 +289,7 @@ test("Fleet UI: empty fleet state renders placeholder cleanly without crashing",
 test("D-07: Interactive tester label specifies X-Ext-Token", () => {
   const html = renderDashboardHtml();
   assert.ok(
-    html.includes('<label data-i18n="lblTestToken">X-Ext-Token Header Value</label>'),
+    /<label[^>]*data-i18n="lblTestToken"[^>]*>X-Ext-Token Header Value<\/label>/.test(html),
     "lblTestToken must specify X-Ext-Token Header Value"
   );
   assert.strictEqual(

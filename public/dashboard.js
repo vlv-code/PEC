@@ -368,6 +368,203 @@
       }, 4200);
     }
 
+    // ----------------- Custom Async Dialog System (pecConfirm / pecPrompt) -----------------
+    function getOrCreatePecDialog() {
+      let dlg = document.getElementById('pecModalDialog');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'pecModalDialog';
+        dlg.className = 'pec-dialog';
+        dlg.setAttribute('role', 'dialog');
+        dlg.setAttribute('aria-modal', 'true');
+        dlg.setAttribute('aria-labelledby', 'pecDialogTitle');
+        dlg.setAttribute('aria-describedby', 'pecDialogMessage');
+        dlg.innerHTML =
+          '<div class="pec-dialog-content">' +
+            '<div class="pec-dialog-header">' +
+              '<h3 id="pecDialogTitle" class="pec-dialog-title"></h3>' +
+            '</div>' +
+            '<p id="pecDialogMessage" class="pec-dialog-message"></p>' +
+            '<div id="pecDialogPromptContainer" class="pec-dialog-prompt" style="display:none;">' +
+              '<input type="text" id="pecDialogInput" class="pec-dialog-input" autocomplete="off" />' +
+            '</div>' +
+            '<div class="pec-dialog-actions">' +
+              '<button type="button" id="pecDialogCancelBtn" class="btn btn-secondary pec-dialog-btn-cancel">Cancel</button>' +
+              '<button type="button" id="pecDialogConfirmBtn" class="btn btn-primary pec-dialog-btn-confirm">OK</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(dlg);
+      }
+      return dlg;
+    }
+
+    function showPecDialog(mode, message, defaultValue, options) {
+      options = options || {};
+      const isRu = (typeof currentLang !== 'undefined' ? currentLang : 'ru') === 'ru';
+      const dlg = getOrCreatePecDialog();
+
+      const titleEl = document.getElementById('pecDialogTitle');
+      const msgEl = document.getElementById('pecDialogMessage');
+      const promptBox = document.getElementById('pecDialogPromptContainer');
+      const inputEl = document.getElementById('pecDialogInput');
+      const cancelBtn = document.getElementById('pecDialogCancelBtn');
+      const confirmBtn = document.getElementById('pecDialogConfirmBtn');
+
+      const title = options.title || (mode === 'prompt'
+        ? (isRu ? 'Ввод данных' : 'Prompt')
+        : (options.isDanger
+          ? (isRu ? 'Подтверждение действия' : 'Confirm Action')
+          : (isRu ? 'Подтверждение' : 'Confirmation')));
+
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) msgEl.textContent = message || '';
+
+      if (cancelBtn) {
+        cancelBtn.textContent = options.cancelText || (isRu ? 'Отмена' : 'Cancel');
+      }
+
+      if (confirmBtn) {
+        confirmBtn.textContent = options.confirmText || (mode === 'prompt' ? (isRu ? 'ОК' : 'OK') : (isRu ? 'Подтвердить' : 'Confirm'));
+        if (options.isDanger) {
+          confirmBtn.classList.remove('btn-primary');
+          confirmBtn.classList.add('btn-danger');
+        } else {
+          confirmBtn.classList.remove('btn-danger');
+          confirmBtn.classList.add('btn-primary');
+        }
+      }
+
+      if (mode === 'prompt') {
+        if (promptBox) promptBox.style.display = 'block';
+        if (inputEl) {
+          inputEl.value = defaultValue != null ? String(defaultValue) : '';
+          inputEl.placeholder = options.placeholder || '';
+        }
+      } else {
+        if (promptBox) promptBox.style.display = 'none';
+      }
+
+      const prevActive = document.activeElement;
+
+      return new Promise(function(resolve) {
+        let isResolved = false;
+
+        function cleanup(result) {
+          if (isResolved) return;
+          isResolved = true;
+
+          dlg.removeEventListener('keydown', onKeyDown);
+          dlg.removeEventListener('click', onBackdropClick);
+          if (cancelBtn) cancelBtn.removeEventListener('click', onCancel);
+          if (confirmBtn) confirmBtn.removeEventListener('click', onConfirm);
+
+          if (typeof dlg.close === 'function') {
+            try { dlg.close(); } catch (e) {}
+          }
+          dlg.removeAttribute('open');
+
+          if (prevActive && typeof prevActive.focus === 'function') {
+            try { prevActive.focus(); } catch (e) {}
+          }
+
+          resolve(result);
+        }
+
+        function onCancel() {
+          cleanup(mode === 'prompt' ? null : false);
+        }
+
+        function onConfirm() {
+          if (mode === 'prompt') {
+            cleanup(inputEl ? inputEl.value : '');
+          } else {
+            cleanup(true);
+          }
+        }
+
+        function onBackdropClick(e) {
+          if (e.target === dlg) {
+            onCancel();
+          }
+        }
+
+        function onKeyDown(e) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            onCancel();
+            return;
+          }
+
+          if (e.key === 'Enter') {
+            if (document.activeElement === cancelBtn) {
+              return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            onConfirm();
+            return;
+          }
+
+          if (e.key === 'Tab') {
+            const focusable = [];
+            if (mode === 'prompt' && inputEl) focusable.push(inputEl);
+            if (cancelBtn) focusable.push(cancelBtn);
+            if (confirmBtn) focusable.push(confirmBtn);
+
+            if (focusable.length > 0) {
+              const first = focusable[0];
+              const last = focusable[focusable.length - 1];
+              if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+              } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+              }
+            }
+          }
+        }
+
+        dlg.addEventListener('keydown', onKeyDown);
+        dlg.addEventListener('click', onBackdropClick);
+        if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+        if (confirmBtn) confirmBtn.addEventListener('click', onConfirm);
+
+        if (typeof dlg.showModal === 'function') {
+          try {
+            dlg.showModal();
+          } catch (e) {
+            dlg.setAttribute('open', '');
+          }
+        } else {
+          dlg.setAttribute('open', '');
+        }
+
+        setTimeout(function() {
+          if (mode === 'prompt' && inputEl) {
+            inputEl.focus();
+            if (typeof inputEl.select === 'function') inputEl.select();
+          } else if (options.isDanger && cancelBtn) {
+            cancelBtn.focus();
+          } else if (confirmBtn) {
+            confirmBtn.focus();
+          }
+        }, 10);
+      });
+    }
+
+    function pecConfirm(message, options) {
+      return showPecDialog('confirm', message, null, options);
+    }
+
+    function pecPrompt(message, defaultValue, options) {
+      return showPecDialog('prompt', message, defaultValue, options);
+    }
+
+    window.pecConfirm = pecConfirm;
+    window.pecPrompt = pecPrompt;
+
     // ----------------- Layout & Theme Switchers -----------------
     function setServerLayout(layout) {
       if (layout !== 'terminal' && layout !== 'console') {
@@ -2523,7 +2720,8 @@
     }
 
     async function createNewProfile() {
-      const name = prompt('Enter name for the new Routing Profile:', 'New Department Profile');
+      const isRu = (typeof currentLang !== 'undefined' ? currentLang : 'ru') === 'ru';
+      const name = await pecPrompt(isRu ? 'Введите название нового профиля маршрутизации:' : 'Enter name for the new Routing Profile:', 'New Department Profile');
       if (!name) return;
       const newP = {
         id: 'prof_' + Math.random().toString(36).substring(2, 8),
@@ -2566,7 +2764,7 @@
 
     async function deleteCurrentProfile() {
       if (!currentProfile) return;
-      if (!confirm('Are you sure you want to delete profile "' + currentProfile.name + '"?')) return;
+      if (!await pecConfirm('Are you sure you want to delete profile "' + currentProfile.name + '"?', { isDanger: true })) return;
       try {
         const res = await adminFetch('/api/routing/profiles/' + currentProfile.id, { method: 'DELETE' });
         const data = await res.json();
@@ -4222,7 +4420,7 @@
 
     async function cleanAppBinariesAction() {
       const isRu = currentLang === 'ru';
-      if (!confirm(isRu ? 'Удалить скомпилированные бинарники PEC-App для сборки с нуля?' : 'Clean compiled PEC-App binaries to build from scratch?')) {
+      if (!await pecConfirm(isRu ? 'Удалить скомпилированные бинарники PEC-App для сборки с нуля?' : 'Clean compiled PEC-App binaries to build from scratch?', { isDanger: true })) {
         return;
       }
       const btn = document.getElementById('btnAppCleanBinaries');
@@ -4956,7 +5154,7 @@
     }
 
     async function deleteCodeSignCertAction() {
-      if (!confirm(currentLang === 'ru' ? 'Удалить сохраненный сертификат цифровой подписи?' : 'Delete code signing certificate?')) return;
+      if (!await pecConfirm(currentLang === 'ru' ? 'Удалить сохраненный сертификат цифровой подписи?' : 'Delete code signing certificate?', { isDanger: true })) return;
       try {
         const res = await adminFetch('/api/app-builder/certificate', { method: 'DELETE' });
         const data = await res.json();
@@ -5673,7 +5871,7 @@
       const isRu = currentLang === 'ru';
       const count = selectedFleetInstances.size;
       if (!count) return;
-      if (!confirm(isRu ? `Отозвать индивидуальные токены для ${count} устройств?` : `Revoke tokens for ${count} devices?`)) return;
+      if (!await pecConfirm(isRu ? `Отозвать индивидуальные токены для ${count} устройств?` : `Revoke tokens for ${count} devices?`, { isDanger: true })) return;
       try {
         const res = await adminFetch('/api/instances/bulk-revoke-tokens', {
           method: 'POST',
@@ -5699,7 +5897,7 @@
       const isRu = currentLang === 'ru';
       const count = selectedFleetInstances.size;
       if (!count) return;
-      if (!confirm(isRu ? `Удалить ${count} выбранных устройств из флота?` : `Delete ${count} selected devices from fleet?`)) return;
+      if (!await pecConfirm(isRu ? `Удалить ${count} выбранных устройств из флота?` : `Delete ${count} selected devices from fleet?`, { isDanger: true })) return;
       try {
         const res = await adminFetch('/api/instances/bulk-delete', {
           method: 'POST',
@@ -5892,7 +6090,7 @@
           if (!btn) return;
           const appId = btn.getAttribute('data-app-id');
           const isRu = currentLang === 'ru';
-          if (!confirm(isRu ? 'Удалить десктопный клиент из реестра?' : 'Delete desktop client from registry?')) return;
+          if (!await pecConfirm(isRu ? 'Удалить десктопный клиент из реестра?' : 'Delete desktop client from registry?', { isDanger: true })) return;
           try {
             const res = await adminFetch(`/api/app/instances/${encodeURIComponent(appId)}`, {
               method: 'DELETE',
@@ -5912,7 +6110,7 @@
 
     async function revokeInstanceToken(id) {
       const isRu = currentLang === 'ru';
-      if (!confirm((isRu ? 'Отозвать токен доступа для ' : 'Revoke access token for ') + id + '?')) return;
+      if (!await pecConfirm((isRu ? 'Отозвать токен доступа для ' : 'Revoke access token for ') + id + '?', { isDanger: true })) return;
       try {
         const res = await adminFetch('/api/instances/' + encodeURIComponent(id) + '/revoke-token', {
           method: 'POST'
@@ -5930,7 +6128,7 @@
     }
 
     async function deleteInstance(id) {
-      if (!confirm("Удалить устройство " + id + "?")) return;
+      if (!await pecConfirm("Удалить устройство " + id + "?", { isDanger: true })) return;
       try {
         const res = await adminFetch('/api/instances/' + encodeURIComponent(id), {
           method: 'DELETE'
@@ -6525,7 +6723,7 @@
     }
 
     async function manualRotate() {
-      if (!confirm('Rotate proxy credentials immediately?')) return;
+      if (!await pecConfirm('Rotate proxy credentials immediately?')) return;
       try {
         const res = await adminFetch('/api/rotation/rotate-now', { method: 'POST' });
         const data = await res.json();
@@ -6736,7 +6934,7 @@
     }
 
     async function deleteProxy(id) {
-      if (!confirm(t('confirmDeleteProxy', 'Are you sure you want to delete this proxy node?'))) return;
+      if (!await pecConfirm(t('confirmDeleteProxy', 'Are you sure you want to delete this proxy node?'), { isDanger: true })) return;
       try {
         const res = await adminFetch('/api/proxies/' + encodeURIComponent(id), { method: 'DELETE' });
         const data = await res.json().catch(() => ({}));
@@ -6906,7 +7104,7 @@
 
     async function delete3xuiPanelAction(id) {
       const isRu = currentLang === 'ru';
-      if (!confirm(isRu ? 'Удалить эту панель 3x-ui?' : 'Delete this 3x-ui panel?')) return;
+      if (!await pecConfirm(isRu ? 'Удалить эту панель 3x-ui?' : 'Delete this 3x-ui panel?', { isDanger: true })) return;
       try {
         const res = await adminFetch(`/api/3xui/panels/${encodeURIComponent(id)}`, { method: 'DELETE' });
         if (res.ok) {
@@ -7416,7 +7614,7 @@ ${JSON.stringify(json, null, 2)}`;
       const confirmMsg = isRu
         ? `Переключить активную версию ${label} на v${version} (откат)?`
         : `Switch active ${label} version to v${version} (rollback)?`;
-      if (!confirm(confirmMsg)) return;
+      if (!await pecConfirm(confirmMsg)) return;
 
       try {
         const res = await adminFetch('/api/releases/set-active', {
@@ -7442,7 +7640,7 @@ ${JSON.stringify(json, null, 2)}`;
       const confirmMsg = isRu
         ? `Удалить релиз ${type} v${version} из архива?`
         : `Delete release ${type} v${version} from archive?`;
-      if (!confirm(confirmMsg)) return;
+      if (!await pecConfirm(confirmMsg, { isDanger: true })) return;
 
       try {
         const res = await adminFetch(`/api/releases/${encodeURIComponent(type)}/${encodeURIComponent(version)}`, {

@@ -228,6 +228,8 @@
       border-color: #94a3b8;
     }
 
+    body[data-theme-mode="light"] button:not(.btn-secondary):not(.btn-danger):not(.btn-warning):not(.btn-icon):not(.tab-btn):not(.lang-btn),
+    body[data-theme-mode="light"] .btn:not(.btn-secondary):not(.btn-danger):not(.btn-warning):not(.btn-icon):not(.tab-btn):not(.lang-btn),
     body[data-theme-mode="light"] button.btn-primary,
     body[data-theme-mode="light"] .btn-primary,
     body[data-theme-mode="light"] button#btnRotateNow {
@@ -2175,4 +2177,214 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+
+    /* ==================== ACCESSIBILITY & FOCUS VISIBLE ==================== */
+    button:focus-visible,
+    .btn:focus-visible,
+    .tab-btn:focus-visible,
+    .btn-icon:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--primary) !important;
+      outline-offset: 2px !important;
+      box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.25) !important;
+    }
+
+    body[data-layout="terminal"] button:focus-visible,
+    body[data-layout="terminal"] .btn:focus-visible,
+    body[data-layout="terminal"] .tab-btn:focus-visible,
+    body[data-layout="terminal"] .btn-icon:focus-visible,
+    body[data-layout="terminal"] input:focus-visible,
+    body[data-layout="terminal"] select:focus-visible,
+    body[data-layout="terminal"] textarea:focus-visible {
+      outline: 2px solid var(--primary) !important;
+      outline-offset: 1px !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
+
+    /* ==================== CONTRACT RESPONSIVE GRIDS ==================== */
+    .grid-routing-matrix-header {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+    .grid-routing-rule-form {
+      display: grid;
+      grid-template-columns: 2fr 3fr 1fr auto;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .grid-builder-columns {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .grid-form-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .grid-form-3col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+    .grid-preview-traffic-row {
+      display: grid;
+      grid-template-columns: 50px 70px 1fr 50px;
+    }
+    .table-responsive-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* ==================== RESPONSIVE MEDIA BREAKPOINTS ==================== */
+    @media (max-width: 1280px) {
+      .table-responsive-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .grid-builder-columns {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .grid-routing-matrix-header,
+      .grid-routing-rule-form,
+      .grid-form-2col,
+      .grid-form-3col {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ==================== CUSTOM ASYNC DIALOG COMPONENT ==================== */
+    dialog.pec-dialog {
+      position: fixed;
+      inset: 0;
+      margin: auto;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card-bg);
+      color: var(--text);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.65);
+      max-width: 440px;
+      width: calc(100% - 32px);
+      box-sizing: border-box;
+      z-index: 10001;
+      overflow: hidden;
+    }
+
+    dialog.pec-dialog:not([open]) {
+      display: none;
+    }
+
+    dialog.pec-dialog[open] {
+      display: block;
+    }
+
+    dialog.pec-dialog::backdrop {
+      background: rgba(3, 7, 18, 0.85);
+      backdrop-filter: blur(4px);
+    }
+
+    body[data-theme-mode="light"] dialog.pec-dialog::backdrop {
+      background: rgba(15, 23, 42, 0.6);
+    }
+
+    body[data-theme-mode="light"] dialog.pec-dialog {
+      box-shadow: 0 20px 35px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Layout overrides for .pec-dialog */
+    body[data-layout="terminal"] dialog.pec-dialog {
+      border-radius: 0px !important;
+      border: 1px solid var(--primary);
+      box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.2);
+      background: rgba(10, 15, 28, 0.98);
+    }
+
+    body[data-layout="terminal"] dialog.pec-dialog .pec-dialog-title {
+      font-family: var(--mono);
+    }
+
+    body[data-layout="terminal"] dialog.pec-dialog .pec-dialog-title::before {
+      content: '> ';
+      color: var(--primary);
+    }
+
+    body[data-layout="terminal"] dialog.pec-dialog input.pec-dialog-input {
+      border-radius: 0px !important;
+    }
+
+    body[data-layout="console"] dialog.pec-dialog {
+      border-radius: 12px;
+    }
+
+    .pec-dialog-content {
+      padding: 22px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .pec-dialog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .pec-dialog-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.2px;
+    }
+
+    .pec-dialog-message {
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--text-muted);
+      word-break: break-word;
+      margin: 0;
+    }
+
+    .pec-dialog-prompt {
+      margin-top: 2px;
+    }
+
+    .pec-dialog-prompt input.pec-dialog-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 12px;
+      font-size: 13px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+    }
+
+    .pec-dialog-prompt input.pec-dialog-input:focus {
+      border-color: var(--primary);
+      outline: none;
+    }
+
+    .pec-dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 6px;
     }
