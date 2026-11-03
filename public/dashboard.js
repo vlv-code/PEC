@@ -946,11 +946,19 @@
           closeCustomizationPopover();
         }
       }
+      const vPopover = document.getElementById('popoverVersionRelease');
+      const vBtn = document.getElementById('versionReleaseBadge');
+      if (vPopover && vPopover.style.display !== 'none') {
+        if (!vPopover.contains(e.target) && (!vBtn || !vBtn.contains(e.target))) {
+          closeVersionPopover();
+        }
+      }
     });
 
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         closeCustomizationPopover();
+        closeVersionPopover();
       }
     });
 
