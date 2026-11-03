@@ -27,7 +27,10 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
   <div class="container">
     <header>
       <div>
-        <h1 id="appTitle" style="font-size: 22px; font-weight: 700;" data-i18n="appTitle">PEC - Proxy Extension Corp</h1>
+        <h1 id="appTitle" style="font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+          <span id="dashboardBrandIcon" style="font-size: 22px; line-height: 1;">🛡️</span>
+          <span data-i18n="appTitle">PEC - Proxy Extension Corp</span>
+        </h1>
         <p id="appSubtitle" style="font-size: 14px; color: var(--text-muted);" data-i18n="appSubtitle">Enterprise Proxy Synchronization</p>
       </div>
       <div class="header-controls">
@@ -70,8 +73,21 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </div>
             </div>
 
-            <!-- 2. Color palettes -->
-            <div>
+            <!-- 2. Dark / Light Mode Switcher (День / Ночь) -->
+            <div style="margin-bottom: 10px;">
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;" data-i18n="lblSettingsThemeMode">Режим темы:</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <button type="button" id="optModeDarkCard" class="popover-layout-btn active" onclick="setServerThemeMode('dark')">
+                  <span style="font-size: 11px; font-weight: 600;" data-i18n="lblThemeDark">🌙 Темная</span>
+                </button>
+                <button type="button" id="optModeLightCard" class="popover-layout-btn" onclick="setServerThemeMode('light')">
+                  <span style="font-size: 11px; font-weight: 600;" data-i18n="lblThemeLight">☀️ Светлая</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. Color palettes -->
+            <div style="margin-bottom: 10px;">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;" data-i18n="lblSettingsTheme">Цветовая гамма:</div>
               <div style="display: flex; gap: 6px; justify-content: space-between;">
                 <button type="button" class="popover-theme-dot" id="btnThemeCyber" onclick="setServerTheme('cyber')" title="Cyber Blue">
@@ -92,7 +108,24 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </div>
             </div>
 
-            <!-- 3. Account (dashboard login credentials) -->
+            <!-- 4. Global Corporate Brand Icon & Sync With Apps -->
+            <div style="margin-bottom: 10px; padding-top: 8px; border-top: 1px dashed var(--border);">
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;" data-i18n="lblGlobalBrandIcon">Корпоративный значок:</div>
+              <select id="globalBrandIconSelect" onchange="setGlobalBrandIcon(this.value)" style="width: 100%; font-size: 11.5px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card-inner); color: var(--text); margin-bottom: 8px;">
+                <option value="shield">🛡️ Щит (Защита)</option>
+                <option value="network">🌐 Сеть (Сфера)</option>
+                <option value="terminal">💻 Терминал (Консоль)</option>
+                <option value="lock">🔒 Замок (VPN / Безопасность)</option>
+                <option value="rocket">🚀 Ракета (Скорость)</option>
+              </select>
+
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 11px; color: var(--text); user-select: none;">
+                <input type="checkbox" id="chkSyncThemeWithApps" checked onchange="toggleSyncThemeWithApps(this.checked)" style="margin-top: 2px;" />
+                <span data-i18n="lblSyncThemeWithApps">Синхронизировать тему и значок с расширениями и приложениями</span>
+              </label>
+            </div>
+
+            <!-- 5. Account (dashboard login credentials) -->
             <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);">
               <button type="button" id="btnOpenCredsModal" class="popover-layout-btn" style="width: 100%;">
                 <img src="/icons/key.png" class="icon-inline" alt="key"> <span style="font-size: 11px; font-weight: 600;">Сменить логин / пароль</span>
@@ -652,7 +685,10 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </div>
 
           <!-- 2. UI Layout & Color Palette -->
-          <div style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px;">
+          <div id="builderThemeCardContainer" style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px; position: relative;">
+            <div id="builderThemeLockedNotice" class="theme-sync-lock-banner" style="display: none;">
+              <span>🔒 <strong data-i18n="msgThemeLockedBySync">Синхронизировано с корпоративным оформлением панели</strong></span>
+            </div>
             <label style="margin-bottom: 8px;" data-i18n="lblThemePalettes">2. Макет и цветовая палитра</label>
 
             <!-- Layout selector: Console vs Terminal -->
@@ -985,7 +1021,10 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </div>
 
           <!-- 2. Themes & Styling Card -->
-          <div class="card">
+          <div class="card" id="appThemeCardContainer" style="position: relative;">
+            <div id="appThemeLockedNotice" class="theme-sync-lock-banner" style="display: none;">
+              <span>🔒 <strong data-i18n="msgThemeLockedBySync">Синхронизировано с корпоративным оформлением панели</strong></span>
+            </div>
             <h2>
               <span data-i18n="titleAppThemes">Темы и визуальный стиль</span>
             </h2>
@@ -1088,6 +1127,14 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <input type="checkbox" id="appTrafficLogging" onchange="onAppConfigChangeLive()" />
                 <span data-i18n="lblAppTrafficLogging">Логирование соединений</span>
               </label>
+            </div>
+
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+              <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;" data-i18n="lblAppSyncInterval">Интервал автосинхронизации с сервером (минуты):</label>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="number" id="appSyncIntervalMinutes" min="1" max="1440" value="15" onchange="onAppConfigChangeLive()" style="width: 120px; font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--card-inner); color: var(--text);" />
+                <span style="font-size: 11px; color: var(--text-muted);" data-i18n="hintAppSyncInterval">Периодичность синхронизации профиля, прокси и маршрутов в фоновом режиме (по умолчанию: 15 мин).</span>
+              </div>
             </div>
           </div>
 

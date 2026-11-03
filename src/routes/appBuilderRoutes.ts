@@ -183,6 +183,13 @@ export function createAppBuilderRouter(
       if (updates.processRules !== undefined) {
         updates.processRules = validateProcessRules(updates.processRules);
       }
+      if (updates.syncIntervalMinutes !== undefined) {
+        const sim = Number(updates.syncIntervalMinutes);
+        if (isNaN(sim) || sim < 1 || sim > 1440) {
+          return res.status(400).json({ ok: false, error: "syncIntervalMinutes must be an integer between 1 and 1440" });
+        }
+        updates.syncIntervalMinutes = Math.round(sim);
+      }
 
       const updated = saveAppBuildConfig(updates);
       res.json({ ok: true, ...updated });
@@ -306,6 +313,12 @@ export function createAppBuilderRouter(
         }
         if (updates.processRules !== undefined) {
           updates.processRules = validateProcessRules(updates.processRules);
+        }
+        if (updates.syncIntervalMinutes !== undefined) {
+          const sim = Number(updates.syncIntervalMinutes);
+          if (!isNaN(sim) && sim >= 1 && sim <= 1440) {
+            updates.syncIntervalMinutes = Math.round(sim);
+          }
         }
         saveAppBuildConfig(updates);
       }

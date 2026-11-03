@@ -383,6 +383,131 @@
       document.body.setAttribute('data-theme', theme);
       try { localStorage.setItem('pec_server_theme', theme); } catch(e){}
       updateModalActiveState();
+      if (isThemeSyncEnabled()) {
+        applyThemeSyncToConstructors();
+      }
+    }
+
+    function setServerThemeMode(mode) {
+      if (mode !== 'light' && mode !== 'dark') mode = 'dark';
+      document.body.setAttribute('data-theme-mode', mode);
+      try { localStorage.setItem('pec_server_theme_mode', mode); } catch(e){}
+      updateModalActiveState();
+      if (isThemeSyncEnabled()) {
+        applyThemeSyncToConstructors();
+      }
+    }
+
+    function setGlobalBrandIcon(icon) {
+      const valid = ['shield', 'network', 'terminal', 'lock', 'rocket'];
+      if (!valid.includes(icon)) icon = 'shield';
+      try { localStorage.setItem('pec_global_brand_icon', icon); } catch(e){}
+      const sel = document.getElementById('globalBrandIconSelect');
+      if (sel && sel.value !== icon) sel.value = icon;
+      applyThemeSyncToConstructors();
+    }
+
+    function toggleSyncThemeWithApps(enabled) {
+      try { localStorage.setItem('pec_sync_theme_apps', enabled ? 'true' : 'false'); } catch(e){}
+      applyThemeSyncToConstructors();
+    }
+
+    function isThemeSyncEnabled() {
+      const stored = localStorage.getItem('pec_sync_theme_apps');
+      return stored === null ? true : stored === 'true';
+    }
+
+    function applyThemeSyncToConstructors() {
+      const syncEnabled = isThemeSyncEnabled();
+      const chk = document.getElementById('chkSyncThemeWithApps');
+      if (chk && chk.checked !== syncEnabled) {
+        chk.checked = syncEnabled;
+      }
+
+      const currentTheme = document.body.getAttribute('data-theme') || 'cyber';
+      const currentMode = document.body.getAttribute('data-theme-mode') || 'dark';
+      const currentIcon = localStorage.getItem('pec_global_brand_icon') || 'shield';
+
+      const iconMapEmoji = {
+        shield: '🛡️',
+        network: '🌐',
+        terminal: '💻',
+        lock: '🔒',
+        rocket: '🚀'
+      };
+
+      const iconMapAppType = {
+        shield: 'shield',
+        network: 'globe',
+        terminal: 'server',
+        lock: 'lock',
+        rocket: 'key'
+      };
+
+      const dashBrandIcon = document.getElementById('dashboardBrandIcon');
+      if (dashBrandIcon) {
+        dashBrandIcon.textContent = iconMapEmoji[currentIcon] || '🛡️';
+      }
+
+      const globalIconSelect = document.getElementById('globalBrandIconSelect');
+      if (globalIconSelect && globalIconSelect.value !== currentIcon) {
+        globalIconSelect.value = currentIcon;
+      }
+
+      const builderThemeCard = document.getElementById('builderThemeCardContainer');
+      const builderLockedNotice = document.getElementById('builderThemeLockedNotice');
+      const appThemeCard = document.getElementById('appThemeCardContainer');
+      const appLockedNotice = document.getElementById('appThemeLockedNotice');
+
+      if (syncEnabled) {
+        if (builderThemeCard) builderThemeCard.classList.add('locked-by-sync');
+        if (builderLockedNotice) builderLockedNotice.style.display = 'flex';
+
+        const bldEmoji = document.getElementById('bldEmoji');
+        if (bldEmoji) {
+          bldEmoji.value = iconMapEmoji[currentIcon] || '🛡️';
+          bldEmoji.disabled = true;
+        }
+        const iconUploadBtn = document.getElementById('iconFileInput');
+        if (iconUploadBtn) iconUploadBtn.disabled = true;
+
+        if (typeof setStudioPalette === 'function') {
+          setStudioPalette(currentTheme, true);
+        }
+        if (typeof setStudioThemeMode === 'function') {
+          setStudioThemeMode(currentMode, true);
+        }
+
+        if (appThemeCard) appThemeCard.classList.add('locked-by-sync');
+        if (appLockedNotice) appLockedNotice.style.display = 'flex';
+
+        const appIconEl = document.getElementById('appIconType');
+        if (appIconEl) {
+          appIconEl.value = iconMapAppType[currentIcon] || 'shield';
+          appIconEl.disabled = true;
+        }
+
+        if (typeof setAppPalette === 'function') {
+          setAppPalette(currentTheme);
+        }
+        if (typeof setAppThemeMode === 'function') {
+          setAppThemeMode(currentMode);
+        }
+      } else {
+        if (builderThemeCard) builderThemeCard.classList.remove('locked-by-sync');
+        if (builderLockedNotice) builderLockedNotice.style.display = 'none';
+
+        const bldEmoji = document.getElementById('bldEmoji');
+        if (bldEmoji) bldEmoji.disabled = false;
+        const iconUploadBtn = document.getElementById('iconFileInput');
+        if (iconUploadBtn) iconUploadBtn.disabled = false;
+
+        if (appThemeCard) appThemeCard.classList.remove('locked-by-sync');
+        if (appLockedNotice) appLockedNotice.style.display = 'none';
+
+        const appIconEl = document.getElementById('appIconType');
+        if (appIconEl) appIconEl.disabled = false;
+      }
     }
 
     function toggleCustomizationPopover(e) {
@@ -429,6 +554,19 @@
     function updateModalActiveState() {
       const currentLayout = document.body.getAttribute('data-layout') || 'console';
       const currentTheme = document.body.getAttribute('data-theme') || 'cyber';
+      const currentMode = document.body.getAttribute('data-theme-mode') || 'dark';
+
+      const darkBtn = document.getElementById('optModeDarkCard');
+      const lightBtn = document.getElementById('optModeLightCard');
+      if (darkBtn && lightBtn) {
+        if (currentMode === 'light') {
+          lightBtn.classList.add('active');
+          darkBtn.classList.remove('active');
+        } else {
+          darkBtn.classList.add('active');
+          lightBtn.classList.remove('active');
+        }
+      }
       
       const consoleCard = document.getElementById('optLayoutConsoleCard');
       const terminalCard = document.getElementById('optLayoutTerminalCard');
@@ -550,6 +688,14 @@
         descLayoutTerminal: 'Monospace SecOps cyber-terminal with sharp 0px corners, neon highlights, and glowing cards.',
         badgeSelected: 'Active',
         lblSettingsTheme: '2. Color Palette Scheme',
+        lblSettingsThemeMode: 'Theme Mode:',
+        lblThemeDark: '🌙 Dark',
+        lblThemeLight: '☀️ Light',
+        lblGlobalBrandIcon: 'Corporate Brand Icon:',
+        lblSyncThemeWithApps: 'Synchronize theme and icon with extensions & apps',
+        msgThemeLockedBySync: 'Synchronized with corporate dashboard appearance',
+        lblAppSyncInterval: 'Server Auto-sync Interval (minutes):',
+        hintAppSyncInterval: 'Frequency of background sync for profiles, proxies, and routes (default: 15 min).',
         subSettingsTheme: 'All color themes are preserved and automatically adapt to the chosen layout:',
         lblSettingsLang: '3. Dashboard Language',
         titleGhVersionControl: 'GitHub Releases & Version Control',
@@ -944,6 +1090,14 @@
         descLayoutTerminal: 'Моноширинный киберпанк/SecOps терминал со строгими 0px углами, неоновой сеткой и подсвеченными карточками.',
         badgeSelected: 'Активно',
         lblSettingsTheme: '2. Цветовая палитра (Color Scheme)',
+        lblSettingsThemeMode: 'Режим темы:',
+        lblThemeDark: '🌙 Темная',
+        lblThemeLight: '☀️ Светлая',
+        lblGlobalBrandIcon: 'Корпоративный значок:',
+        lblSyncThemeWithApps: 'Синхронизировать тему и значок с расширениями и приложениями',
+        msgThemeLockedBySync: 'Синхронизировано с корпоративным оформлением панели',
+        lblAppSyncInterval: 'Интервал автосинхронизации с сервером (минуты):',
+        hintAppSyncInterval: 'Периодичность синхронизации профиля, прокси и маршрутов в фоновом режиме (по умолчанию: 15 мин).',
         subSettingsTheme: 'Все цветовые схемы сохранены и адаптируются под выбранный макет:',
         lblSettingsLang: '3. Язык интерфейса (Language)',
         titleGhVersionControl: 'Версии и релизы GitHub',
@@ -2517,6 +2671,7 @@
         }
 
         updateLivePreview();
+        applyThemeSyncToConstructors();
       } catch (e) {
         console.error(e);
       }
@@ -2994,6 +3149,7 @@
         extensionFiles = await res.json();
         loadFileContent();
         updateLivePreview();
+        applyThemeSyncToConstructors();
       } catch (e) {
         console.error(e);
       }
@@ -3441,6 +3597,7 @@
         const minEl = document.getElementById('appStartMinimized');
         const serviceEl = document.getElementById('appInstallService');
         const logEl = document.getElementById('appTrafficLogging');
+        const syncIntervalEl = document.getElementById('appSyncIntervalMinutes');
 
         if (nameEl) nameEl.value = cfg.name || 'PEC - Proxy Client';
         if (shortNameEl) shortNameEl.value = cfg.shortName || 'PEC Client';
@@ -3456,6 +3613,7 @@
         if (minEl) minEl.checked = cfg.startMinimizedToTray !== false;
         if (serviceEl) serviceEl.checked = cfg.installAsService === true;
         if (logEl) logEl.checked = cfg.trafficLogging !== false;
+        if (syncIntervalEl) syncIntervalEl.value = cfg.syncIntervalMinutes || 15;
 
         const inclExtEl = document.getElementById('branchAppIncludeExtensionRules');
         if (inclExtEl) {
@@ -3543,12 +3701,13 @@
         renderAppProcessRulesTable();
         updateAppLivePreview();
         await loadCodeSignStatus();
+        applyThemeSyncToConstructors();
         isAppStudioDirty = false;
       } catch (e) {
         console.error('Failed to load App Studio config:', e);
       }
-    }
-
+    }
+
     function renderAppStudioBuildInfo(info) {
       if (!info) return;
 
@@ -3787,6 +3946,8 @@
       const minEl = document.getElementById('appStartMinimized');
       const serviceEl = document.getElementById('appInstallService');
       const logEl = document.getElementById('appTrafficLogging');
+      const syncIntervalEl = document.getElementById('appSyncIntervalMinutes');
+      const parsedInterval = syncIntervalEl ? parseInt(syncIntervalEl.value, 10) : 15;
 
       return {
         name: nameEl ? nameEl.value.trim() : 'PEC - Proxy Client',
@@ -3802,6 +3963,7 @@
         themeColor: colorEl ? colorEl.value : '#0284c7',
         themeBackground: bgEl ? bgEl.value : '#0b1120',
         themeCard: cardEl ? cardEl.value : '#131d36',
+        syncIntervalMinutes: isNaN(parsedInterval) ? 15 : Math.max(1, Math.min(1440, parsedInterval)),
         autoStartWithWindows: autoStartEl ? autoStartEl.checked : true,
         startMinimizedToTray: minEl ? minEl.checked : true,
         installAsService: serviceEl ? serviceEl.checked : false,
@@ -4884,8 +5046,13 @@
         container.innerHTML = '<div style="color:var(--danger); font-size:11px;">Ошибка загрузки правил</div>';
       }
     }
-window.loadAppStudioConfig = loadAppStudioConfig;
+    window.loadAppStudioConfig = loadAppStudioConfig;
     window.setAppPalette = setAppPalette;
+    window.setServerTheme = setServerTheme;
+    window.setServerThemeMode = setServerThemeMode;
+    window.setGlobalBrandIcon = setGlobalBrandIcon;
+    window.toggleSyncThemeWithApps = toggleSyncThemeWithApps;
+    window.applyThemeSyncToConstructors = applyThemeSyncToConstructors;
     window.toggleVersionPopover = toggleVersionPopover;
     window.closeVersionPopover = closeVersionPopover;
     window.checkGitHubReleasesNow = checkGitHubReleasesNow;
@@ -4904,7 +5071,7 @@ window.loadAppStudioConfig = loadAppStudioConfig;
     window.buildAppPackageAction = buildAppPackageAction;
     window.updateAppLivePreview = updateAppLivePreview;
     window.importSelectedRoutingProfileRules = importSelectedRoutingProfileRules;
-    window.importRoutingRulesToApp = importSelectedRoutingProfileRules;
+    window.importRoutingRulesToApp = importSelectedRoutingProfileRules;
     window.addNewAppProcessRule = addNewAppProcessRule;
     window.deleteAppProcessRule = deleteAppProcessRule;
     window.setAppPresetTheme = setAppPresetTheme;
@@ -4938,7 +5105,7 @@ window.loadAppStudioConfig = loadAppStudioConfig;
       get() { return currentAppConfig; },
       set(v) { currentAppConfig = v; },
       configurable: true
-    });
+    });
     window.loadCodeSignStatus = loadCodeSignStatus;
     window.onCodeSignTypeChange = onCodeSignTypeChange;
     window.uploadCodeSignCertAction = uploadCodeSignCertAction;
@@ -5069,7 +5236,7 @@ window.loadAppStudioConfig = loadAppStudioConfig;
         const profileOptions = (allProfiles || []).map(p => {
           const sel = (inst.assignedProfileId === p.id) ? ' selected' : '';
           return `<option value="${esc(p.id)}"${sel}>${esc(p.name)}</option>`;
-        }).join('');
+        }).join('');
 
         const pairedBadge = inst.pairedAppId
           ? `<span class="badge badge-success" title="${isRu ? 'Связано с десктоп-агентом (' + esc(inst.pairedHostname || '') + ')' : 'Paired with desktop app (' + esc(inst.pairedHostname || '') + ')'}">🔗 ${isRu ? 'Десктоп' : 'Desktop'}</span>`
@@ -7041,8 +7208,13 @@ ${JSON.stringify(json, null, 2)}`;
         setServerLayout(savedLayout);
         const savedTheme = localStorage.getItem('pec_server_theme') || 'cyber';
         setServerTheme(savedTheme);
+        const savedMode = localStorage.getItem('pec_server_theme_mode') || 'dark';
+        setServerThemeMode(savedMode);
+        const savedIcon = localStorage.getItem('pec_global_brand_icon') || 'shield';
+        setGlobalBrandIcon(savedIcon);
         const savedLang = localStorage.getItem('pec_lang') || 'ru';
         setLanguage(savedLang);
+        applyThemeSyncToConstructors();
       } catch (e) {}
 
       fetchStatus();
@@ -7066,8 +7238,13 @@ ${JSON.stringify(json, null, 2)}`;
         setServerLayout(savedLayout);
         const savedTheme = localStorage.getItem('pec_server_theme') || 'cyber';
         setServerTheme(savedTheme);
+        const savedMode = localStorage.getItem('pec_server_theme_mode') || 'dark';
+        setServerThemeMode(savedMode);
+        const savedIcon = localStorage.getItem('pec_global_brand_icon') || 'shield';
+        setGlobalBrandIcon(savedIcon);
         const savedLang = localStorage.getItem('pec_lang') || 'ru';
         setLanguage(savedLang);
+        applyThemeSyncToConstructors();
       } catch (e) {}
 
       const loginBtn = document.getElementById('loginSubmitBtn');

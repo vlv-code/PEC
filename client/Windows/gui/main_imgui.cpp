@@ -1200,9 +1200,8 @@ static void RenderRulesTab()
                                  ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
     float availY = ImGui::GetContentRegionAvail().y - 10.0f;
 
-    if (ImGui::BeginTable("RulesTable", 5, tableFlags, ImVec2(0.0f, availY))) {
-        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 32.0f);
-        ImGui::TableSetupColumn("##actions", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+    if (ImGui::BeginTable("RulesTable", 4, tableFlags, ImVec2(0.0f, availY))) {
+        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 100.0f);
         ImGui::TableSetupColumn(u8"Правило", ImGuiTableColumnFlags_WidthStretch, 2.5f);
         ImGui::TableSetupColumn(u8"Действие", ImGuiTableColumnFlags_WidthFixed, 85.0f);
         ImGui::TableSetupColumn(u8"Прокси-сервер", ImGuiTableColumnFlags_WidthStretch, 1.5f);
@@ -1222,12 +1221,12 @@ static void RenderRulesTab()
 
             ImGui::TableNextRow();
 
-            // Column 0: Row number
+            // Column 0: Row number + Checkbox toggle + Pencil edit icon in a single aligned column
             ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(PecTheme::TextMuted, "%d", i + 1);
 
-            // Column 1: Functional buttons on the LEFT: Checkbox toggle (no text) + Pencil edit icon
-            ImGui::TableSetColumnIndex(1);
+            ImGui::SameLine(0, 8.0f);
             char chkId[32];
             snprintf(chkId, sizeof(chkId), "##chk%d", i);
             bool en = (r->enabled != 0);
@@ -1246,10 +1245,10 @@ static void RenderRulesTab()
                 ImGui::SetTooltip(en ? u8"Правило включено (нажмите для выключения)" : u8"Правило выключено (нажмите для включения)");
             }
 
-            ImGui::SameLine(0, 8.0f);
+            ImGui::SameLine(0, 6.0f);
             char editBtn[32];
             snprintf(editBtn, sizeof(editBtn), u8"✎##editrule%d", i);
-            if (ImGui::Button(editBtn, ImVec2(28.0f, 22.0f))) {
+            if (ImGui::Button(editBtn, ImVec2(26.0f, 22.0f))) {
                 g_selectedRuleIdx = i;
                 OpenRuleModal(i);
             }
@@ -1257,8 +1256,8 @@ static void RenderRulesTab()
                 ImGui::SetTooltip(u8"Редактировать правило");
             }
 
-            // Column 2: Rule Target / Name with corporate / custom indicator
-            ImGui::TableSetColumnIndex(2);
+            // Column 1: Rule Target / Name with corporate / custom indicator
+            ImGui::TableSetColumnIndex(1);
             if (r->isCorporate) {
                 ImGui::TextColored(PecTheme::PrimaryAccent, u8"[Корп]");
             } else {
@@ -1289,8 +1288,8 @@ static void RenderRulesTab()
                 ImGui::SetTooltip("%s", tip.c_str());
             }
 
-            // Column 3: Action Pill
-            ImGui::TableSetColumnIndex(3);
+            // Column 2: Action Pill
+            ImGui::TableSetColumnIndex(2);
             if (_wcsicmp(r->action, L"DIRECT") == 0) {
                 RenderPill("DIRECT", PecTheme::SuccessDirect);
             } else if (_wcsicmp(r->action, L"BLOCK") == 0) {
@@ -1304,8 +1303,8 @@ static void RenderRulesTab()
                 else ImGui::SetTooltip(u8"Трафик перенаправляется через назначенный прокси");
             }
 
-            // Column 4: Proxy name
-            ImGui::TableSetColumnIndex(4);
+            // Column 3: Proxy name
+            ImGui::TableSetColumnIndex(3);
             std::string proxyLabel = "По умолчанию";
             for (int k = 0; k < g_profile.cfgCount; k++) {
                 if (g_profile.cfg[k].storedId == r->cfgStoredId) {
@@ -1698,9 +1697,8 @@ static void RenderProxiesTab()
                                  ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
     float availY = ImGui::GetContentRegionAvail().y - 10.0f;
 
-    if (ImGui::BeginTable("ProxiesTable", 8, tableFlags, ImVec2(0.0f, availY))) {
-        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 32.0f);
-        ImGui::TableSetupColumn("##actions", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+    if (ImGui::BeginTable("ProxiesTable", 7, tableFlags, ImVec2(0.0f, availY))) {
+        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 100.0f);
         ImGui::TableSetupColumn(u8"Название", ImGuiTableColumnFlags_WidthStretch, 1.5f);
         ImGui::TableSetupColumn(u8"Тип", ImGuiTableColumnFlags_WidthFixed, 75.0f);
         ImGui::TableSetupColumn(u8"Адрес (Хост : Порт)", ImGuiTableColumnFlags_WidthStretch, 2.0f);
@@ -1713,12 +1711,12 @@ static void RenderProxiesTab()
             PBConfig* c = &g_profile.cfg[i];
             ImGui::TableNextRow();
 
-            // Column 0: Row index
+            // Column 0: Row index + Default proxy toggle + Pencil edit icon in a single aligned column
             ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(PecTheme::TextMuted, "%d", i + 1);
 
-            // Column 1: Action buttons on the LEFT: Default proxy checkbox + Pencil edit icon
-            ImGui::TableSetColumnIndex(1);
+            ImGui::SameLine(0, 8.0f);
             char chkId[32];
             snprintf(chkId, sizeof(chkId), "##defchk%d", i);
             bool isDefault = (i == 0);
@@ -1732,10 +1730,10 @@ static void RenderProxiesTab()
                                             : u8"Нажмите, чтобы сделать этот прокси используемым по умолчанию");
             }
 
-            ImGui::SameLine(0, 8.0f);
+            ImGui::SameLine(0, 6.0f);
             char editBtn[32];
             snprintf(editBtn, sizeof(editBtn), u8"✎##editproxy%d", i);
-            if (ImGui::Button(editBtn, ImVec2(28.0f, 22.0f))) {
+            if (ImGui::Button(editBtn, ImVec2(26.0f, 22.0f))) {
                 g_selectedProxyIdx = i;
                 OpenProxyModal(i);
             }
@@ -1743,8 +1741,8 @@ static void RenderProxiesTab()
                 ImGui::SetTooltip(u8"Редактировать параметры прокси");
             }
 
-            // Column 2: Name & row selection (no SpanAllColumns, prevents click capture bugs)
-            ImGui::TableSetColumnIndex(2);
+            // Column 1: Name & row selection (no SpanAllColumns, prevents click capture bugs)
+            ImGui::TableSetColumnIndex(1);
             std::string nameStr = WToUtf8(c->name[0] ? c->name : c->type);
             bool isSelected = (g_selectedProxyIdx == i);
             if (ImGui::Selectable(nameStr.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick)) {
@@ -1757,27 +1755,27 @@ static void RenderProxiesTab()
                 ImGui::SetTooltip(u8"Дважды щелкните для редактирования прокси");
             }
 
-            // Column 3: Type Pill
-            ImGui::TableSetColumnIndex(3);
+            // Column 2: Type Pill
+            ImGui::TableSetColumnIndex(2);
             RenderPill(WToUtf8(c->type).c_str(), PecTheme::PrimaryAccent);
 
-            // Column 4: Host : Port
-            ImGui::TableSetColumnIndex(4);
+            // Column 3: Host : Port
+            ImGui::TableSetColumnIndex(3);
             std::string endpoint = WToUtf8(c->host) + ":" + WToUtf8(c->port);
             ImGui::TextUnformatted(endpoint.c_str());
 
-            // Column 5: Authentication
-            ImGui::TableSetColumnIndex(5);
+            // Column 4: Authentication
+            ImGui::TableSetColumnIndex(4);
             std::string auth = c->user[0] ? WToUtf8(c->user) : u8"Без пароля";
             ImGui::TextUnformatted(auth.c_str());
 
-            // Column 6: DNS
-            ImGui::TableSetColumnIndex(6);
+            // Column 5: DNS
+            ImGui::TableSetColumnIndex(5);
             ImGui::TextColored(c->sendDomain ? PecTheme::SuccessDirect : PecTheme::TextMuted,
                                c->sendDomain ? u8"Удаленный" : u8"Локальный");
 
-            // Column 7: Latency / Ping status
-            ImGui::TableSetColumnIndex(7);
+            // Column 6: Latency / Ping status
+            ImGui::TableSetColumnIndex(6);
             if (g_proxyLatencies[i].testing) {
                 ImGui::TextColored(PecTheme::HoverAccent, u8"Проверка...");
             } else if (g_proxyLatencies[i].ms >= 0) {
