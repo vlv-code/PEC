@@ -42,6 +42,12 @@ enum {
     S_M_PROXIED_ONLY, S_M_PROXY_SELECT, S_PROXY_CHOOSE,
     S_TAB_RULES, S_TAB_SERVERS, S_BTN_SETACTIVE, S_BTN_TEST, S_STATUS_PRIMARY, S_STATUS_STANDBY,
     S_COL_STATUS, S_M_OPEN_LOGS, S_BTN_LOGS,
+    S_BTN_CLEARSEARCH, S_CHK_AUTOSCROLL, S_BTN_SAVE,
+    S_STATUS_SYNCING, S_STATUS_SYNC_OK, S_STATUS_SYNC_ERR, S_STATUS_SYNC_WAIT,
+    S_STATUS_PAIRED, S_STATUS_WAIT_EXT,
+    S_LOG_COPY_ALL, S_LOG_OPEN_FILE, S_LOG_FOLDER,
+    S_DLG_RULE_EDIT, S_DLG_RULE_NEW, S_DLG_PROXY_EDIT, S_DLG_PROXY_NEW,
+    S_PRESETS_HINT, S_COL_TIME, S_COL_PROCESS,
     S_COUNT
 };
 
@@ -234,12 +240,65 @@ static const wchar_t* const g_strings[S_COUNT][3] = {
     /* S_COL_STATUS        */ { L"Статус", L"Status", L"状态" },
     /* S_M_OPEN_LOGS       */ { L"Открыть папку с логами", L"Open Logs Folder", L"打开日志文件夹" },
     /* S_BTN_LOGS          */ { L"📂 Логи", L"📂 Logs", L"📂 日志" },
+    /* S_BTN_CLEARSEARCH   */ { L"Очистить поиск", L"Clear Search", L"清除搜索" },
+    /* S_CHK_AUTOSCROLL    */ { L"Автопрокрутка", L"Auto Scroll", L"自动滚屏" },
+    /* S_BTN_SAVE          */ { L"Сохранить", L"Save", L"保存" },
+    /* S_STATUS_SYNCING    */ { L"● Сервер: Синхронизация...", L"● Server: Syncing...", L"● 服务器: 同步中..." },
+    /* S_STATUS_SYNC_OK     */ { L"● Сервер PEC (ОК)", L"● PEC Server (OK)", L"● PEC 服务器 (正常)" },
+    /* S_STATUS_SYNC_ERR   */ { L"● Сервер: Ошибка связи", L"● Server: Connection Error", L"● 服务器: 连接错误" },
+    /* S_STATUS_SYNC_WAIT  */ { L"● Сервер: Ожидание", L"● Server: Waiting", L"● 服务器: 等待中" },
+    /* S_STATUS_PAIRED     */ { L"🌐 Спарено с расширением", L"🌐 Paired with Extension", L"🌐 已与扩展配对" },
+    /* S_STATUS_WAIT_EXT   */ { L"🌐 Ожидание расширения", L"🌐 Waiting for Extension", L"🌐 等待扩展" },
+    /* S_LOG_COPY_ALL      */ { L"📋 Скопировать весь лог", L"📋 Copy All Logs", L"📋 复制所有日志" },
+    /* S_LOG_OPEN_FILE     */ { L"📄 Открыть pec-app.log", L"📄 Open pec-app.log", L"📄 打开 pec-app.log" },
+    /* S_LOG_FOLDER        */ { L"📂 Папка с логами", L"📂 Logs Folder", L"📂 日志文件夹" },
+    /* S_DLG_RULE_EDIT     */ { L"Редактирование правила", L"Edit Routing Rule", L"编辑路由规则" },
+    /* S_DLG_RULE_NEW      */ { L"Новое правило маршрутизации", L"New Routing Rule", L"新建路由规则" },
+    /* S_DLG_PROXY_EDIT    */ { L"Редактирование прокси", L"Edit Proxy", L"编辑代理" },
+    /* S_DLG_PROXY_NEW     */ { L"Новый прокси-сервер", L"New Proxy Server", L"新建代理服务器" },
+    /* S_PRESETS_HINT      */ { L"Быстрые пресеты:", L"Quick presets:", L"快速预设:" },
+    /* S_COL_TIME          */ { L"Время", L"Time", L"时间" },
+    /* S_COL_PROCESS       */ { L"Процесс", L"Process", L"进程" },
 };
 
+#ifdef __cplusplus
+static char g_strings_u8[S_COUNT][3][256] = {};
+static bool g_strings_u8_inited = false;
+
+static inline void InitLocU8() {
+    if (g_strings_u8_inited) return;
+    for (int i = 0; i < S_COUNT; ++i) {
+        for (int l = 0; l < 3; ++l) {
+            if (g_strings[i][l]) {
+                WideCharToMultiByte(CP_UTF8, 0, g_strings[i][l], -1, g_strings_u8[i][l], (int)sizeof(g_strings_u8[i][l]), nullptr, nullptr);
+            }
+        }
+    }
+    g_strings_u8_inited = true;
+}
+
+static inline const char* TU8(int id) {
+    if (!g_strings_u8_inited) InitLocU8();
+    if (id < 0 || id >= S_COUNT) return "";
+    int l = (g_lang >= 0 && g_lang <= 2) ? g_lang : 0;
+    return g_strings_u8[id][l];
+}
+
+static inline const wchar_t* TW(int id) {
+    if (id < 0 || id >= S_COUNT) return L"";
+    int l = (g_lang >= 0 && g_lang <= 2) ? g_lang : 0;
+    return g_strings[id][l];
+}
+
+#ifndef T
+#define T(id) TU8(id)
+#endif
+#else
 static const wchar_t* T(int id) {
     if (id < 0 || id >= S_COUNT) return L"";
     int l = (g_lang >= 0 && g_lang <= 2) ? g_lang : 0;
     return g_strings[id][l];
 }
+#endif
 
 #endif // PB_LOC_H

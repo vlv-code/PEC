@@ -58,6 +58,7 @@
 
 #include "pec_imgui_theme.h"
 #include "res/resource.h"
+#include "loc/loc.h"
 
 #if defined(__has_include)
 #if __has_include("res/version_gen.h")
@@ -254,6 +255,24 @@ static void W2Ux(const wchar_t* w, char* out, int cch)
     if (!WideCharToMultiByte(CP_UTF8, 0, w ? w : L"", -1, out, cch, NULL, NULL)) out[0] = 0;
 }
 
+// Case-insensitive substring search without heap allocations
+static bool StrContainsCaseInsensitive(const char* haystack, const char* needle_lower, size_t needle_len)
+{
+    if (!needle_len) return true;
+    if (!haystack || !*haystack) return false;
+    for (const char* h = haystack; *h; ++h) {
+        size_t i = 0;
+        while (i < needle_len && h[i] != '\0') {
+            unsigned char c1 = (unsigned char)h[i];
+            char c1_lower = (c1 >= 'A' && c1 <= 'Z') ? (char)(c1 + 32) : (char)c1;
+            if (c1_lower != needle_lower[i]) break;
+            ++i;
+        }
+        if (i == needle_len) return true;
+    }
+    return false;
+}
+
 // -----------------------------------------------------------------------------
 // Global Application State
 // -----------------------------------------------------------------------------
@@ -406,8 +425,6 @@ static void PBConnCb(const char* proc, DWORD pid, const char* ip, unsigned short
 
     bool isDirect = (info && _strnicmp(info, "Direct", 6) == 0);
     bool isBlock  = (info && _strnicmp(info, "Block",  5) == 0);
-
-    if (g_proxiedOnly && isDirect) return;
 
     // Filter out OS daemon background noise going direct
     if (isDirect && proc) {
@@ -728,6 +745,11 @@ struct ProxyLatencyState {
     char status[64] = "Не проверен";
 };
 static ProxyLatencyState g_proxyLatencies[PB_MAX_CFG];
+static CRITICAL_SECTION  g_latencyCs;
+struct LatencyLock {
+    LatencyLock()  { EnterCriticalSection(&g_latencyCs); }
+    ~LatencyLock() { LeaveCriticalSection(&g_latencyCs); }
+};
 
 struct LatencyTestArgs {
     int cfgIdx;
@@ -751,16 +773,22 @@ static DWORD WINAPI LatencyTestThreadProc(LPVOID param)
     auto start = std::chrono::high_resolution_clock::now();
     int rc = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
     if (rc != 0 || !res) {
-        snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "DNS ошибка");
-        g_proxyLatencies[cfgIdx].testing = false;
+        {
+            LatencyLock lock;
+            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "DNS ошибка");
+            g_proxyLatencies[cfgIdx].testing = false;
+        }
         return 0;
     }
 
     SOCKET s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (s == INVALID_SOCKET) {
         freeaddrinfo(res);
-        snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Socket ошибка");
-        g_proxyLatencies[cfgIdx].testing = false;
+        {
+            LatencyLock lock;
+            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Socket ошибка");
+            g_proxyLatencies[cfgIdx].testing = false;
+        }
         return 0;
     }
 
@@ -779,23 +807,26 @@ static DWORD WINAPI LatencyTestThreadProc(LPVOID param)
     auto end = std::chrono::high_resolution_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    if (sel > 0 && FD_ISSET(s, &writeSet)) {
-        int err = 0;
-        int errLen = sizeof(err);
-        getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&err, &errLen);
-        if (err == 0) {
-            g_proxyLatencies[cfgIdx].ms = (int)ms;
-            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "%d ms (OK)", (int)ms);
+    {
+        LatencyLock lock;
+        if (sel > 0 && FD_ISSET(s, &writeSet)) {
+            int err = 0;
+            int errLen = sizeof(err);
+            getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&err, &errLen);
+            if (err == 0) {
+                g_proxyLatencies[cfgIdx].ms = (int)ms;
+                snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "%d ms (OK)", (int)ms);
+            } else {
+                snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Ошибка соединения");
+            }
         } else {
-            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Ошибка соединения");
+            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Таймаут (3с)");
         }
-    } else {
-        snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Таймаут (3с)");
+        g_proxyLatencies[cfgIdx].testing = false;
     }
 
     closesocket(s);
     freeaddrinfo(res);
-    g_proxyLatencies[cfgIdx].testing = false;
     return 0;
 }
 
@@ -808,12 +839,15 @@ static void TestProxyLatencyAsync(int cfgIdx)
             delete args;
             return;
         }
-        if (g_proxyLatencies[cfgIdx].testing) {
-            delete args;
-            return;
+        {
+            LatencyLock latLock;
+            if (g_proxyLatencies[cfgIdx].testing) {
+                delete args;
+                return;
+            }
+            g_proxyLatencies[cfgIdx].testing = true;
+            snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Проверка...");
         }
-        g_proxyLatencies[cfgIdx].testing = true;
-        snprintf(g_proxyLatencies[cfgIdx].status, sizeof(g_proxyLatencies[cfgIdx].status), "Проверка...");
 
         args->cfgIdx = cfgIdx;
         args->host = WToUtf8(g_profile.cfg[cfgIdx].host);
@@ -824,6 +858,7 @@ static void TestProxyLatencyAsync(int cfgIdx)
     if (hThread) {
         CloseHandle(hThread);
     } else {
+        LatencyLock latLock;
         g_proxyLatencies[cfgIdx].testing = false;
         delete args;
     }
@@ -1009,14 +1044,14 @@ static void RenderHeader()
 
     ImGui::SameLine(0, 16.0f);
     if (g_pairedExt.paired) {
-        RenderPill(u8"🌐 Спарено с расширением", ImVec4(0.08f, 0.28f, 0.18f, 1.0f), ImVec4(0.3f, 0.9f, 0.5f, 1.0f));
+        RenderPill(T(S_STATUS_PAIRED), ImVec4(0.08f, 0.28f, 0.18f, 1.0f), ImVec4(0.3f, 0.9f, 0.5f, 1.0f));
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(u8"Расширение активно в браузере (версия %ls, %ls)\nСинхронизация работает по порту 20809",
                 g_pairedExt.version[0] ? g_pairedExt.version : L"1.0.0",
                 g_pairedExt.browser[0] ? g_pairedExt.browser : L"chromium");
         }
     } else {
-        RenderPill(u8"🌐 Ожидание расширения", PecTheme::CardBg, PecTheme::TextMuted);
+        RenderPill(T(S_STATUS_WAIT_EXT), PecTheme::CardBg, PecTheme::TextMuted);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(u8"Локальный порт 20809 слушается.\nДля спаривания убедитесь, что в браузере запущено расширение PEC v1.0.0+.");
         }
@@ -1031,19 +1066,19 @@ static void RenderHeader()
     }
 
     if (g_isSyncing) {
-        RenderPill(u8"● Сервер: Синхронизация...", ImVec4(0.08f, 0.20f, 0.35f, 1.0f), PecTheme::HoverAccent);
+        RenderPill(T(S_STATUS_SYNCING), ImVec4(0.08f, 0.20f, 0.35f, 1.0f), PecTheme::HoverAccent);
     } else if (g_syncEverSucceeded) {
         char pillText[96];
-        snprintf(pillText, sizeof(pillText), u8"● Сервер PEC (%s)", syncTimeStr[0] ? syncTimeStr : u8"ОК");
+        snprintf(pillText, sizeof(pillText), "%s (%s)", T(S_STATUS_SYNC_OK), syncTimeStr[0] ? syncTimeStr : "OK");
         RenderPill(pillText, ImVec4(0.08f, 0.28f, 0.18f, 1.0f), PecTheme::SuccessDirect);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(u8"Синхронизация с сервером PEC активна\nПоследний обмен: %s\nСтатус: %ls\nСервер: %ls",
-                syncTimeStr[0] ? syncTimeStr : u8"Недавно",
+                syncTimeStr[0] ? syncTimeStr : "OK",
                 g_lastSyncStatusStr,
                 g_profile.pecSync.serverUrl[0] ? g_profile.pecSync.serverUrl : L"—");
         }
     } else if (g_lastSyncError != 0) {
-        RenderPill(u8"● Сервер: Ошибка связи", ImVec4(0.35f, 0.10f, 0.10f, 1.0f), PecTheme::DangerRed);
+        RenderPill(T(S_STATUS_SYNC_ERR), ImVec4(0.35f, 0.10f, 0.10f, 1.0f), PecTheme::DangerRed);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(u8"Ошибка связи с сервером PEC (код %lu)\n%ls\nСервер: %ls",
                 g_lastSyncError,
@@ -1051,7 +1086,7 @@ static void RenderHeader()
                 g_profile.pecSync.serverUrl[0] ? g_profile.pecSync.serverUrl : L"—");
         }
     } else {
-        RenderPill(u8"● Сервер: Ожидание", PecTheme::CardBg, PecTheme::TextMuted);
+        RenderPill(T(S_STATUS_SYNC_WAIT), PecTheme::CardBg, PecTheme::TextMuted);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(u8"Синхронизация с сервером PEC\n%ls", g_lastSyncStatusStr);
         }
@@ -1065,31 +1100,59 @@ static void RenderHeader()
         ImGui::SetTooltip(u8"Синхронизировать конфигурацию с сервером PEC сейчас");
     }
 
+    // Language Selector (RU | EN | ZH)
+    ImGui::SameLine(0, 10.0f);
+    const char* langs[] = { "RU", "EN", "ZH" };
+    for (int l = 0; l < 3; l++) {
+        if (l > 0) ImGui::SameLine(0, 2.0f);
+        bool isCur = (g_lang == l);
+        if (isCur) {
+            ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::PrimaryAccent);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::FrameBg);
+            ImGui::PushStyleColor(ImGuiCol_Text, PecTheme::TextSecondary);
+        }
+        char lbtn[16];
+        snprintf(lbtn, sizeof(lbtn), "%s##lang_%d", langs[l], l);
+        if (ImGui::Button(lbtn, ImVec2(28.0f, 0))) {
+            g_lang = l;
+            const wchar_t* langCodes[] = { L"ru", L"en", L"zh" };
+            ProfileLock lk;
+            lstrcpynW(g_profile.language, langCodes[l], 8);
+            SaveProfile();
+        }
+        ImGui::PopStyleColor(2);
+    }
+
     // Status Toggle Button placed in the far right corner
     float btnWidth = 180.0f;
     float rightOffset = ImGui::GetWindowWidth() - btnWidth - 16.0f;
     if (rightOffset > ImGui::GetCursorPosX()) ImGui::SameLine(rightOffset);
     else ImGui::SameLine();
 
+    char statBtnText[64];
     if (g_proxyEnabled) {
+        snprintf(statBtnText, sizeof(statBtnText), "● %s##statbtn", T(S_STATUS_ACTIVE));
         ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::SuccessDirect);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.1f, 0.8f, 0.55f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.05f, 0.65f, 0.45f, 1.0f));
-        if (ImGui::Button(u8"● Прокси активен##statbtn", ImVec2(btnWidth, 0))) {
+        if (ImGui::Button(statBtnText, ImVec2(btnWidth, 0))) {
             SetProxyEnabled(false);
-            TrayUpdateTip(L"PEC-App - Приостановлен");
+            TrayUpdateTip(TW(S_STATUS_PAUSED));
         }
         ImGui::PopStyleColor(3);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(u8"Трафик перехватывается согласно правилам маршрутизации.\nНажмите, чтобы временно приостановить работу.");
         }
     } else {
+        snprintf(statBtnText, sizeof(statBtnText), "⏸ %s##statbtn", T(S_STATUS_PAUSED));
         ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::WarningAlert);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.7f, 0.1f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.85f, 0.55f, 0.02f, 1.0f));
-        if (ImGui::Button(u8"⏸ Приостановлен##statbtn", ImVec2(btnWidth, 0))) {
+        if (ImGui::Button(statBtnText, ImVec2(btnWidth, 0))) {
             SetProxyEnabled(true);
-            TrayUpdateTip(L"PEC-App - Прокси активен");
+            TrayUpdateTip(TW(S_STATUS_ACTIVE));
         }
         ImGui::PopStyleColor(3);
         if (ImGui::IsItemHovered()) {
@@ -1111,11 +1174,11 @@ static void RenderRulesTab()
     ProfileLock lock;
     // Search input & match counter
     ImGui::PushItemWidth(320.0f);
-    ImGui::InputTextWithHint("##rulesearch", u8"Поиск правил (процесс, домен, порт)...", g_ruleSearch, sizeof(g_ruleSearch));
+    ImGui::InputTextWithHint("##rulesearch", T(S_RULES_SEARCH), g_ruleSearch, sizeof(g_ruleSearch));
     ImGui::PopItemWidth();
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"Очистить##clrrulesearch")) {
+    if (ImGui::Button(T(S_BTN_CLEARSEARCH))) {
         g_ruleSearch[0] = 0;
     }
 
@@ -1137,16 +1200,18 @@ static void RenderRulesTab()
     }
 
     ImGui::SameLine(0, 16.0f);
-    ImGui::TextColored(PecTheme::TextMuted, u8"Показано: %d из %d правил", matchCount, g_profile.ruleCount);
+    ImGui::TextColored(PecTheme::TextMuted, "%d / %d", matchCount, g_profile.ruleCount);
 
     ImGui::Spacing();
 
     // Toolbar Buttons
-    if (ImGui::Button(u8"+ Добавить правило")) {
+    char addRuleBtn[64];
+    snprintf(addRuleBtn, sizeof(addRuleBtn), "+ %s", T(S_BTN_ADDRULE));
+    if (ImGui::Button(addRuleBtn)) {
         OpenRuleModal(-1);
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"▲ Вверх") && g_selectedRuleIdx > 0 && g_selectedRuleIdx < g_profile.ruleCount) {
+    if (ImGui::Button(u8"▲") && g_selectedRuleIdx > 0 && g_selectedRuleIdx < g_profile.ruleCount) {
         PBRule temp = g_profile.rule[g_selectedRuleIdx];
         g_profile.rule[g_selectedRuleIdx] = g_profile.rule[g_selectedRuleIdx - 1];
         g_profile.rule[g_selectedRuleIdx - 1] = temp;
@@ -1156,7 +1221,7 @@ static void RenderRulesTab()
         SaveProfile();
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"▼ Вниз") && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount - 1) {
+    if (ImGui::Button(u8"▼") && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount - 1) {
         PBRule temp = g_profile.rule[g_selectedRuleIdx];
         g_profile.rule[g_selectedRuleIdx] = g_profile.rule[g_selectedRuleIdx + 1];
         g_profile.rule[g_selectedRuleIdx + 1] = temp;
@@ -1166,7 +1231,7 @@ static void RenderRulesTab()
         SaveProfile();
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"Удалить") && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount) {
+    if (ImGui::Button(T(S_BTN_REMOVE)) && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount) {
         if (g_profile.rule[g_selectedRuleIdx].nativeId && g_api.DeleteRule) {
             g_api.DeleteRule(g_profile.rule[g_selectedRuleIdx].nativeId);
             g_profile.rule[g_selectedRuleIdx].nativeId = 0;
@@ -1181,11 +1246,11 @@ static void RenderRulesTab()
         SaveProfile();
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"Клонировать") && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount && g_profile.ruleCount < PB_MAX_RULE) {
+    if (ImGui::Button(T(S_BTN_CLONE)) && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount && g_profile.ruleCount < PB_MAX_RULE) {
         PBRule clone = g_profile.rule[g_selectedRuleIdx];
         clone.nativeId = 0;
         clone.isCorporate = 0;
-        _snwprintf_s(clone.name, 128, _TRUNCATE, L"%s (копия)", g_profile.rule[g_selectedRuleIdx].name);
+        _snwprintf_s(clone.name, 128, _TRUNCATE, L"%s (copy)", g_profile.rule[g_selectedRuleIdx].name);
         g_profile.rule[g_profile.ruleCount] = clone;
         EngineAddRule(&g_profile.rule[g_profile.ruleCount]);
         g_profile.ruleCount++;
@@ -1202,9 +1267,9 @@ static void RenderRulesTab()
 
     if (ImGui::BeginTable("RulesTable", 4, tableFlags, ImVec2(0.0f, availY))) {
         ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-        ImGui::TableSetupColumn(u8"Правило", ImGuiTableColumnFlags_WidthStretch, 2.5f);
-        ImGui::TableSetupColumn(u8"Действие", ImGuiTableColumnFlags_WidthFixed, 85.0f);
-        ImGui::TableSetupColumn(u8"Прокси-сервер", ImGuiTableColumnFlags_WidthStretch, 1.5f);
+        ImGui::TableSetupColumn(T(S_COL_NAME), ImGuiTableColumnFlags_WidthStretch, 2.5f);
+        ImGui::TableSetupColumn(T(S_COL_ACTION), ImGuiTableColumnFlags_WidthFixed, 85.0f);
+        ImGui::TableSetupColumn(T(S_COL_CFG), ImGuiTableColumnFlags_WidthStretch, 1.5f);
         ImGui::TableHeadersRow();
 
         for (int i = 0; i < g_profile.ruleCount; i++) {
@@ -1318,7 +1383,8 @@ static void RenderRulesTab()
     }
 
     // Modal Dialog: Add / Edit Rule
-    const char* ruleModalTitle = g_isEditRule ? u8"Редактирование правила###RuleModalPopup" : u8"Новое правило маршрутизации###RuleModalPopup";
+    char ruleModalTitle[128];
+    snprintf(ruleModalTitle, sizeof(ruleModalTitle), "%s###RuleModalPopup", g_isEditRule ? T(S_DLG_RULE_EDIT) : T(S_DLG_RULE_NEW));
     if (g_openRuleModal) {
         ImGui::OpenPopup(ruleModalTitle);
         g_openRuleModal = false;
@@ -1336,14 +1402,14 @@ static void RenderRulesTab()
             ImGui::Spacing();
         }
 
-        ImGui::Text(u8"Название:");
+        ImGui::Text("%s", T(S_L_NAME));
         ImGui::InputText("##rmName", g_rmName, sizeof(g_rmName));
 
-        ImGui::Text(u8"Процессы (через точку с запятой, * = все):");
+        ImGui::Text("%s", T(S_COL_APPS));
         ImGui::InputText("##rmProc", g_rmProc, sizeof(g_rmProc));
 
         // Preset process buttons
-        ImGui::TextColored(PecTheme::TextMuted, u8"Быстрые пресеты:");
+        ImGui::TextColored(PecTheme::TextMuted, "%s", T(S_PRESETS_HINT));
         const char* presets[] = { "curl.exe", "git.exe", "node.exe", "docker.exe", "chrome.exe", "msedge.exe" };
         for (int p = 0; p < 6; p++) {
             if (p > 0) ImGui::SameLine();
@@ -1363,23 +1429,23 @@ static void RenderRulesTab()
         }
 
         ImGui::Spacing();
-        ImGui::Text(u8"Целевые домены и IP-адреса (* = любые):");
+        ImGui::Text("%s", T(S_L_HOSTS));
         ImGui::InputText("##rmHosts", g_rmHosts, sizeof(g_rmHosts));
 
-        ImGui::Text(u8"Порты (например: 80, 443, 8000-8999 или *):");
+        ImGui::Text("%s", T(S_L_PORTS));
         ImGui::InputText("##rmPorts", g_rmPorts, sizeof(g_rmPorts));
 
         ImGui::Spacing();
-        ImGui::Text(u8"Протокол:");
+        ImGui::Text("%s", T(S_L_PROTO));
         const char* protoItems[] = { "TCP", "UDP", "BOTH" };
         ImGui::Combo("##rmProto", &g_rmProto, protoItems, IM_ARRAYSIZE(protoItems));
 
-        ImGui::Text(u8"Действие:");
+        ImGui::Text("%s", T(S_L_ACTION));
         const char* actionItems[] = { "PROXY (Через прокси)", "DIRECT (Напрямую)", "BLOCK (Блокировать)" };
         ImGui::Combo("##rmAction", &g_rmAction, actionItems, IM_ARRAYSIZE(actionItems));
 
         if (g_rmAction == 0 && g_profile.cfgCount > 0) {
-            ImGui::Text(u8"Прокси-сервер:");
+            ImGui::Text("%s", T(S_L_CFGID));
             std::vector<std::string> cfgNames;
             for (int c = 0; c < g_profile.cfgCount; c++) {
                 cfgNames.push_back(WToUtf8(g_profile.cfg[c].name[0] ? g_profile.cfg[c].name : g_profile.cfg[c].host));
@@ -1390,14 +1456,18 @@ static void RenderRulesTab()
         }
 
         ImGui::Spacing();
-        ImGui::Checkbox(u8"Правило включено", &g_rmEnabled);
-        ImGui::Checkbox(u8"Перехватывать localhost (127.x / ::1)", &g_rmLocalhost);
+        ImGui::Checkbox(T(S_CHK_ENABLE), &g_rmEnabled);
+        ImGui::Checkbox(T(S_CHK_LOCALHOST), &g_rmLocalhost);
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::Button(u8"Сохранить##saverule", ImVec2(120, 0))) {
+        char saveRuleBtn[64], cancelRuleBtn[64];
+        snprintf(saveRuleBtn, sizeof(saveRuleBtn), "%s##saverule", T(S_BTN_SAVE));
+        snprintf(cancelRuleBtn, sizeof(cancelRuleBtn), "%s##cancelrule", T(S_BTN_CANCEL));
+
+        if (ImGui::Button(saveRuleBtn, ImVec2(120, 0))) {
             PBRule* target = nullptr;
             if (g_isEditRule && g_editRuleIdx >= 0 && g_editRuleIdx < g_profile.ruleCount) {
                 target = &g_profile.rule[g_editRuleIdx];
@@ -1435,7 +1505,7 @@ static void RenderRulesTab()
         }
 
         ImGui::SameLine();
-        if (ImGui::Button(u8"Отмена##cancelrule", ImVec2(120, 0))) {
+        if (ImGui::Button(cancelRuleBtn, ImVec2(120, 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -1452,22 +1522,22 @@ static void RenderConnectionsTab()
 {
     // Search input
     ImGui::PushItemWidth(300.0f);
-    ImGui::InputTextWithHint("##connsearch", u8"Фильтр (процесс, хост)...", g_connSearch, sizeof(g_connSearch));
+    ImGui::InputTextWithHint("##connsearch", T(S_SEARCH_CUE), g_connSearch, sizeof(g_connSearch));
     ImGui::PopItemWidth();
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"Очистить поиск##clrconnsearch")) {
+    if (ImGui::Button(T(S_BTN_CLEARSEARCH))) {
         g_connSearch[0] = 0;
     }
 
     ImGui::SameLine(0, 16.0f);
-    ImGui::Checkbox(u8"Автопрокрутка", &g_connAutoScroll);
+    ImGui::Checkbox(T(S_CHK_AUTOSCROLL), &g_connAutoScroll);
 
     ImGui::SameLine();
-    ImGui::Checkbox(u8"Только проксированные", &g_proxiedOnly);
+    ImGui::Checkbox(T(S_M_PROXIED_ONLY), &g_proxiedOnly);
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"Очистить журнал##clearconnlog")) {
+    if (ImGui::Button(T(S_BTN_CLEARLOGS))) {
         g_connBuffer.Clear();
         if (g_api.ClearConnectionLogs) g_api.ClearConnectionLogs();
     }
@@ -1475,8 +1545,34 @@ static void RenderConnectionsTab()
     std::vector<ConnEntry> snapshot;
     g_connBuffer.GetSnapshot(snapshot);
 
+    // Compute lowercase search query once before row iteration
+    char searchLower[sizeof(g_connSearch)];
+    size_t needleLen = 0;
+    for (size_t i = 0; g_connSearch[i] && i < sizeof(searchLower) - 1; ++i) {
+        unsigned char c = (unsigned char)g_connSearch[i];
+        searchLower[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : (char)c;
+        needleLen++;
+    }
+    searchLower[needleLen] = '\0';
+
+    // Collect visible row indices without per-row heap allocations
+    std::vector<size_t> visibleIndices;
+    visibleIndices.reserve(snapshot.size());
+    for (size_t i = 0; i < snapshot.size(); ++i) {
+        const ConnEntry& e = snapshot[i];
+        if (g_proxiedOnly && e.isDirect) continue;
+        if (needleLen > 0) {
+            if (!StrContainsCaseInsensitive(e.process, searchLower, needleLen) &&
+                !StrContainsCaseInsensitive(e.hostIp, searchLower, needleLen) &&
+                !StrContainsCaseInsensitive(e.proxy, searchLower, needleLen)) {
+                continue;
+            }
+        }
+        visibleIndices.push_back(i);
+    }
+
     ImGui::SameLine(0, 16.0f);
-    ImGui::TextColored(PecTheme::TextMuted, u8"Соединений: %zu", snapshot.size());
+    ImGui::TextColored(PecTheme::TextMuted, "%zu / %zu", visibleIndices.size(), snapshot.size());
 
     ImGui::Spacing();
 
@@ -1485,59 +1581,54 @@ static void RenderConnectionsTab()
                                  ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
     float availY = ImGui::GetContentRegionAvail().y - 10.0f;
 
-    std::string searchLower = g_connSearch;
-    std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
-
     if (ImGui::BeginTable("ConnStreamTable", 6, tableFlags, ImVec2(0.0f, availY))) {
-        ImGui::TableSetupColumn(u8"Время", ImGuiTableColumnFlags_WidthFixed, 75.0f);
-        ImGui::TableSetupColumn(u8"Процесс", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-        ImGui::TableSetupColumn(u8"Хост / IP", ImGuiTableColumnFlags_WidthStretch, 2.0f);
-        ImGui::TableSetupColumn(u8"Действие", ImGuiTableColumnFlags_WidthFixed, 85.0f);
-        ImGui::TableSetupColumn(u8"Прокси-сервер", ImGuiTableColumnFlags_WidthStretch, 1.2f);
-        ImGui::TableSetupColumn(u8"Статус", ImGuiTableColumnFlags_WidthFixed, 75.0f);
+        ImGui::TableSetupColumn(T(S_COL_TIME), ImGuiTableColumnFlags_WidthFixed, 75.0f);
+        ImGui::TableSetupColumn(T(S_COL_PROCESS), ImGuiTableColumnFlags_WidthFixed, 140.0f);
+        ImGui::TableSetupColumn(T(S_COL_HOSTS), ImGuiTableColumnFlags_WidthStretch, 2.0f);
+        ImGui::TableSetupColumn(T(S_COL_ACTION), ImGuiTableColumnFlags_WidthFixed, 85.0f);
+        ImGui::TableSetupColumn(T(S_COL_CFG), ImGuiTableColumnFlags_WidthStretch, 1.2f);
+        ImGui::TableSetupColumn(T(S_COL_STATUS), ImGuiTableColumnFlags_WidthFixed, 75.0f);
         ImGui::TableHeadersRow();
 
-        for (size_t i = 0; i < snapshot.size(); i++) {
-            const ConnEntry& e = snapshot[i];
-            if (!searchLower.empty()) {
-                std::string all = std::string(e.process) + " " + e.hostIp + " " + e.proxy;
-                std::transform(all.begin(), all.end(), all.begin(), ::tolower);
-                if (all.find(searchLower) == std::string::npos) continue;
+        ImGuiListClipper clipper;
+        clipper.Begin((int)visibleIndices.size());
+        while (clipper.Step()) {
+            for (int row_i = clipper.DisplayStart; row_i < clipper.DisplayEnd; row_i++) {
+                const ConnEntry& e = snapshot[visibleIndices[row_i]];
+                ImGui::TableNextRow();
+
+                // Time
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextColored(PecTheme::TextMuted, "%s", e.time);
+
+                // Process
+                ImGui::TableSetColumnIndex(1);
+                char procStr[128];
+                snprintf(procStr, sizeof(procStr), "%s [%lu]", e.process, e.pid);
+                ImGui::TextUnformatted(procStr);
+
+                // Host / IP
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextUnformatted(e.hostIp);
+
+                // Action Pill
+                ImGui::TableSetColumnIndex(3);
+                if (e.isDirect) {
+                    RenderPill("DIRECT", PecTheme::SuccessDirect);
+                } else if (e.isBlock) {
+                    RenderPill("BLOCK", PecTheme::DangerRed);
+                } else {
+                    RenderPill("PROXY", PecTheme::PrimaryAccent);
+                }
+
+                // Proxy
+                ImGui::TableSetColumnIndex(4);
+                ImGui::TextUnformatted(e.proxy);
+
+                // Status
+                ImGui::TableSetColumnIndex(5);
+                ImGui::TextColored(e.isDirect ? PecTheme::TextMuted : PecTheme::HoverAccent, "%s", e.status);
             }
-
-            ImGui::TableNextRow();
-
-            // Time
-            ImGui::TableSetColumnIndex(0);
-            ImGui::TextColored(PecTheme::TextMuted, "%s", e.time);
-
-            // Process
-            ImGui::TableSetColumnIndex(1);
-            char procStr[128];
-            snprintf(procStr, sizeof(procStr), "%s [%lu]", e.process, e.pid);
-            ImGui::TextUnformatted(procStr);
-
-            // Host / IP
-            ImGui::TableSetColumnIndex(2);
-            ImGui::TextUnformatted(e.hostIp);
-
-            // Action Pill
-            ImGui::TableSetColumnIndex(3);
-            if (e.isDirect) {
-                RenderPill("DIRECT", PecTheme::SuccessDirect);
-            } else if (e.isBlock) {
-                RenderPill("BLOCK", PecTheme::DangerRed);
-            } else {
-                RenderPill("PROXY", PecTheme::PrimaryAccent);
-            }
-
-            // Proxy
-            ImGui::TableSetColumnIndex(4);
-            ImGui::TextUnformatted(e.proxy);
-
-            // Status
-            ImGui::TableSetColumnIndex(5);
-            ImGui::TextColored(e.isDirect ? PecTheme::TextMuted : PecTheme::HoverAccent, "%s", e.status);
         }
 
         if (g_connAutoScroll) {
@@ -1559,36 +1650,38 @@ static void RenderEngineLogsTab()
 {
     // Search input
     ImGui::PushItemWidth(260.0f);
-    ImGui::InputTextWithHint("##englogsearch", u8"Поиск в логах...", g_logSearch, sizeof(g_logSearch));
+    ImGui::InputTextWithHint("##englogsearch", T(S_SEARCH_CUE), g_logSearch, sizeof(g_logSearch));
     ImGui::PopItemWidth();
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"Очистить поиск##clrlogsearch")) {
+    if (ImGui::Button(T(S_BTN_CLEARSEARCH))) {
         g_logSearch[0] = 0;
     }
 
     ImGui::SameLine();
-    ImGui::Checkbox(u8"Автопрокрутка##logautoscroll", &g_logAutoScroll);
+    ImGui::Checkbox(T(S_CHK_AUTOSCROLL), &g_logAutoScroll);
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"Очистить лог##clrlog")) {
+    if (ImGui::Button(T(S_BTN_CLEARLOGS))) {
         EnterCriticalSection(&g_logCs);
         g_logEntries.clear();
         LeaveCriticalSection(&g_logCs);
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"📂 Папка с логами##openfolderlog")) {
+    if (ImGui::Button(T(S_LOG_FOLDER))) {
         OpenLogsFolder();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"📄 Открыть pec-app.log##openfilelog")) {
+    if (ImGui::Button(T(S_LOG_OPEN_FILE))) {
         OpenLogFile();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"📋 Скопировать весь лог##copylogall")) {
+    char copyAllBtnLabel[128];
+    snprintf(copyAllBtnLabel, sizeof(copyAllBtnLabel), "%s##copylogall", (g_lang == 0 ? u8"Скопировать весь лог##copylogall" : T(S_LOG_COPY_ALL)));
+    if (ImGui::Button(g_lang == 0 ? u8"Скопировать весь лог##copylogall" : copyAllBtnLabel)) {
         EnterCriticalSection(&g_logCs);
         std::string allLogs;
         for (const auto& entry : g_logEntries) {
@@ -1608,26 +1701,44 @@ static void RenderEngineLogsTab()
     float availY = ImGui::GetContentRegionAvail().y - 10.0f;
     ImGui::BeginChild("EngineLogsScrollRegion", ImVec2(0.0f, availY), true, ImGuiWindowFlags_HorizontalScrollbar);
 
+    // Compute lowercase search query once before log iteration
+    char searchLower[sizeof(g_logSearch)];
+    size_t needleLen = 0;
+    for (size_t i = 0; g_logSearch[i] && i < sizeof(searchLower) - 1; ++i) {
+        unsigned char c = (unsigned char)g_logSearch[i];
+        searchLower[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : (char)c;
+        needleLen++;
+    }
+    searchLower[needleLen] = '\0';
+
     EnterCriticalSection(&g_logCs);
-    std::string searchLower = g_logSearch;
-    std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
-
-    for (const auto& entry : g_logEntries) {
-        if (!searchLower.empty()) {
-            std::string msgLower = entry.message;
-            std::transform(msgLower.begin(), msgLower.end(), msgLower.begin(), ::tolower);
-            if (msgLower.find(searchLower) == std::string::npos) continue;
+    std::vector<size_t> visibleLogIndices;
+    visibleLogIndices.reserve(g_logEntries.size());
+    for (size_t i = 0; i < g_logEntries.size(); ++i) {
+        const auto& entry = g_logEntries[i];
+        if (needleLen > 0) {
+            if (!StrContainsCaseInsensitive(entry.message.c_str(), searchLower, needleLen)) {
+                continue;
+            }
         }
+        visibleLogIndices.push_back(i);
+    }
 
-        ImGui::TextColored(PecTheme::TextMuted, "[%s] ", entry.time);
-        ImGui::SameLine();
+    ImGuiListClipper clipper;
+    clipper.Begin((int)visibleLogIndices.size());
+    while (clipper.Step()) {
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+            const auto& entry = g_logEntries[visibleLogIndices[i]];
+            ImGui::TextColored(PecTheme::TextMuted, "[%s] ", entry.time);
+            ImGui::SameLine();
 
-        if (entry.level == 2) {
-            ImGui::TextColored(PecTheme::DangerRed, "%s", entry.message.c_str());
-        } else if (entry.level == 1) {
-            ImGui::TextColored(PecTheme::WarningAlert, "%s", entry.message.c_str());
-        } else {
-            ImGui::TextColored(PecTheme::TextPrimary, "%s", entry.message.c_str());
+            if (entry.level == 2) {
+                ImGui::TextColored(PecTheme::DangerRed, "%s", entry.message.c_str());
+            } else if (entry.level == 1) {
+                ImGui::TextColored(PecTheme::WarningAlert, "%s", entry.message.c_str());
+            } else {
+                ImGui::TextColored(PecTheme::TextPrimary, "%s", entry.message.c_str());
+            }
         }
     }
     LeaveCriticalSection(&g_logCs);
@@ -1648,11 +1759,16 @@ static void RenderProxiesTab()
 {
     ProfileLock lock;
     // Toolbar buttons
-    if (ImGui::Button(u8"+ Добавить прокси")) {
+    char addPrx[64], delPrx[64], testPrx[64];
+    snprintf(addPrx, sizeof(addPrx), "+ %s", T(S_BTN_ADD));
+    snprintf(delPrx, sizeof(delPrx), "%s##delproxy", T(S_BTN_DELETE));
+    snprintf(testPrx, sizeof(testPrx), "⚡ %s", T(S_BTN_TEST));
+
+    if (ImGui::Button(addPrx)) {
         OpenProxyModal(-1);
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"Удалить##delproxy") && g_selectedProxyIdx >= 0 && g_selectedProxyIdx < g_profile.cfgCount) {
+    if (ImGui::Button(delPrx) && g_selectedProxyIdx >= 0 && g_selectedProxyIdx < g_profile.cfgCount) {
         if (g_profile.cfgCount > 1) {
             UINT32 delStoredId = g_profile.cfg[g_selectedProxyIdx].storedId;
             if (g_profile.cfg[g_selectedProxyIdx].nativeId && g_api.DeleteProxyConfig) {
@@ -1677,7 +1793,7 @@ static void RenderProxiesTab()
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"⚡ Проверить задержку")) {
+    if (ImGui::Button(testPrx)) {
         for (int i = 0; i < g_profile.cfgCount; i++) {
             TestProxyLatencyAsync(i);
         }
@@ -1687,7 +1803,7 @@ static void RenderProxiesTab()
         PecSyncTriggerNow();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(u8"Запросить актуальный список корпоративных прокси-узлов с сервера PEC");
+        ImGui::SetTooltip(u8"Синхронизировать конфигурацию с сервером PEC");
     }
 
     ImGui::Spacing();
@@ -1699,12 +1815,12 @@ static void RenderProxiesTab()
 
     if (ImGui::BeginTable("ProxiesTable", 7, tableFlags, ImVec2(0.0f, availY))) {
         ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-        ImGui::TableSetupColumn(u8"Название", ImGuiTableColumnFlags_WidthStretch, 1.5f);
-        ImGui::TableSetupColumn(u8"Тип", ImGuiTableColumnFlags_WidthFixed, 75.0f);
-        ImGui::TableSetupColumn(u8"Адрес (Хост : Порт)", ImGuiTableColumnFlags_WidthStretch, 2.0f);
-        ImGui::TableSetupColumn(u8"Авторизация", ImGuiTableColumnFlags_WidthStretch, 1.2f);
-        ImGui::TableSetupColumn(u8"DNS", ImGuiTableColumnFlags_WidthFixed, 85.0f);
-        ImGui::TableSetupColumn(u8"Задержка / Пинг", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+        ImGui::TableSetupColumn(T(S_COL_NAME), ImGuiTableColumnFlags_WidthStretch, 1.5f);
+        ImGui::TableSetupColumn(T(S_COL_TYPE), ImGuiTableColumnFlags_WidthFixed, 75.0f);
+        ImGui::TableSetupColumn(T(S_COL_ADDR), ImGuiTableColumnFlags_WidthStretch, 2.0f);
+        ImGui::TableSetupColumn(T(S_G_AUTH), ImGuiTableColumnFlags_WidthStretch, 1.2f);
+        ImGui::TableSetupColumn(T(S_CHK_SENDDOMAIN), ImGuiTableColumnFlags_WidthFixed, 85.0f);
+        ImGui::TableSetupColumn(T(S_COL_STATUS), ImGuiTableColumnFlags_WidthFixed, 140.0f);
         ImGui::TableHeadersRow();
 
         for (int i = 0; i < g_profile.cfgCount; i++) {
@@ -1776,19 +1892,25 @@ static void RenderProxiesTab()
 
             // Column 6: Latency / Ping status
             ImGui::TableSetColumnIndex(6);
-            if (g_proxyLatencies[i].testing) {
+            ProxyLatencyState lat;
+            {
+                LatencyLock latLock;
+                lat = g_proxyLatencies[i];
+            }
+            if (lat.testing) {
                 ImGui::TextColored(PecTheme::HoverAccent, u8"Проверка...");
-            } else if (g_proxyLatencies[i].ms >= 0) {
-                ImGui::TextColored(PecTheme::SuccessDirect, "%s", g_proxyLatencies[i].status);
+            } else if (lat.ms >= 0) {
+                ImGui::TextColored(PecTheme::SuccessDirect, "%s", lat.status);
             } else {
-                ImGui::TextColored(PecTheme::TextMuted, "%s", g_proxyLatencies[i].status);
+                ImGui::TextColored(PecTheme::TextMuted, "%s", lat.status);
             }
         }
         ImGui::EndTable();
     }
 
     // Modal: Add / Edit Proxy
-    const char* proxyModalTitle = g_isEditProxy ? u8"Редактирование прокси###ProxyModalPopup" : u8"Новый прокси-сервер###ProxyModalPopup";
+    char proxyModalTitle[128];
+    snprintf(proxyModalTitle, sizeof(proxyModalTitle), "%s###ProxyModalPopup", g_isEditProxy ? T(S_DLG_PROXY_EDIT) : T(S_DLG_PROXY_NEW));
     if (g_openProxyModal) {
         ImGui::OpenPopup(proxyModalTitle);
         g_openProxyModal = false;
@@ -1797,34 +1919,38 @@ static void RenderProxiesTab()
     if (ImGui::BeginPopupModal(proxyModalTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Spacing();
 
-        ImGui::Text(u8"Название (метка):");
+        ImGui::Text("%s", T(S_L_NAME));
         ImGui::InputText("##pmName", g_pmName, sizeof(g_pmName));
 
-        ImGui::Text(u8"Тип протокола:");
+        ImGui::Text("%s", T(S_L_TYPE));
         const char* typeItems[] = { "SOCKS5", "HTTP" };
         ImGui::Combo("##pmType", &g_pmType, typeItems, IM_ARRAYSIZE(typeItems));
 
-        ImGui::Text(u8"Адрес хоста (IP или домен):");
+        ImGui::Text("%s", T(S_L_HOST));
         ImGui::InputText("##pmHost", g_pmHost, sizeof(g_pmHost));
 
-        ImGui::Text(u8"Порт:");
+        ImGui::Text("%s", T(S_L_PORT));
         ImGui::InputText("##pmPort", g_pmPort, sizeof(g_pmPort));
 
         ImGui::Spacing();
-        ImGui::Text(u8"Имя пользователя (если требуется):");
+        ImGui::Text("%s", T(S_L_USER));
         ImGui::InputText("##pmUser", g_pmUser, sizeof(g_pmUser));
 
-        ImGui::Text(u8"Пароль:");
+        ImGui::Text("%s", T(S_L_PASS));
         ImGui::InputText("##pmPass", g_pmPass, sizeof(g_pmPass), ImGuiInputTextFlags_Password);
 
         ImGui::Spacing();
-        ImGui::Checkbox(u8"Разрешать DNS через прокси (Send Domain)", &g_pmSendDomain);
+        ImGui::Checkbox(T(S_CHK_SENDDOMAIN), &g_pmSendDomain);
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::Button(u8"Сохранить##saveproxy", ImVec2(120, 0))) {
+        char saveBtn[64], cancelBtn[64];
+        snprintf(saveBtn, sizeof(saveBtn), "%s##saveproxy", T(S_BTN_SAVE));
+        snprintf(cancelBtn, sizeof(cancelBtn), "%s##cancelproxy", T(S_BTN_CANCEL));
+
+        if (ImGui::Button(saveBtn, ImVec2(120, 0))) {
             PBConfig* target = nullptr;
             if (g_isEditProxy && g_editProxyIdx >= 0 && g_editProxyIdx < g_profile.cfgCount) {
                 target = &g_profile.cfg[g_editProxyIdx];
@@ -1852,7 +1978,7 @@ static void RenderProxiesTab()
         }
 
         ImGui::SameLine();
-        if (ImGui::Button(u8"Отмена##cancelproxy", ImVec2(120, 0))) {
+        if (ImGui::Button(cancelBtn, ImVec2(120, 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -1865,19 +1991,25 @@ static void RenderProxiesTab()
 static void RenderTabs()
 {
     if (ImGui::BeginTabBar("PECTabBar", ImGuiTabBarFlags_None)) {
-        if (ImGui::BeginTabItem(u8"🛡 Прокси-серверы")) {
+        char tabServers[128], tabRules[128], tabConn[128], tabLogs[128];
+        snprintf(tabServers, sizeof(tabServers), "🛡 %s###tab_servers", T(S_TAB_SERVERS));
+        snprintf(tabRules,   sizeof(tabRules),   "🔀 %s###tab_rules",   T(S_TAB_RULES));
+        snprintf(tabConn,    sizeof(tabConn),    "📡 %s###tab_conn",    T(S_TAB_CONN));
+        snprintf(tabLogs,    sizeof(tabLogs),    "📋 %s###tab_logs",    T(S_TAB_ACT));
+
+        if (ImGui::BeginTabItem(tabServers)) {
             RenderProxiesTab();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(u8"🔀 Таблица маршрутизации")) {
+        if (ImGui::BeginTabItem(tabRules)) {
             RenderRulesTab();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(u8"📡 Журнал соединений")) {
+        if (ImGui::BeginTabItem(tabConn)) {
             RenderConnectionsTab();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(u8"📋 Журнал работы")) {
+        if (ImGui::BeginTabItem(tabLogs)) {
             RenderEngineLogsTab();
             ImGui::EndTabItem();
         }
@@ -1900,6 +2032,16 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
+    case WM_DPICHANGED: {
+        RECT* const prcNewWindow = (RECT*)lParam;
+        SetWindowPos(hWnd, nullptr,
+            prcNewWindow->left, prcNewWindow->top,
+            prcNewWindow->right - prcNewWindow->left,
+            prcNewWindow->bottom - prcNewWindow->top,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+        return 0;
+    }
+
     case WM_SIZE:
         if (g_pd3dDevice != nullptr && wParam != SIZE_MINIMIZED) {
             CleanupRenderTarget();
@@ -1929,11 +2071,13 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             SetForegroundWindow(hWnd);
         } else if (lParam == WM_RBUTTONUP) {
             HMENU hMenu = CreatePopupMenu();
-            AppendMenuW(hMenu, MF_STRING, IDM_TRAY_SHOW, L"Открыть PEC-App");
-            AppendMenuW(hMenu, MF_STRING, IDM_PROXY_ENABLE, g_proxyEnabled ? L"Статус: Прокси активен" : L"Статус: Приостановлен");
-            AppendMenuW(hMenu, MF_STRING, IDM_OPEN_LOGS, L"📂 Папка с логами");
+            AppendMenuW(hMenu, MF_STRING, IDM_TRAY_SHOW, TW(S_TRAY_SHOW));
+            wchar_t trayStat[128];
+            _snwprintf_s(trayStat, 128, _TRUNCATE, L"%ls: %ls", TW(S_COL_STATUS), g_proxyEnabled ? TW(S_STATUS_ACTIVE) : TW(S_STATUS_PAUSED));
+            AppendMenuW(hMenu, MF_STRING, IDM_PROXY_ENABLE, trayStat);
+            AppendMenuW(hMenu, MF_STRING, IDM_OPEN_LOGS, TW(S_LOG_FOLDER));
             AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-            AppendMenuW(hMenu, MF_STRING, IDM_TRAY_EXIT, L"Выход");
+            AppendMenuW(hMenu, MF_STRING, IDM_TRAY_EXIT, TW(S_TRAY_EXIT));
 
             POINT pt;
             GetCursorPos(&pt);
@@ -2122,6 +2266,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     g_connBuffer.Init();
     InitializeCriticalSection(&g_logCs);
     InitializeCriticalSection(&g_profileCs);
+    InitializeCriticalSection(&g_latencyCs);
     PB_SetAppLogUiCallback(OnAppLogUiBridge);
 
     // Profile Initialization
@@ -2267,6 +2412,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 
         g_connLogging = g_profile.trafficLogging != 0;
         g_closeToTray = g_profile.closeToTray != 0;
+
+        // Initialize UI language from profile or system default
+        LANGID lid = PRIMARYLANGID(GetUserDefaultUILanguage());
+        if (_wcsicmp(g_profile.language, L"zh") == 0 || (g_profile.language[0] == 0 && lid == LANG_CHINESE)) g_lang = 2;
+        else if (_wcsicmp(g_profile.language, L"en") == 0 && lid != LANG_RUSSIAN) g_lang = 1;
+        else g_lang = 0; // Default Russian for PEC
+        InitLocU8();
     }
 
     // Connect to engine (service IPC or elevated portable mode)
@@ -2274,6 +2426,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         g_connBuffer.Destroy();
         DeleteCriticalSection(&g_logCs);
         DeleteCriticalSection(&g_profileCs);
+        DeleteCriticalSection(&g_latencyCs);
         WSACleanup();
         if (hMutex) CloseHandle(hMutex);
         return 0;
@@ -2369,6 +2522,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         g_connBuffer.Destroy();
         DeleteCriticalSection(&g_logCs);
         DeleteCriticalSection(&g_profileCs);
+        DeleteCriticalSection(&g_latencyCs);
         WSACleanup();
         if (hMutex) CloseHandle(hMutex);
         return 1;
@@ -2385,6 +2539,23 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         ProfileLock lock;
         ApplyProfileTheme(&g_profile);
     }
+
+    // Query DPI and apply High-DPI style and font scaling
+    float dpiScale = 1.0f;
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32) {
+        typedef UINT (WINAPI* PFN_GetDpiForWindow)(HWND);
+        PFN_GetDpiForWindow pfnGetDpiForWindow = (PFN_GetDpiForWindow)GetProcAddress(hUser32, "GetDpiForWindow");
+        if (pfnGetDpiForWindow) {
+            UINT dpi = pfnGetDpiForWindow(g_hWnd);
+            if (dpi > 0) dpiScale = (float)dpi / 96.0f;
+        }
+    }
+    if (dpiScale <= 0.1f) dpiScale = 1.0f;
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(dpiScale);
+    float baseFontSize = 16.0f * dpiScale;
 
     // Setup ImGui Backends
     ImGui_ImplWin32_Init(g_hWnd);
@@ -2404,12 +2575,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         0x2300, 0x23FF, // Miscellaneous Technical (⏸, etc.)
         0x2190, 0x21FF, // Arrows
         0x2700, 0x27BF, // Dingbats (✏ 0x270F, ✎ 0x270E, etc.)
+        0x4E00, 0x9FFF, // CJK Unified Ideographs (Chinese/Japanese/Korean)
         0
     };
 
     ImFontGlyphRangesBuilder builder;
     builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
     builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
+    builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
     builder.AddRanges(extraGlyphs);
     builder.AddText(u8"●⏸▲▼🔀📡📋🛡📂⚙✓✗✏✎🔄");
     ImVector<ImWchar> glyphRanges;
@@ -2420,9 +2593,24 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     fontCfg.OversampleV = 2;
 
     if (GetFileAttributesA(fontPath) != INVALID_FILE_ATTRIBUTES) {
-        io.Fonts->AddFontFromFileTTF(fontPath, 16.0f, &fontCfg, glyphRanges.Data);
+        io.Fonts->AddFontFromFileTTF(fontPath, baseFontSize, &fontCfg, glyphRanges.Data);
     } else {
         io.Fonts->AddFontDefault();
+    }
+
+    // Merge Microsoft YaHei for Chinese CJK glyphs
+    char yaheiPath[MAX_PATH];
+    snprintf(yaheiPath, sizeof(yaheiPath), "%s\\Fonts\\msyh.ttc", winDir);
+    if (GetFileAttributesA(yaheiPath) != INVALID_FILE_ATTRIBUTES) {
+        ImFontConfig yaheiCfg;
+        yaheiCfg.MergeMode = true;
+        yaheiCfg.OversampleH = 1;
+        yaheiCfg.OversampleV = 1;
+        static const ImWchar cjkRanges[] = {
+            0x4E00, 0x9FFF,
+            0
+        };
+        io.Fonts->AddFontFromFileTTF(yaheiPath, baseFontSize, &yaheiCfg, cjkRanges);
     }
 
     // Merge Segoe UI Symbol for Unicode emojis/pictographs (🔀, 📡, 📋, 🛡, 📂, etc.)
@@ -2438,7 +2626,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
             0x1F000, 0x1FAFF, // Supplemental symbols, pictographs, emojis
             0
         };
-        io.Fonts->AddFontFromFileTTF(symFontPath, 16.0f, &symCfg, symRanges);
+        io.Fonts->AddFontFromFileTTF(symFontPath, baseFontSize, &symCfg, symRanges);
     }
     io.Fonts->Build();
 
@@ -2535,6 +2723,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     g_connBuffer.Destroy();
     DeleteCriticalSection(&g_logCs);
     DeleteCriticalSection(&g_profileCs);
+    DeleteCriticalSection(&g_latencyCs);
     WSACleanup();
     if (hMutex) CloseHandle(hMutex);
 

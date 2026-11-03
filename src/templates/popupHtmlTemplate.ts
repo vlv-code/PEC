@@ -233,6 +233,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       overflow-x: hidden;
       scrollbar-width: thin;
       scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+      scrollbar-gutter: stable;
     }
     body {
       width: 380px;
@@ -516,6 +517,21 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       box-shadow: none !important;
     }
 
+    /* Disabled states */
+    button:disabled,
+    .btn-sm:disabled,
+    .btn-sec:disabled,
+    .btn-primary-sm:disabled,
+    .btn-action:disabled,
+    .btn-icon:disabled,
+    .btn-icon-minimal:disabled {
+      opacity: 0.5 !important;
+      cursor: not-allowed !important;
+      pointer-events: none !important;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
     /* Inline PNG icon pack */
     .icon-inline {
       width: 14px;
@@ -568,6 +584,13 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       height: 14px;
       text-align: center;
       line-height: 1;
+      flex-shrink: 0;
+    }
+    #tabRulesDefaultPolicy {
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .card-title {
       font-weight: 700;
@@ -582,6 +605,45 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       background: var(--card-inner);
       color: var(--text-muted);
       border: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 4px;
+      background: var(--card-inner);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      line-height: 1.3;
+    }
+    .badge-action-proxy {
+      background: rgba(var(--primary-rgb), 0.15);
+      color: var(--primary);
+      border-color: rgba(var(--primary-rgb), 0.35);
+    }
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      font-size: 12px;
+      padding: 0;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+    .btn-icon:hover {
+      background: var(--card-inner);
+      border-color: var(--primary);
+      color: var(--text);
     }
     .tag.corp-tag {
       color: var(--primary);
@@ -648,7 +710,8 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-weight: 600;
       color: var(--text);
-      max-width: 200px;
+      min-width: 0;
+      max-width: 130px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -710,12 +773,28 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-weight: 600;
       font-size: 12px;
+      min-width: 0;
+      max-width: 130px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
     }
     .val.success-val { color: var(--success); }
+    .val.warn-val { color: var(--warning); }
     .row-action {
       display: flex;
       align-items: center;
       gap: 6px;
+      min-width: 0;
+    }
+    #exitIpVal,
+    #pingVal {
+      min-width: 0;
+      max-width: 130px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+      display: inline-block;
     }
 
     /* Form and Inputs in Routing */
@@ -792,6 +871,15 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     [data-theme="light"] .btn-primary-sm {
       color: #ffffff;
     }
+    /* WCAG AA contrast for buttons in light theme across cyber, nord, emerald palettes */
+    [data-theme="light"][data-palette="cyber"] .btn-primary-sm,
+    [data-theme="light"][data-palette="nord"] .btn-primary-sm,
+    [data-theme="light"][data-palette="emerald"] .btn-primary-sm,
+    [data-palette="cyber"][data-theme="light"] .btn-primary-sm,
+    [data-palette="nord"][data-theme="light"] .btn-primary-sm,
+    [data-palette="emerald"][data-theme="light"] .btn-primary-sm {
+      color: #0f172a !important;
+    }
 
     .user-rules-list {
       max-height: 120px;
@@ -817,7 +905,8 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     .user-rule-item:last-child { border-bottom: none; }
     .rule-pattern {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      max-width: 160px;
+      flex: 1;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -925,42 +1014,42 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   </header>
 
   <!-- Navigation Tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">${t.tabConn || "Главная"}</button>
-    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">${t.tabRules || "Роутинг"}</button>
-    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">${t.tabDiag || "Инфо"}</button>
+  <div class="tabs" role="tablist" aria-label="Navigation Tabs">
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus" role="tab" aria-selected="true" aria-controls="tab-status">${t.tabConn || "Главная"}</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting" role="tab" aria-selected="false" aria-controls="tab-routing">${t.tabRules || "Роутинг"}</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo" role="tab" aria-selected="false" aria-controls="tab-info">${t.tabDiag || "Инфо"}</button>
   </div>
 
   <!-- TAB 1: Main (Главная) -->
-  <div class="tab-content active" id="tab-status">
+  <div class="tab-content active" id="tab-status" role="tabpanel" aria-labelledby="tabBtnStatus">
     <div class="card" id="cardConnection">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
         <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><path d="M9 2v6M15 2v6M6 8h12a2 2 0 0 1 2 2v2a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6v-2a2 2 0 0 1 2-2zM12 18v4"/></svg> ${t.connGateway || "Подключение к прокси"}</span>
         <div class="card-header-actions">
           <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}"><span class="sync-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg></span></button>
           <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg></button>
-          <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || "Приостановить прокси на 15 минут"}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg></button>
+          <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || (t.isRu ? `Приостановить прокси на ${safeCfg.bypassAutoTimeoutMinutes || 15} минут` : `Pause proxy for ${safeCfg.bypassAutoTimeoutMinutes || 15} minutes`)}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg></button>
         </div>
       </div>
       <div class="hero-meta">
         <div class="meta-row">
           <span class="meta-label">${t.routingProfile}</span>
-          <span class="meta-val" id="profileVal">—</span>
+          <span class="meta-val" id="profileVal" title="—">—</span>
         </div>
         <div class="meta-row">
           <span class="meta-label">${t.activeEndpoint}</span>
-          <span class="meta-val" id="serverVal">—</span>
+          <span class="meta-val" id="serverVal" title="—">—</span>
         </div>
         <div class="meta-row">
           <span class="meta-label">${t.proxyMode}</span>
-          <span class="meta-val" id="modeVal">—</span>
+          <span class="meta-val" id="modeVal" title="—">—</span>
         </div>
       </div>
     </div>
   </div>
 
   <!-- TAB 2: Routing -->
-  <div class="tab-content" id="tab-routing">
+  <div class="tab-content" id="tab-routing" role="tabpanel" aria-labelledby="tabBtnRouting">
     <div class="card" id="cardProxySelector" style="margin-bottom: 8px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <span style="font-weight: 600; font-size: 12px; color: var(--text);">🌐 ${t.isRu ? "Прокси-сервер" : "Proxy Server"}</span>
@@ -977,8 +1066,8 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
           <span class="card-title">${t.corpRules || "Корпоративные правила"} <span id="corpRulesCountBadge" class="badge" style="font-size: 10px; margin-left: 2px;">0</span></span>
         </div>
         <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
-          <span class="tag" id="tabRulesDefaultPolicy" style="font-size: 9px; padding: 1px 5px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">DIRECT</span>
-          <span id="corpRulesToggleChevron" class="accordion-chevron">▼</span>
+          <span class="tag" id="tabRulesDefaultPolicy" style="font-size: 9px; padding: 1px 5px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="DIRECT">DIRECT</span>
+          <span id="corpRulesToggleChevron" class="accordion-chevron" style="flex-shrink: 0;">▼</span>
         </div>
       </div>
       <div id="corpRulesBody" style="display: none; margin-top: 8px;">
@@ -1023,26 +1112,26 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   </div>
 
   <!-- TAB 3: Diagnostics & Info -->
-  <div class="tab-content" id="tab-info">
+  <div class="tab-content" id="tab-info" role="tabpanel" aria-labelledby="tabBtnInfo">
     <div class="card">
       <div class="card-header">
         <span class="card-title">${t.connParams || "Параметры соединения"}</span>
       </div>
       <div class="row">
         <span class="label">${t.webrtcShield}</span>
-        <span class="val success-val" id="webrtcVal">${safeCfg.webRtcProtection !== false ? t.webrtcStatus : "Disabled"}</span>
+        <span class="val success-val" id="webrtcVal" title="${safeCfg.webRtcProtection !== false ? t.webrtcStatus : "Disabled"}">${safeCfg.webRtcProtection !== false ? t.webrtcStatus : "Disabled"}</span>
       </div>
       <div class="row">
         <span class="label">${t.latency}</span>
         <div class="row-action">
-          <span class="val" id="pingVal">—</span>
+          <span class="val" id="pingVal" title="—">—</span>
           <button id="btnTestLatency" class="btn-sm">${t.testBtn || "Тест"}</button>
         </div>
       </div>
       <div class="row">
         <span class="label">${t.exitIp}</span>
         <div class="row-action">
-          <span class="val" id="exitIpVal">—</span>
+          <span class="val" id="exitIpVal" title="—">—</span>
           <button id="btnCheckIp" class="btn-sm">${t.checkBtn || "Проверить"}</button>
         </div>
       </div>
@@ -1059,7 +1148,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       </div>
       <pre id="logContainer" class="log-terminal"></pre>
       <div class="log-actions">
-        <button id="btnCopyLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> ${t.copyLogs}</button>
+        <button id="btnCopyLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span id="btnCopyLogsText">${t.copyLogs}</span></button>
         <button id="btnClearLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> ${t.clearLogs}</button>
       </div>
     </div>

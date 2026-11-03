@@ -88,6 +88,9 @@
       --text: #0f172a;
       --text-muted: #475569;
       --bg-card-subtle: rgba(0, 0, 0, 0.04);
+      --success: #059669;
+      --warning: #d97706;
+      --danger: #dc2626;
     }
 
     body[data-theme-mode="light"][data-theme="cyber"],
@@ -95,21 +98,33 @@
       --primary: #0284c7;
       --primary-hover: #0369a1;
       --primary-rgb: 2, 132, 199;
+      --success: #059669;
+      --warning: #d97706;
+      --danger: #dc2626;
     }
     body[data-theme-mode="light"][data-theme="obsidian"] {
       --primary: #9333ea;
       --primary-hover: #7e22ce;
       --primary-rgb: 147, 51, 234;
+      --success: #16a34a;
+      --warning: #d97706;
+      --danger: #dc2626;
     }
     body[data-theme-mode="light"][data-theme="nord"] {
       --primary: #4c566a;
       --primary-hover: #3b4252;
       --primary-rgb: 76, 86, 106;
+      --success: #2e7d32;
+      --warning: #d97706;
+      --danger: #b91c1c;
     }
     body[data-theme-mode="light"][data-theme="emerald"] {
       --primary: #059669;
       --primary-hover: #047857;
       --primary-rgb: 5, 150, 105;
+      --success: #047857;
+      --warning: #d97706;
+      --danger: #dc2626;
     }
     body[data-theme-mode="light"][data-theme="light"] {
       --bg: #f8fafc;
@@ -384,7 +399,6 @@
     }
     body[data-layout="console"] .table-container {
       border-radius: 8px;
-      overflow: hidden;
       border: 1px solid var(--border);
     }
     body[data-layout="console"] .table-container table {
@@ -1525,8 +1539,9 @@
       max-width: 720px;
       width: 90%;
       max-height: 85vh;
-      background: #131d36;
-      border: 1px solid #22345c;
+      background: var(--card-inner);
+      color: var(--text);
+      border: 1px solid var(--border);
       border-radius: 12px;
       padding: 24px;
       display: flex;
@@ -1538,7 +1553,7 @@
       width: 100%;
       box-sizing: border-box;
       padding: 8px 12px;
-      background: #0b1120;
+      background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
       color: var(--text);
@@ -1552,7 +1567,7 @@
       max-height: 420px;
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: #0b1120;
+      background: var(--card-bg);
       margin-bottom: 16px;
     }
     .inspector-table {
@@ -1569,7 +1584,7 @@
     .inspector-table th {
       position: sticky;
       top: 0;
-      background: #1e293b;
+      background: var(--card-bg);
       z-index: 10;
     }
 
@@ -2009,6 +2024,10 @@
       opacity: 1;
       color: var(--primary);
     }
+    .sortable-th:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: -2px;
+    }
 
     /* ==========================================================================
        App Studio & Desktop Live Preview Mockup Styles
@@ -2294,6 +2313,26 @@
       grid-template-columns: 1fr 1fr 1fr;
       gap: 10px;
     }
+    .grid-form-2-1 {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 10px;
+    }
+    .grid-form-1-2 {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 10px;
+    }
+    .grid-form-1-15 {
+      display: grid;
+      grid-template-columns: 1fr 1.5fr;
+      gap: 10px;
+    }
+    .grid-form-1-2-1 {
+      display: grid;
+      grid-template-columns: 1fr 2fr 1fr;
+      gap: 10px;
+    }
     .grid-preview-traffic-row {
       display: grid;
       grid-template-columns: 50px 70px 1fr 50px;
@@ -2323,9 +2362,34 @@
       .grid-routing-matrix-header,
       .grid-routing-rule-form,
       .grid-form-2col,
-      .grid-form-3col {
+      .grid-form-3col,
+      .grid-form-2-1,
+      .grid-form-1-2,
+      .grid-form-1-15,
+      .grid-form-1-2-1 {
         grid-template-columns: 1fr;
       }
+    }
+
+    @media (max-width: 380px) {
+      #previewFrame {
+        max-width: 100%;
+      }
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-radius: 50%;
+      border-top-color: currentColor;
+      animation: pec-spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    @keyframes pec-spin {
+      to { transform: rotate(360deg); }
     }
 
     /* ==================== CUSTOM ASYNC DIALOG COMPONENT ==================== */
@@ -2368,8 +2432,12 @@
     }
 
     /* Layout overrides for .pec-dialog */
-    body[data-layout="terminal"] dialog.pec-dialog {
+    body[data-layout="terminal"] dialog.pec-dialog,
+    body[data-layout="terminal"] dialog.pec-dialog * {
       border-radius: 0px !important;
+    }
+
+    body[data-layout="terminal"] dialog.pec-dialog {
       border: 1px solid var(--primary);
       box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.2);
       background: rgba(10, 15, 28, 0.98);

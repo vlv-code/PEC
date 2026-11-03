@@ -249,9 +249,9 @@ inline void ApplyProfileTheme(const PBProfile* prof, ImGuiStyle* dst = nullptr)
 
     // Buttons: Use elegant elevated card/frame background with subtle borders and clear contrast
     if (PecTheme::IsLightMode) {
-        colors[ImGuiCol_Button]            = PecTheme::FrameBg;
-        colors[ImGuiCol_ButtonHovered]     = PecTheme::FrameBgHover;
-        colors[ImGuiCol_ButtonActive]      = PecTheme::FrameBgActive;
+        colors[ImGuiCol_Button]            = ImVec4(0.820f, 0.865f, 0.920f, 1.000f); // High-contrast distinct button in light mode (#D1DDEB)
+        colors[ImGuiCol_ButtonHovered]     = ImVec4(0.720f, 0.790f, 0.880f, 1.000f);
+        colors[ImGuiCol_ButtonActive]      = ImVec4(0.600f, 0.690f, 0.810f, 1.000f);
     } else {
         colors[ImGuiCol_Button]            = PecTheme::FrameBg;
         colors[ImGuiCol_ButtonHovered]     = PecTheme::FrameBgHover;
@@ -338,6 +338,7 @@ inline const ImWchar* GetCyberBlueGlyphRanges()
         0x2700, 0x27BF, // Dingbats
         0x2DE0, 0x2DFF, // Cyrillic Extended-A
         0xA640, 0xA69F, // Cyrillic Extended-B
+        0x4E00, 0x9FFF, // CJK Unified Ideographs (Chinese/Japanese/Korean)
         0,
     };
     return ranges;
@@ -369,6 +370,7 @@ inline ImFont* LoadCyberBlueFont(ImGuiIO& io, float size_pixels = 16.0f)
     }
 
     const char* font_names[] = {
+        "msyh.ttc",
         "segoeui.ttf",
         "tahoma.ttf",
         "arial.ttf"

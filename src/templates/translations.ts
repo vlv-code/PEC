@@ -3,6 +3,7 @@ import { ExtensionBuildConfig } from "../types.js";
 export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
   const safeCfg = cfg || {};
   const isRu = (safeCfg.locale || "ru") === "ru";
+  const bypassMinutes = safeCfg.bypassAutoTimeoutMinutes || 15;
   return {
     isRu,
     title: safeCfg.name || "PEC Corp",
@@ -21,9 +22,9 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
     btnSync: isRu ? "Синхронизировать сейчас" : "Sync with Server Now",
     btnSyncShort: isRu ? "Синхронизация" : "Sync",
     btnPower: isRu ? "Включить / Выключить прокси" : "Enable / Disable Proxy",
-    btnPause: isRu ? "Пауза 15м" : "Pause 15m",
+    btnPause: isRu ? `Пауза ${bypassMinutes}м` : `Pause ${bypassMinutes}m`,
     toggleTheme: isRu ? "Переключить тему (День / Ночь)" : "Toggle theme (Day / Night)",
-    btnBypass: isRu ? `Временно отключить (${cfg?.bypassAutoTimeoutMinutes || 15}м)` : `Bypass Proxy Temporarily (${cfg?.bypassAutoTimeoutMinutes || 15}m)`,
+    btnBypass: isRu ? `Временно отключить (${bypassMinutes}м)` : `Bypass Proxy Temporarily (${bypassMinutes}m)`,
     btnResume: isRu ? "Включить прокси" : "Resume Proxy Now",
     corpRules: isRu ? "Корпоративные правила" : "Corporate Rules",
     userOverrides: isRu ? "Мои исключения" : "My Overrides",
@@ -31,6 +32,7 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
     localBadge: isRu ? "Локально" : "Local",
     addCurrentSite: isRu ? "+ Добавить текущий сайт" : "+ Add Current Site",
     addRule: isRu ? "+ Добавить" : "+ Add",
+    ruleLimitReached: isRu ? "Лимит (100)!" : "Limit (100)!",
     patternPlaceholder: isRu ? "*.example.com или домен" : "*.example.com or domain",
     throughProxy: isRu ? "PROXY (через прокси)" : "PROXY (via proxy)",
     directConn: isRu ? "DIRECT (напрямую)" : "DIRECT (direct)",
@@ -65,6 +67,7 @@ export function getPopupTranslations(cfg?: Partial<ExtensionBuildConfig>) {
     entriesSuffix: isRu ? " записей" : " entries",
     copyLogs: isRu ? "Скопировать логи" : "Copy logs",
     clearLogs: isRu ? "Очистить" : "Clear",
+    confirmClearLogs: isRu ? "Очистить журнал событий?" : "Clear event log?",
     copied: isRu ? "Скопировано!" : "Copied!",
     pacSelective: isRu ? "PAC (селективный)" : "PAC (selective)",
     pacTunnel: isRu ? "PAC (туннель)" : "PAC (tunnel)",

@@ -63,7 +63,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- 1. Layout switcher (Compact Console & Cyber Terminal) -->
             <div style="margin-bottom: 10px;">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;" data-i18n="lblSettingsLayout">Макет панели:</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+              <div class="grid-form-2col" style="gap: 6px;">
                 <button type="button" id="optLayoutConsoleCard" class="popover-layout-btn" onclick="setServerLayout('console')">
                   <span style="font-size: 11px; font-weight: 600;">Console</span>
                 </button>
@@ -76,7 +76,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- 2. Dark / Light Mode Switcher (День / Ночь) -->
             <div style="margin-bottom: 10px;">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;" data-i18n="lblSettingsThemeMode">Режим темы:</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+              <div class="grid-form-2col" style="gap: 6px;">
                 <button type="button" id="optModeDarkCard" class="popover-layout-btn active" onclick="setServerThemeMode('dark')">
                   <span style="font-size: 11px; font-weight: 600;" data-i18n="lblThemeDark">🌙 Темная</span>
                 </button>
@@ -112,7 +112,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div style="margin-bottom: 10px; padding-top: 8px; border-top: 1px dashed var(--border);">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;" data-i18n="lblGlobalBrandIcon">Корпоративный значок:</div>
               <!-- Icon source toggle: Emoji vs Custom logo -->
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
+              <div class="grid-form-2col" style="gap: 6px; margin-bottom: 6px;">
                 <button type="button" id="optBrandIconPreset" class="popover-layout-btn active" onclick="setGlobalBrandIconSource('preset')">
                   <span style="font-size: 11px; font-weight: 600;" data-i18n="lblBrandIconPreset">Эмодзи</span>
                 </button>
@@ -297,7 +297,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </select>
             </div>
             <div>
-              <label for="profTargetGroup" data-i18n="lblTargetScope">Deployment Target Scope</label>
+              <label for="profTargetScope" data-i18n="lblTargetScope">Deployment Target Scope</label>
               <select id="profTargetScope" style="margin-bottom: 0;">
                 <option value="all" data-i18n="optScopeAll">All Devices (Global Default)</option>
                 <option value="group" data-i18n="optScopeGroup">Target AD / Device Group</option>
@@ -312,7 +312,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </div>
 
           <div id="instancesTargetRow" style="display: none; margin-bottom: 10px;">
-            <label for="profFailClosed" data-i18n="lblTargetInstances">Target Instances</label>
+            <label for="profTargetInstancesList" data-i18n="lblTargetInstances">Target Instances</label>
             <div id="profTargetInstancesList" style="max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; background: var(--bg-card-subtle);">
               <!-- Checkboxes for available instances rendered dynamically -->
             </div>
@@ -435,7 +435,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </div>
               <div id="branchAppInheritProfileContainer" style="min-width: 300px; display: none;">
                 <div style="margin-bottom: 8px;">
-                  <label for="appRuleInheritModeAll" style="font-size: 12px; font-weight: 600;" data-i18n="lblBranchAppInheritProfile">Профиль расширений для подмешивания:</label>
+                  <label for="branchAppInheritProfileSelect" style="font-size: 12px; font-weight: 600;" data-i18n="lblBranchAppInheritProfile">Профиль расширений для подмешивания:</label>
                   <select id="branchAppInheritProfileSelect" style="font-size: 12px; margin-bottom: 6px; width: 100%;" onchange="onBranchAppInheritProfileChange()">
                     <option value="">-- Наследовать по назначению флота --</option>
                   </select>
@@ -610,7 +610,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           <label for="rotRemark" data-i18n="lblInboundRemark">Target Inbound Remark</label>
           <input type="text" id="rotRemark" placeholder="squid-in" data-i18n-ph="phRotRemark" />
 
-          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div class="grid-form-2-1">
             <div>
               <label for="rotInterval" data-i18n="lblRotInterval">Rotation Interval</label>
               <select id="rotInterval">
@@ -622,7 +622,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </select>
             </div>
             <div>
-              <label for="rotInsecureTls" data-i18n="lblScheduler">Scheduler</label>
+              <label for="rotEnabled" data-i18n="lblScheduler">Scheduler</label>
               <select id="rotEnabled">
                 <option value="true" data-i18n="optSchedEnabled">Enabled (Auto)</option>
                 <option value="false" data-i18n="optSchedDisabled">Disabled</option>
@@ -721,7 +721,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- Layout selector: Console vs Terminal -->
             <div style="margin-bottom: 12px;">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblStudioLayout">Макет интерфейса:</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div class="grid-form-2col" style="gap: 8px;">
                 <button type="button" class="studio-layout-btn active" id="btnStudioLayoutConsole" onclick="setStudioLayout('console')">
                   <span style="font-size: 12px; font-weight: 600;">Console</span>
                   <span style="font-size: 10px; color: var(--text-muted);">(rounded, soft)</span>
@@ -763,7 +763,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- Default Theme Mode: Dark (Ночь) vs Light (День) -->
             <div>
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblStudioThemeMode">Режим темы по умолчанию:</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div class="grid-form-2col" style="gap: 8px;">
                 <button type="button" class="studio-mode-btn active" id="btnStudioModeDark" onclick="setStudioThemeMode('dark')">
                   <img src="/icons/moon.png" class="icon-inline" alt="moon">
                   <span style="font-size: 12px; font-weight: 600;" data-i18n="optModeDark">Темная (Ночь)</span>
@@ -778,7 +778,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
           <!-- 3. Identity & Branding -->
           <input type="hidden" id="bldUiMode" value="popup" />
-          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div class="grid-form-2-1">
             <div>
               <label for="bldName" data-i18n="lblExtName">Extension Name</label>
               <input type="text" id="bldName" oninput="onConfigChangeLive()" placeholder="Corp Proxy Auth & Sync" data-i18n-ph="phExtName" />
@@ -810,7 +810,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; margin-top: 10px;">
+          <div class="grid-form-1-15" style="margin-top: 10px;">
             <div>
               <label for="bldThemeColor" data-i18n="lblBrandColor">Brand Theme Color</label>
               <input type="text" id="bldThemeColor" oninput="onConfigChangeLive()" placeholder="#0284c7" />
@@ -852,7 +852,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           <!-- 4. Security & User Feature Policies -->
           <div style="background: var(--card-inner); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 14px;">
             <label for="bldWebRtc" style="margin-bottom: 8px;" data-i18n="lblSecPolicies">Security & Leak Prevention Policies</label>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+            <div class="grid-form-2col" style="gap: 8px; font-size: 12px;">
               <label for="bldWebRtc" style="display: flex; align-items: center; gap: 8px; text-transform: none; color: var(--text); font-weight: normal; cursor: pointer;">
                 <input type="checkbox" id="bldWebRtc" checked onchange="onConfigChangeLive()" style="width: auto; margin-bottom: 0;" />
                 <span data-i18n="lblWebrtcShield">WebRTC IP Shield (no UDP leak)</span>
@@ -871,9 +871,9 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               </label>
             </div>
             
-            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 10px;">
+            <div class="grid-form-1-2" style="margin-top: 10px;">
               <div>
-                <label for="bldSupportUrl" style="font-size: 11px;" data-i18n="lblPauseTimeout">Таймаут паузы</label>
+                <label for="bldBypassTimeout" style="font-size: 11px;" data-i18n="lblPauseTimeout">Таймаут паузы</label>
                 <select id="bldBypassTimeout" onchange="onConfigChangeLive()" style="margin-bottom: 0; font-size: 12px;">
                   <option value="10">10 minutes</option>
                   <option value="15" selected>15 minutes</option>
@@ -889,7 +889,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           </div>
 
           <div class="builder-actions-row">
-            <button onclick="buildAndPackExtension()" class="btn-success" data-i18n="btnBuildCrx">Собрать CRX</button>
+            <button type="button" id="btnBuildExtension" onclick="buildAndPackExtension()" class="btn-success" data-i18n="btnBuildCrx">Собрать CRX</button>
             <button onclick="saveBuilderConfigOnly(true)" class="btn-secondary" data-i18n="btnSaveConfig">Сохранить конфиг</button>
             <button onclick="regenerateTemplatesFromConfig()" class="btn-secondary btn-reset-template" data-i18n="btnResetTemplate" data-i18n-title="btnResetTemplateTitle" title="Сбросить все исходные файлы к чистому шаблону из текущей конфигурации">Сбросить шаблон</button>
             <button type="button" id="btnExtViewBuildLog" onclick="openBuildLogModal('extension')" class="btn-secondary" style="display: none;" title="Показать лог сборки расширения">📋 Лог сборки</button>
@@ -1013,7 +1013,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               Настройка нативного прозрачного десктоп-клиента (Windows WinDivert / Linux NFQUEUE):
             </p>
 
-            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+            <div class="grid-form-2-1">
               <div>
                 <label for="appBuildName" data-i18n="lblAppName">Название приложения</label>
                 <input type="text" id="appBuildName" value="PEC - Proxy Client" oninput="onAppConfigChangeLive()" placeholder="PEC - Proxy Client" />
@@ -1030,7 +1030,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <input type="text" id="appBuildVersion" value="2.2.0" oninput="onAppConfigChangeLive()" placeholder="2.2.0" />
               </div>
               <div>
-                <label for="appIconFileInput" data-i18n="lblAppIconType">Иконка приложения (Эмодзи или PNG)</label>
+                <label for="appIconType" data-i18n="lblAppIconType">Иконка приложения (Эмодзи или PNG)</label>
                 <div style="display: flex; gap: 6px; align-items: center;">
                   <select id="appIconType" onchange="onAppConfigChangeLive()" style="margin-bottom: 0; flex: 1;">
                     <option value="shield">🛡️ Shield (Щит безопасности)</option>
@@ -1097,7 +1097,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- Theme Geometry: Rounded (Console) vs Sharp (Terminal) -->
             <div style="margin-bottom: 12px;">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblAppLayout">Геометрия интерфейса:</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div class="grid-form-2col" style="gap: 8px;">
                 <button type="button" class="studio-layout-btn active" id="btnAppLayoutConsole" onclick="setAppLayout('console')">
                   <span style="font-size: 12px; font-weight: 600;">Console</span>
                   <span style="font-size: 10px; color: var(--text-muted);">(rounded, soft)</span>
@@ -1112,7 +1112,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- Dark / Light Mode Switcher -->
             <div style="margin-bottom: 12px;">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblAppThemeMode">Режим темы:</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div class="grid-form-2col" style="gap: 8px;">
                 <button type="button" class="studio-mode-btn active" id="btnAppModeDark" onclick="setAppThemeMode('dark')">
                   <img src="/icons/moon.png" class="icon-inline" alt="dark">
                   <span style="font-size: 12px; font-weight: 600;" data-i18n="optModeDark">Темная (Ночь)</span>
@@ -1147,7 +1147,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               <span data-i18n="titleAppBehavior">Системные службы и запуск</span>
             </h2>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="grid-form-2col" style="gap: 12px;">
               <label for="appAutoStart" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                 <input type="checkbox" id="appAutoStart" checked onchange="onAppConfigChangeLive()" />
                 <span data-i18n="lblAppAutoStart">Автозапуск с Windows</span>
@@ -1201,9 +1201,9 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
 
             <div id="codeSignUploadView">
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+              <div class="grid-form-2col" style="gap: 12px; margin-bottom: 10px;">
                 <div>
-                  <label for="csTimestampUrl" style="font-size: 11px; font-weight: 600;">Тип сертификата</label>
+                  <label for="csCertType" style="font-size: 11px; font-weight: 600;">Тип сертификата</label>
                   <select id="csCertType" class="form-select" onchange="onCodeSignTypeChange()" style="font-size: 12px; margin-bottom: 0;">
                     <option value="commercial">Официальный / Коммерческий (с RFC 3161 Timestamp)</option>
                     <option value="internal">Внутридоменный CA (Active Directory CS, offline / без штампа времени)</option>
@@ -1215,7 +1215,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 </div>
               </div>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+              <div class="grid-form-2col" style="gap: 12px; margin-bottom: 10px;">
                 <div>
                   <label for="csCertFile" style="font-size: 11px; font-weight: 600;">Файл сертификата (.pfx / .p12)</label>
                   <input type="file" id="csCertFile" accept=".pfx,.p12" style="font-size: 12px; padding: 4px;" />
@@ -1315,7 +1315,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                     <button type="button" style="width: 100%; padding: 8px; font-size: 12px; font-weight: 700; background: var(--app-accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;">
                       ⚡ Туннель активен (PROXY)
                     </button>
-                    <div style="margin-top: 8px; font-size: 10.5px; color: var(--text-muted); display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                    <div class="grid-form-2col" style="margin-top: 8px; font-size: 10.5px; color: var(--text-muted); gap: 4px;">
                       <div>Фильтр ядра: <strong style="color: #10b981;">WinDivert64.sys</strong></div>
                       <div>Локальный релей: <strong style="color: var(--app-accent);">127.0.0.1:34010</strong></div>
                     </div>
@@ -1425,14 +1425,14 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <thead>
               <tr>
                 <th style="width: 38px; text-align: center;"><input type="checkbox" id="fleetSelectAll" title="Выбрать все"></th>
-                <th class="sortable-th" data-sort="id"><span data-i18n="thInstId">Instance ID</span> <span class="sort-icon"></span></th>
-                <th class="sortable-th" data-sort="user"><span data-i18n="thInstUser">Пользователь</span> <span class="sort-icon"></span></th>
-                <th class="sortable-th" data-sort="ip"><span data-i18n="thInstIp">IP Address</span> <span class="sort-icon"></span></th>
-                <th class="sortable-th" data-sort="version"><span data-i18n="thInstVer">Version</span> <span class="sort-icon"></span></th>
-                <th class="sortable-th" data-sort="group"><span data-i18n="thInstGroup">Группа флота</span> <span class="sort-icon"></span></th>
-                <th class="sortable-th" data-sort="profile"><span data-i18n="thInstProfile">Assigned Profile</span> <span class="sort-icon"></span></th>
-                <th class="sortable-th" data-sort="syncs"><span data-i18n="thInstSyncs">Syncs</span> <span class="sort-icon"></span></th>
-                <th class="sortable-th" data-sort="status"><span data-i18n="thInstStatus">Status</span> <span class="sort-icon"></span></th>
+                <th class="sortable-th" data-sort="id" tabindex="0" role="button" aria-sort="none"><span data-i18n="thInstId">Instance ID</span> <span class="sort-icon"></span></th>
+                <th class="sortable-th" data-sort="user" tabindex="0" role="button" aria-sort="none"><span data-i18n="thInstUser">Пользователь</span> <span class="sort-icon"></span></th>
+                <th class="sortable-th" data-sort="ip" tabindex="0" role="button" aria-sort="none"><span data-i18n="thInstIp">IP Address</span> <span class="sort-icon"></span></th>
+                <th class="sortable-th" data-sort="version" tabindex="0" role="button" aria-sort="none"><span data-i18n="thInstVer">Version</span> <span class="sort-icon"></span></th>
+                <th class="sortable-th" data-sort="group" tabindex="0" role="button" aria-sort="none"><span data-i18n="thInstGroup">Группа флота</span> <span class="sort-icon"></span></th>
+                <th class="sortable-th" data-sort="profile" tabindex="0" role="button" aria-sort="none"><span data-i18n="thInstProfile">Assigned Profile</span> <span class="sort-icon"></span></th>
+                <th class="sortable-th" data-sort="syncs" tabindex="0" role="button" aria-sort="none"><span data-i18n="thInstSyncs">Syncs</span> <span class="sort-icon"></span></th>
+                <th class="sortable-th" data-sort="status" tabindex="0" role="button" aria-sort="none"><span data-i18n="thInstStatus">Status</span> <span class="sort-icon"></span></th>
                 <th data-i18n="thInstAssign">Assign</th>
                 <th data-i18n="thInstProxy">Прокси-сервер</th>
                 <th data-i18n="thInstActions">Действия</th>
@@ -1778,7 +1778,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       <p style="color: var(--text-muted); font-size: 12px; margin: 0 0 16px 0;" data-i18n="subAdd3xui">Enter inbound tag configured in your 3x-ui panel to fetch and link credentials.</p>
 
       <div style="margin-bottom: 12px;">
-        <label for="add3xuiTag" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Панель 3x-ui / Source Panel</label>
+        <label for="add3xuiPanelSelect" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);">Панель 3x-ui / Source Panel</label>
         <select id="add3xuiPanelSelect" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
           <option value="">По умолчанию (Настройки ротации)</option>
         </select>
@@ -1870,9 +1870,9 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 10px; margin-bottom: 10px;">
+      <div class="grid-form-1-2-1" style="margin-bottom: 10px;">
         <div>
-          <label for="proxyFormHost" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyProtocol">Protocol</label>
+          <label for="proxyFormProtocol" style="text-transform: uppercase; font-size: 10.5px; color: var(--text-muted);" data-i18n="lblProxyProtocol">Protocol</label>
           <select id="proxyFormProtocol" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
             <option value="http">HTTP</option>
             <option value="socks5">SOCKS5</option>
@@ -1956,7 +1956,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
   <!-- Modal: Geobase Inspector -->
   <div id="modalGeobaseInspector" class="modal-geobase-inspector" style="display: none;">
-    <div class="modal-geobase-inspector-content">
+    <div class="modal-geobase-inspector-content" style="background: var(--card-inner); color: var(--text);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">
         <div>
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -2019,7 +2019,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
   <!-- Modal: Import Presets -->
   <div id="modalImportPresets" class="modal-import-presets" style="display: none;">
-    <div class="modal-import-presets-content">
+    <div class="modal-import-presets-content" style="background: var(--card-inner); color: var(--text);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">
         <div>
           <h2 style="margin: 0; font-size: 17px;" data-i18n="titleImportPresets">Import GeoData & Presets</h2>

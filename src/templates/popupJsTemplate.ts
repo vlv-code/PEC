@@ -8,7 +8,10 @@ export function renderPopupJs(cfg?: ExtensionBuildConfig): string {
 window.switchPopupTab = function(tabId) {
   if (!tabId) return;
   const tabs = document.querySelectorAll(".tab-btn");
-  tabs.forEach(t => t.classList.remove("active"));
+  tabs.forEach(t => {
+    t.classList.remove("active");
+    if (typeof t.setAttribute === "function") t.setAttribute("aria-selected", "false");
+  });
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
   let targetContentId = tabId;
@@ -26,7 +29,10 @@ window.switchPopupTab = function(tabId) {
                     document.querySelector('.tab-btn[data-tab="' + targetContentId + '"]') ||
                     document.getElementById(tabId) ||
                     document.getElementById("tab-btn-" + tabId.replace(/^tab-content-/, "").replace(/^tab-/, ""));
-  if (activeBtn) activeBtn.classList.add("active");
+  if (activeBtn) {
+    activeBtn.classList.add("active");
+    if (typeof activeBtn.setAttribute === "function") activeBtn.setAttribute("aria-selected", "true");
+  }
   const target = document.getElementById(targetContentId) || document.getElementById(tabId);
   if (target) target.classList.add("active");
 
@@ -44,11 +50,30 @@ function updateBypassCountdown(expiresAt) {
   const btnPauseLabel = document.getElementById("btnPauseLabel");
   if (!btnPauseToggle && !btnPauseLabel) return;
   if (!expiresAt || expiresAt <= Date.now()) {
-    if (btnPauseToggle) btnPauseToggle.title = "${t.btnPause}";
+    if (btnPauseToggle) {
+      btnPauseToggle.title = "${t.btnPause}";
+      if (btnPauseToggle.classList && typeof btnPauseToggle.classList.remove === "function") {
+        btnPauseToggle.classList.remove("btn-pause-active");
+      }
+    }
     if (btnPauseLabel) btnPauseLabel.textContent = "${t.btnPause}";
     if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
       clearInterval(bypassCountdownTimer);
       bypassCountdownTimer = null;
+    }
+    currentProxyState.bypassActive = false;
+    currentProxyState.bypassExpiresAt = null;
+
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ action: "GET_STATUS", type: "GET_STATUS" }, (res) => {
+        if (!chrome.runtime.lastError && res) {
+          window.applyPopupState(res);
+        } else {
+          window.applyPopupState(currentProxyState);
+        }
+      });
+    } else {
+      window.applyPopupState(currentProxyState);
     }
     return;
   }
@@ -121,11 +146,12 @@ window.applyPopupState = function(response) {
   if (btnPowerLabel) {
     btnPowerLabel.textContent = isEnabled ? "${t.isRu ? "Отключить" : "Disable"}" : "${t.isRu ? "Включить" : "Enable"}";
   }
+  const isPowerActive = Boolean(isEnabled && isOnline);
   if (btnPowerToggle) {
     btnPowerToggle.style.opacity = isEnabled ? "1" : "0.7";
     if (btnPowerToggle.classList && typeof btnPowerToggle.classList.toggle === "function") {
-      btnPowerToggle.classList.toggle("btn-power-active", isEnabled);
-      btnPowerToggle.classList.toggle("btn-power-disabled", !isEnabled);
+      btnPowerToggle.classList.toggle("btn-power-active", isPowerActive);
+      btnPowerToggle.classList.toggle("btn-power-disabled", !isEnabled || !isOnline);
     }
     btnPowerToggle.title = isEnabled ? "${t.isRu ? "Отключить прокси" : "Disable proxy"}" : "${t.isRu ? "Включить прокси" : "Enable proxy"}";
   }
@@ -151,13 +177,7 @@ window.applyPopupState = function(response) {
             } else {
               if (typeof clearInterval !== "undefined") clearInterval(bypassCountdownTimer);
               bypassCountdownTimer = null;
-              if (btnPauseToggle) {
-                btnPauseToggle.title = "${t.btnPause}";
-                if (btnPauseToggle.classList && typeof btnPauseToggle.classList.remove === "function") {
-                  btnPauseToggle.classList.remove("btn-pause-active");
-                }
-              }
-              if (btnPauseLabel) btnPauseLabel.textContent = "${t.btnPause}";
+              updateBypassCountdown(0);
             }
           }, 1000);
         }
@@ -191,14 +211,26 @@ window.applyPopupState = function(response) {
   if (tabRulesDefaultPolicy && response.profileDefaultPolicy) {
     const isTunnel = response.profileDefaultPolicy === "proxy";
     tabRulesDefaultPolicy.textContent = isTunnel ? "PROXY (туннель)" : "DIRECT (селективный)";
+    tabRulesDefaultPolicy.title = tabRulesDefaultPolicy.textContent;
   }
 
   if (serverVal) {
-    serverVal.textContent = (isOnline && response.host) ? (response.host + ":" + response.port) : (isOnline ? "Direct" : "${t.offline}");
+    const sText = (isOnline && response.host) ? (response.host + ":" + response.port) : (isOnline ? "Direct" : "${t.offline}");
+    serverVal.textContent = sText;
+    serverVal.title = sText;
   }
-  if (profileVal) profileVal.textContent = response.profileName || "Selective PAC";
-  if (pingVal && response.ping) pingVal.textContent = response.ping;
-  if (exitIpVal && response.exitIp) exitIpVal.textContent = response.exitIp;
+  if (profileVal) {
+    profileVal.textContent = response.profileName || "Selective PAC";
+    profileVal.title = profileVal.textContent;
+  }
+  if (pingVal && response.ping) {
+    pingVal.textContent = response.ping;
+    pingVal.title = response.ping;
+  }
+  if (exitIpVal && response.exitIp) {
+    exitIpVal.textContent = response.exitIp;
+    exitIpVal.title = response.exitIp;
+  }
   if (response.uiLayout && document.body) {
     document.body.setAttribute("data-layout", response.uiLayout);
   }
@@ -220,6 +252,7 @@ window.applyPopupState = function(response) {
       webrtcVal.textContent = isRu ? "Защищено (без утечки UDP)" : "Protected (UDP block)";
       webrtcVal.className = "val success-val";
     }
+    webrtcVal.title = webrtcVal.textContent;
   }
   if (dnsVal) {
     if (!isEnabled || isBypass) {
@@ -232,6 +265,7 @@ window.applyPopupState = function(response) {
       dnsVal.textContent = isRu ? "Системный" : "System";
       dnsVal.className = "val";
     }
+    dnsVal.title = dnsVal.textContent;
   }
 
   if (btnToggle) {
@@ -306,6 +340,7 @@ function renderCorporateRules(rules, profileName, defaultPolicy) {
   if (defaultPolicyTag && defaultPolicy) {
     const isTunnel = defaultPolicy === "proxy";
     defaultPolicyTag.textContent = isTunnel ? "PROXY (туннель)" : "DIRECT (селективный)";
+    defaultPolicyTag.title = defaultPolicyTag.textContent;
   }
 
   if (!container) return;
@@ -579,6 +614,7 @@ function initPopup() {
               } else {
                 pingVal.textContent = isRu ? "Недоступен" : "Unavailable";
               }
+              pingVal.title = pingVal.textContent;
             }
             if (res) window.applyPopupState(res);
             loadState();
@@ -611,6 +647,8 @@ function initPopup() {
     });
   }
 
+  const bypassTimeoutMinutes = ${Number(safeCfg.bypassAutoTimeoutMinutes) || 15};
+
   if (btnPauseToggle) {
     btnPauseToggle.addEventListener("click", () => {
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
@@ -621,7 +659,7 @@ function initPopup() {
       } else {
         const nextBypass = !currentProxyState.bypassActive;
         currentProxyState.bypassActive = nextBypass;
-        currentProxyState.bypassExpiresAt = nextBypass ? Date.now() + 15 * 60 * 1000 : null;
+        currentProxyState.bypassExpiresAt = nextBypass ? Date.now() + bypassTimeoutMinutes * 60 * 1000 : null;
         window.applyPopupState(currentProxyState);
         if (window.parent && window.parent.postMessage) {
           window.parent.postMessage({ type: "SIM_TOGGLE_BYPASS" }, "*");
@@ -675,6 +713,7 @@ function initPopup() {
       left.style.alignItems = "center";
       left.style.gap = "6px";
       left.style.minWidth = "0";
+      left.style.flex = "1";
 
       const chk = document.createElement("input");
       chk.type = "checkbox";
@@ -769,11 +808,18 @@ function initPopup() {
       } catch (e) {
         p = p.replace(/^[a-z]+:\\/\\//i, "").split("/")[0].split(":")[0];
       }
-    } else if (p.indexOf("/") !== -1) {
-      p = p.split("/")[0].trim();
+    } else {
+      // Do not strip CIDR subnet masks like 192.168.1.0/24 or 10.0.0.0/8
+      const isSubnetMask = /^(?:(?:\\d{1,3}\\.){3}\\d{1,3}|[0-9a-fA-F:]+)\\/\\d{1,3}$/.test(p);
+      if (!isSubnetMask && p.indexOf("/") !== -1) {
+        p = p.split("/")[0].trim();
+      }
     }
     if (p.indexOf(":") !== -1 && p.indexOf("]") === -1) {
-      p = p.split(":")[0].trim();
+      const colonCount = (p.match(/:/g) || []).length;
+      if (colonCount === 1) {
+        p = p.split(":")[0].trim();
+      }
     }
     if (!p) return;
     const act = (action || "PROXY").toUpperCase();
@@ -783,6 +829,18 @@ function initPopup() {
       existing.enabled = true;
     } else {
       if (userRules.length >= MAX_USER_RULES) {
+        const btn = document.getElementById("btnAddRule");
+        if (btn) {
+          const orig = btn.textContent;
+          btn.textContent = "${t.ruleLimitReached || (t.isRu ? "Лимит (100)!" : "Limit (100)!")}";
+          btn.style.backgroundColor = "var(--danger)";
+          btn.style.color = "#ffffff";
+          setTimeout(() => {
+            btn.textContent = orig;
+            btn.style.backgroundColor = "";
+            btn.style.color = "";
+          }, 2000);
+        }
         return;
       }
       userRules.push({ pattern: p, action: act, enabled: true });
@@ -923,9 +981,13 @@ function initPopup() {
         const latencyMs = Date.now() - startMs;
         if (pingVal) {
           pingVal.textContent = latencyMs + " ms";
+          pingVal.title = pingVal.textContent;
         }
       } catch (e) {
-        if (pingVal) pingVal.textContent = isRu ? "Недоступен" : "Unavailable";
+        if (pingVal) {
+          pingVal.textContent = isRu ? "Недоступен" : "Unavailable";
+          pingVal.title = pingVal.textContent;
+        }
       } finally {
         if (t) clearTimeout(t);
         if (c) c.abort();
@@ -963,7 +1025,7 @@ function initPopup() {
         { url: "https://checkip.amazonaws.com", isJson: false },
         { url: "https://ipv4.icanhazip.com", isJson: false },
         { url: "https://icanhazip.com", isJson: false },
-        { url: "https://yandex.ru/internet/api/v0/ip", isJson: false }
+        { url: "https://yandex.ru/internet/api/v0/ip", isJson: true, key: "ip" }
       ];
 
       const controller = new AbortController();
@@ -1013,9 +1075,12 @@ function initPopup() {
       }
 
       if (ip && exitIpVal) {
-        exitIpVal.textContent = ip + (geo ? " (" + geo + ")" : "");
+        const fullExitText = ip + (geo ? " (" + geo + ")" : "");
+        exitIpVal.textContent = fullExitText;
+        exitIpVal.title = fullExitText;
       } else if (exitIpVal) {
         exitIpVal.textContent = "${t.connError}";
+        exitIpVal.title = "${t.connError}";
       }
       setTimeout(() => {
         btnCheckIp.disabled = false;
@@ -1075,18 +1140,33 @@ function initPopup() {
     btnCopyLogs.addEventListener("click", () => {
       if (!logContainer) return;
       const text = logContainer.textContent || "";
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => {
+      const textSpan = btnCopyLogs.querySelector("#btnCopyLogsText") || btnCopyLogs.querySelector("span");
+      const doFeedback = () => {
+        if (textSpan) {
+          const orig = textSpan.textContent;
+          textSpan.textContent = "${t.copied}";
+          setTimeout(() => { textSpan.textContent = orig; }, 1200);
+        } else {
           const orig = btnCopyLogs.textContent;
           btnCopyLogs.textContent = "${t.copied}";
           setTimeout(() => { btnCopyLogs.textContent = orig; }, 1200);
-        }).catch(() => {});
+        }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(doFeedback).catch(() => {
+          fallbackCopyText(text, doFeedback);
+        });
+      } else {
+        fallbackCopyText(text, doFeedback);
       }
     });
   }
 
   if (btnClearLogs) {
     btnClearLogs.addEventListener("click", () => {
+      if (typeof confirm === "function" && !confirm("${t.confirmClearLogs || (t.isRu ? "Очистить журнал событий?" : "Clear event log?")}")) {
+        return;
+      }
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "CLEAR_LOGS", type: "CLEAR_LOGS" }, () => {
           renderLogs([]);

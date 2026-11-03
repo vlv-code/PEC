@@ -164,6 +164,7 @@
       overflow-x: hidden;
       scrollbar-width: thin;
       scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+      scrollbar-gutter: stable;
     }
     body {
       width: 380px;
@@ -447,6 +448,21 @@
       box-shadow: none !important;
     }
 
+    /* Disabled states */
+    button:disabled,
+    .btn-sm:disabled,
+    .btn-sec:disabled,
+    .btn-primary-sm:disabled,
+    .btn-action:disabled,
+    .btn-icon:disabled,
+    .btn-icon-minimal:disabled {
+      opacity: 0.5 !important;
+      cursor: not-allowed !important;
+      pointer-events: none !important;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
     /* Inline PNG icon pack */
     .icon-inline {
       width: 14px;
@@ -499,6 +515,13 @@
       height: 14px;
       text-align: center;
       line-height: 1;
+      flex-shrink: 0;
+    }
+    #tabRulesDefaultPolicy {
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .card-title {
       font-weight: 700;
@@ -513,6 +536,45 @@
       background: var(--card-inner);
       color: var(--text-muted);
       border: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 4px;
+      background: var(--card-inner);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      line-height: 1.3;
+    }
+    .badge-action-proxy {
+      background: rgba(var(--primary-rgb), 0.15);
+      color: var(--primary);
+      border-color: rgba(var(--primary-rgb), 0.35);
+    }
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      font-size: 12px;
+      padding: 0;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+    .btn-icon:hover {
+      background: var(--card-inner);
+      border-color: var(--primary);
+      color: var(--text);
     }
     .tag.corp-tag {
       color: var(--primary);
@@ -579,7 +641,8 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-weight: 600;
       color: var(--text);
-      max-width: 200px;
+      min-width: 0;
+      max-width: 130px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -641,12 +704,28 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-weight: 600;
       font-size: 12px;
+      min-width: 0;
+      max-width: 130px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
     }
     .val.success-val { color: var(--success); }
+    .val.warn-val { color: var(--warning); }
     .row-action {
       display: flex;
       align-items: center;
       gap: 6px;
+      min-width: 0;
+    }
+    #exitIpVal,
+    #pingVal {
+      min-width: 0;
+      max-width: 130px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+      display: inline-block;
     }
 
     /* Form and Inputs in Routing */
@@ -723,6 +802,15 @@
     [data-theme="light"] .btn-primary-sm {
       color: #ffffff;
     }
+    /* WCAG AA contrast for buttons in light theme across cyber, nord, emerald palettes */
+    [data-theme="light"][data-palette="cyber"] .btn-primary-sm,
+    [data-theme="light"][data-palette="nord"] .btn-primary-sm,
+    [data-theme="light"][data-palette="emerald"] .btn-primary-sm,
+    [data-palette="cyber"][data-theme="light"] .btn-primary-sm,
+    [data-palette="nord"][data-theme="light"] .btn-primary-sm,
+    [data-palette="emerald"][data-theme="light"] .btn-primary-sm {
+      color: #0f172a !important;
+    }
 
     .user-rules-list {
       max-height: 120px;
@@ -748,7 +836,8 @@
     .user-rule-item:last-child { border-bottom: none; }
     .rule-pattern {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      max-width: 160px;
+      flex: 1;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -856,14 +945,14 @@
   </header>
 
   <!-- Navigation Tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus">Главная</button>
-    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting">Роутинг</button>
-    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo">Инфо</button>
+  <div class="tabs" role="tablist" aria-label="Navigation Tabs">
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus" role="tab" aria-selected="true" aria-controls="tab-status">Главная</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting" role="tab" aria-selected="false" aria-controls="tab-routing">Роутинг</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo" role="tab" aria-selected="false" aria-controls="tab-info">Инфо</button>
   </div>
 
   <!-- TAB 1: Main (Главная) -->
-  <div class="tab-content active" id="tab-status">
+  <div class="tab-content active" id="tab-status" role="tabpanel" aria-labelledby="tabBtnStatus">
     <div class="card" id="cardConnection">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
         <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><path d="M9 2v6M15 2v6M6 8h12a2 2 0 0 1 2 2v2a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6v-2a2 2 0 0 1 2-2zM12 18v4"/></svg> Подключение к прокси</span>
@@ -876,22 +965,22 @@
       <div class="hero-meta">
         <div class="meta-row">
           <span class="meta-label">Профиль правил</span>
-          <span class="meta-val" id="profileVal">—</span>
+          <span class="meta-val" id="profileVal" title="—">—</span>
         </div>
         <div class="meta-row">
           <span class="meta-label">Прокси-сервер</span>
-          <span class="meta-val" id="serverVal">—</span>
+          <span class="meta-val" id="serverVal" title="—">—</span>
         </div>
         <div class="meta-row">
           <span class="meta-label">Режим прокси</span>
-          <span class="meta-val" id="modeVal">—</span>
+          <span class="meta-val" id="modeVal" title="—">—</span>
         </div>
       </div>
     </div>
   </div>
 
   <!-- TAB 2: Routing -->
-  <div class="tab-content" id="tab-routing">
+  <div class="tab-content" id="tab-routing" role="tabpanel" aria-labelledby="tabBtnRouting">
     <div class="card" id="cardProxySelector" style="margin-bottom: 8px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <span style="font-weight: 600; font-size: 12px; color: var(--text);">🌐 Прокси-сервер</span>
@@ -908,8 +997,8 @@
           <span class="card-title">Корпоративные правила <span id="corpRulesCountBadge" class="badge" style="font-size: 10px; margin-left: 2px;">0</span></span>
         </div>
         <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
-          <span class="tag" id="tabRulesDefaultPolicy" style="font-size: 9px; padding: 1px 5px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">DIRECT</span>
-          <span id="corpRulesToggleChevron" class="accordion-chevron">▼</span>
+          <span class="tag" id="tabRulesDefaultPolicy" style="font-size: 9px; padding: 1px 5px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="DIRECT">DIRECT</span>
+          <span id="corpRulesToggleChevron" class="accordion-chevron" style="flex-shrink: 0;">▼</span>
         </div>
       </div>
       <div id="corpRulesBody" style="display: none; margin-top: 8px;">
@@ -954,26 +1043,26 @@
   </div>
 
   <!-- TAB 3: Diagnostics & Info -->
-  <div class="tab-content" id="tab-info">
+  <div class="tab-content" id="tab-info" role="tabpanel" aria-labelledby="tabBtnInfo">
     <div class="card">
       <div class="card-header">
         <span class="card-title">Параметры соединения</span>
       </div>
       <div class="row">
         <span class="label">Защита WebRTC IP</span>
-        <span class="val success-val" id="webrtcVal">Защищено (без утечки UDP)</span>
+        <span class="val success-val" id="webrtcVal" title="Защищено (без утечки UDP)">Защищено (без утечки UDP)</span>
       </div>
       <div class="row">
         <span class="label">Задержка (Пинг)</span>
         <div class="row-action">
-          <span class="val" id="pingVal">—</span>
+          <span class="val" id="pingVal" title="—">—</span>
           <button id="btnTestLatency" class="btn-sm">Тест</button>
         </div>
       </div>
       <div class="row">
         <span class="label">Текущий внешний IP</span>
         <div class="row-action">
-          <span class="val" id="exitIpVal">—</span>
+          <span class="val" id="exitIpVal" title="—">—</span>
           <button id="btnCheckIp" class="btn-sm">Проверить</button>
         </div>
       </div>
@@ -990,7 +1079,7 @@
       </div>
       <pre id="logContainer" class="log-terminal"></pre>
       <div class="log-actions">
-        <button id="btnCopyLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Скопировать логи</button>
+        <button id="btnCopyLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span id="btnCopyLogsText">Скопировать логи</span></button>
         <button id="btnClearLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Очистить</button>
       </div>
     </div>

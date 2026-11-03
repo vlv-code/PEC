@@ -1,6 +1,13 @@
 #include "gui.h"
 #include <glib-unix.h>
 #include <signal.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <poll.h>
 
 GtkWidget *window;
 GtkTextBuffer *conn_buffer;
@@ -233,10 +240,97 @@ static guint status_source = 0;
 static uint64_t last_conn_count = 0;
 static unsigned conn_rate = 0;
 
+static const char *const daemon_socket_paths[] = {
+    "/var/run/proxybridge.sock",
+    "/run/proxybridge.sock",
+    "/tmp/proxybridge.sock"
+};
+
+static bool check_tcp_port_connect(uint16_t port) {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s < 0) return false;
+    int flags = fcntl(s, F_GETFL, 0);
+    fcntl(s, F_SETFL, flags | O_NONBLOCK);
+    struct sockaddr_in sin;
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(port);
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    int res = connect(s, (struct sockaddr *)&sin, sizeof(sin));
+    bool alive = false;
+    if (res == 0) {
+        alive = true;
+    } else if (errno == EINPROGRESS) {
+        struct pollfd pfd = { .fd = s, .events = POLLOUT };
+        if (poll(&pfd, 1, 50) > 0) {
+            int err = 0;
+            socklen_t len = sizeof(err);
+            if (getsockopt(s, SOL_SOCKET, SO_ERROR, &err, &len) == 0 && err == 0) {
+                alive = true;
+            }
+        }
+    }
+    close(s);
+    return alive;
+}
+
+static bool check_local_daemon_alive(void) {
+    // 1. Check known UNIX domain socket paths
+    for (size_t i = 0; i < sizeof(daemon_socket_paths) / sizeof(daemon_socket_paths[0]); i++) {
+        struct stat st;
+        if (stat(daemon_socket_paths[i], &st) == 0 && S_ISSOCK(st.st_mode)) {
+            int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+            if (fd >= 0) {
+                int flags = fcntl(fd, F_GETFL, 0);
+                fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+                struct sockaddr_un sun;
+                memset(&sun, 0, sizeof(sun));
+                sun.sun_family = AF_UNIX;
+                strncpy(sun.sun_path, daemon_socket_paths[i], sizeof(sun.sun_path) - 1);
+                int res = connect(fd, (struct sockaddr *)&sun, sizeof(sun));
+                if (res == 0 || errno == EISCONN || errno == EAGAIN || errno == EINPROGRESS) {
+                    close(fd);
+                    return true;
+                }
+                close(fd);
+            }
+        }
+    }
+
+    // 2. Check /proc/net/tcp for local relay listening port (24010..24030)
+    FILE *f = fopen("/proc/net/tcp", "r");
+    if (f) {
+        char line[256];
+        if (fgets(line, sizeof(line), f)) {
+            while (fgets(line, sizeof(line), f)) {
+                unsigned int sl, lport, st;
+                unsigned int lip;
+                if (sscanf(line, "%u: %X:%X %*X:%*X %X", &sl, &lip, &lport, &st) == 4) {
+                    if (st == 0x0A && lport >= 24010 && lport <= 24030) {
+                        fclose(f);
+                        return true;
+                    }
+                }
+            }
+        }
+        fclose(f);
+    }
+
+    // 3. Fallback: probe loopback TCP relay port
+    return check_tcp_port_connect(24010);
+}
+
+static int daemon_fail_count = 0;
+static bool daemon_lost_reported = false;
+
 static void update_status_info() {
     static const char *names[] = {"Stopped", "Starting...", "Running", "Stopping..."};
+    const char *state_str = names[engine_state];
+    if (engine_state == ENGINE_RUNNING && daemon_lost_reported) {
+        state_str = "Running (Relay unreachable)";
+    }
     char *text = g_strdup_printf("Engine: %s  |  Profile: %s  |  Proxies: %u  |  Rules: %u  |  %u conn/s",
-                                 names[engine_state], g_active_profile, g_list_length(g_proxies_list),
+                                 state_str, g_active_profile, g_list_length(g_proxies_list),
                                  g_list_length(g_rules_list), conn_rate);
     gtk_label_set_text(GTK_LABEL(status_info), text);
     g_free(text);
@@ -244,8 +338,41 @@ static void update_status_info() {
     gtk_widget_set_sensitive(stop_item, engine_state == ENGINE_RUNNING);
 }
 
+static void check_daemon_health(void) {
+    if (engine_state != ENGINE_RUNNING) {
+        daemon_fail_count = 0;
+        daemon_lost_reported = false;
+        return;
+    }
+
+    bool alive = check_local_daemon_alive();
+    if (!alive) {
+        daemon_fail_count++;
+        if (daemon_fail_count >= 2 && !daemon_lost_reported) {
+            daemon_lost_reported = true;
+            gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id,
+                               "Error: connection to local daemon / relay lost!");
+            gui_log("Health check: connection to local daemon / relay lost\n");
+            update_status_info();
+        }
+    } else {
+        if (daemon_lost_reported) {
+            daemon_lost_reported = false;
+            gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id,
+                               "ProxyBridge Service Connected (eBPF).");
+            gui_log("Health check: connection to local daemon / relay restored\n");
+            update_status_info();
+        }
+        daemon_fail_count = 0;
+    }
+}
+
 static void set_engine_state(EngineState state) {
     engine_state = state;
+    if (state != ENGINE_RUNNING) {
+        daemon_fail_count = 0;
+        daemon_lost_reported = false;
+    }
     update_status_info();
 }
 
@@ -253,6 +380,7 @@ static gboolean status_tick(gpointer data) {
     uint64_t now = gui_conn_event_count();
     conn_rate = (unsigned)(now - last_conn_count);
     last_conn_count = now;
+    check_daemon_health();
     update_status_info();
     return G_SOURCE_CONTINUE;
 }
