@@ -794,10 +794,26 @@
       cursor: pointer;
       box-sizing: border-box;
       transition: all 0.2s;
+      font-size: 0;
+      line-height: 0;
+      overflow: hidden;
+      user-select: none;
     }
     .badge-status-dot:hover {
       background: rgba(16, 185, 129, 0.24);
       border-color: rgba(16, 185, 129, 0.5);
+    }
+    .badge-status-dot.offline {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .badge-status-dot.offline:hover {
+      background: rgba(239, 68, 68, 0.24);
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+    .badge-status-dot.offline .dot {
+      background: var(--danger);
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
     }
     .badge-status .dot,
     .badge-status-dot .dot {

@@ -190,7 +190,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         </a>
 
         <!-- 4. Minimized Pulsing Status Dot with Tooltip -->
-        <span class="badge-status-dot" id="lblGatewayStatus" title="Шлюз активен" data-i18n-title="statusGatewayActive">
+        <span class="badge-status-dot" id="gatewayStatusIndicator" title="Шлюз активен" data-i18n-title="statusGatewayActive">
           <span class="dot"></span>
         </span>
 

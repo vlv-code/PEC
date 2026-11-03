@@ -19,3 +19,17 @@ test("dashboard navigation: tab-proxy-settings is placed immediately after tab-r
   assert.ok(proxySettingsBtnIdx < builderBtnIdx, "proxy settings is before builder");
   assert.ok(builderBtnIdx < fleetBtnIdx, "builder is before fleet");
 });
+
+test("dashboard header: gateway status indicator is a minimized pulsing dot without inline text", () => {
+  const html = renderDashboardHtml({});
+
+  // Indicator element check
+  assert.match(
+    html,
+    /<span class="badge-status-dot" id="gatewayStatusIndicator" title="Шлюз активен" data-i18n-title="statusGatewayActive">\s*<span class="dot"><\/span>\s*<\/span>/,
+    "must render gatewayStatusIndicator with only dot inside and tooltip attributes"
+  );
+
+  // Must not have the old id that caused setLanguage() to inject text
+  assert.doesNotMatch(html, /id="lblGatewayStatus"/, "must not have id lblGatewayStatus");
+});

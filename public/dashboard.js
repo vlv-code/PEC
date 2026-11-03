@@ -826,7 +826,7 @@
         appTitle: 'PEC - Proxy Extension Corp',
         appSubtitle: 'Enterprise Proxy Synchronization',
         statusGatewayActive: 'Gateway Active',
-        lblGatewayStatus: 'Gateway Active',
+        statusGatewayOffline: 'Gateway Offline',
         btnRefreshAllTitle: 'Refresh All',
         btnLogoutTitle: 'Log out',
         btnCustomizationTitle: 'Appearance & Themes',
@@ -1229,7 +1229,7 @@
         appTitle: 'PEC - Proxy Extension Corp',
         appSubtitle: 'Корпоративная синхронизация прокси',
         statusGatewayActive: 'Шлюз активен',
-        lblGatewayStatus: 'Шлюз активен',
+        statusGatewayOffline: 'Шлюз недоступен',
         btnRefreshAllTitle: 'Обновить всё',
         btnLogoutTitle: 'Выйти',
         btnCustomizationTitle: 'Внешний вид и темы',
@@ -6260,9 +6260,20 @@
     async function fetchStatus() {
       try {
         const res = await adminFetch('/api/status');
+        if (!res.ok) throw new Error('Status fetch failed: ' + res.status);
         const data = await res.json();
         const isRu = currentLang === 'ru';
         
+        const gatewayDot = document.getElementById('gatewayStatusIndicator');
+        if (gatewayDot) {
+          gatewayDot.classList.remove('offline');
+          let tooltip = isRu ? 'Шлюз активен' : 'Gateway Active';
+          if (data.activeInstancesCount !== undefined) {
+            tooltip += ' • ' + (isRu ? 'Устройств: ' : 'Devices: ') + data.activeInstancesCount;
+          }
+          gatewayDot.setAttribute('title', tooltip);
+        }
+
         document.getElementById('hdrUser').textContent = data.currentUser || (isRu ? 'нет' : 'none');
         document.getElementById('hdrFleetCount').textContent = data.activeInstancesCount + (isRu ? ' активных (' : ' active (') + data.totalInstancesCount + (isRu ? ' всего)' : ' total)');
         
@@ -6284,6 +6295,12 @@
         renderAuditLogs(data.auditLogs || []);
       } catch (err) {
         console.error(err);
+        const gatewayDot = document.getElementById('gatewayStatusIndicator');
+        if (gatewayDot) {
+          const isRu = currentLang === 'ru';
+          gatewayDot.classList.add('offline');
+          gatewayDot.setAttribute('title', isRu ? 'Шлюз недоступен' : 'Gateway Offline');
+        }
       }
     }
 
