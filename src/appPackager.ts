@@ -25,6 +25,36 @@ export function getAppUpdatesDir(): string {
   return path.resolve(process.env.PEC_UPDATES_DIR || "./dist/updates");
 }
 
+export function hasAuthenticodeSignature(filePath: string): boolean {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    const buf = fs.readFileSync(filePath);
+    if (buf.length < 64) return false;
+    if (buf[0] !== 0x4d || buf[1] !== 0x5a) return false; // MZ
+    const peOffset = buf.readUInt32LE(0x3c);
+    if (peOffset + 4 > buf.length) return false;
+    if (
+      buf[peOffset] !== 0x50 ||
+      buf[peOffset + 1] !== 0x45 ||
+      buf[peOffset + 2] !== 0x00 ||
+      buf[peOffset + 3] !== 0x00
+    ) {
+      return false; // PE\0\0
+    }
+    const magic = buf.readUInt16LE(peOffset + 24);
+    const secDirOffset = magic === 0x020b ? peOffset + 168 : peOffset + 152;
+    if (secDirOffset + 8 > buf.length) return false;
+    const certOffset = buf.readUInt32LE(secDirOffset);
+    const certSize = buf.readUInt32LE(secDirOffset + 4);
+    if (certOffset === 0 || certSize === 0 || certOffset + certSize > buf.length) return false;
+    const dwLength = buf.readUInt32LE(certOffset);
+    const wCertType = buf.readUInt16LE(certOffset + 6);
+    return dwLength > 0 && wCertType === 0x0002;
+  } catch {
+    return false;
+  }
+}
+
 export function ensurePristineTemplates(): void {
   const rootWin = path.join(getTemplatesAppDir(), "windows");
   const fallbackWin = path.resolve("./templates/app/windows");
@@ -51,21 +81,41 @@ export function ensurePristineTemplates(): void {
       const dst = path.join(pristineDir, b);
       const altSrc = winDir === rootWin ? path.join(fallbackWin, b) : path.join(rootWin, b);
       const altPristine = winDir === rootWin ? path.join(fallbackWin, ".pristine", b) : path.join(rootWin, ".pristine", b);
+      const isProtected = b === "WinDivert64.sys" || b === "PECAppCore.dll";
 
-      if (fs.existsSync(src) && fs.statSync(src).size > 1000) {
-        if (!fs.existsSync(dst) || fs.statSync(dst).size < 1000) {
-          try { fs.copyFileSync(src, dst); } catch {}
+      const canUseAsSource = (p: string) => {
+        if (!fs.existsSync(p)) return false;
+        try {
+          if (fs.statSync(p).size < 1000) return false;
+          if (isProtected && !hasAuthenticodeSignature(p)) return false;
+          return true;
+        } catch {
+          return false;
         }
-      } else if (fs.existsSync(altSrc) && fs.statSync(altSrc).size > 1000) {
-        try { fs.copyFileSync(altSrc, src); } catch {}
-        if (!fs.existsSync(dst) || fs.statSync(dst).size < 1000) {
-          try { fs.copyFileSync(altSrc, dst); } catch {}
+      };
+
+      const safeCopy = (from: string, to: string) => {
+        if (!canUseAsSource(from)) return;
+        if (isProtected && fs.existsSync(to) && hasAuthenticodeSignature(to)) {
+          return;
         }
-      } else if (fs.existsSync(dst) && fs.statSync(dst).size > 1000) {
-        try { fs.copyFileSync(dst, src); } catch {}
-      } else if (fs.existsSync(altPristine) && fs.statSync(altPristine).size > 1000) {
-        try { fs.copyFileSync(altPristine, src); } catch {}
-        try { fs.copyFileSync(altPristine, dst); } catch {}
+        try { fs.copyFileSync(from, to); } catch {}
+      };
+
+      if (canUseAsSource(src)) {
+        if (!fs.existsSync(dst) || fs.statSync(dst).size < 1000 || (isProtected && !hasAuthenticodeSignature(dst))) {
+          safeCopy(src, dst);
+        }
+      } else if (canUseAsSource(altSrc)) {
+        safeCopy(altSrc, src);
+        if (!fs.existsSync(dst) || fs.statSync(dst).size < 1000 || (isProtected && !hasAuthenticodeSignature(dst))) {
+          safeCopy(altSrc, dst);
+        }
+      } else if (canUseAsSource(dst)) {
+        safeCopy(dst, src);
+      } else if (canUseAsSource(altPristine)) {
+        safeCopy(altPristine, src);
+        safeCopy(altPristine, dst);
       }
     }
   }
@@ -234,7 +284,7 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
   let port = proxy?.port;
   let protocol = proxy?.protocol || "socks5";
   let username = proxy?.username || "";
-  let password = proxy?.password || "";
+  let password = (cfg as any)?.proxyPassword || (cfg as any)?.password || proxy?.password || "";
   const proxyName = proxy?.name || "Corporate Proxy";
 
   if (!host || !port) {
@@ -298,7 +348,7 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
     Host: node.host,
     Port: String(node.port),
     Username: node.username || "",
-    Password: "",
+    Password: node.password || "",
     SendDomainToProxy: true,
   }));
 
@@ -980,6 +1030,7 @@ export function assembleAppPackage(
   }
 
   const resolveTemplateBinary = (name: string): string | null => {
+    const isProtected = name === "WinDivert64.sys" || name === "PECAppCore.dll";
     const candidates = [
       path.join(winTemplatesDir, name),
       path.resolve("./templates/app/windows", name),
@@ -991,7 +1042,13 @@ export function assembleAppPackage(
     for (const c of candidates) {
       if (fs.existsSync(c)) {
         try {
-          if (fs.statSync(c).size > 1000) return c;
+          if (fs.statSync(c).size > 1000) {
+            if (isProtected && c.includes("client") && !hasAuthenticodeSignature(c)) {
+              console.warn(`[Security] Ignored unsigned ${name} candidate in client directory: ${c}`);
+              continue;
+            }
+            return c;
+          }
         } catch {}
       }
     }
@@ -1194,6 +1251,7 @@ export function packageApp(baseUrl: string): AppBuildInfo {
   // Standalone Setup Installer artifact check
   const winTemplatesDir = path.join(getTemplatesAppDir(), "windows");
   const resolveTemplateBinary = (name: string): string | null => {
+    const isProtected = name === "WinDivert64.sys" || name === "PECAppCore.dll";
     const candidates = [
       path.join(winTemplatesDir, name),
       path.resolve("./templates/app/windows", name),
@@ -1205,7 +1263,13 @@ export function packageApp(baseUrl: string): AppBuildInfo {
     for (const c of candidates) {
       if (fs.existsSync(c)) {
         try {
-          if (fs.statSync(c).size > 1000) return c;
+          if (fs.statSync(c).size > 1000) {
+            if (isProtected && c.includes("client") && !hasAuthenticodeSignature(c)) {
+              console.warn(`[Security] Ignored unsigned ${name} candidate in client directory: ${c}`);
+              continue;
+            }
+            return c;
+          }
         } catch {}
       }
     }
@@ -1448,7 +1512,8 @@ export function getCoreModulesIntegrity(customWinTemplatesDir?: string): Array<{
       const sha256 = crypto.createHash("sha256").update(buf).digest("hex");
       const size = buf.length;
       const isDummy = size < 512 && buf.subarray(0, 32).toString().includes("MZ_DUMMY");
-      const verified = size > 1000 && !isDummy;
+      const isProtected = name === "WinDivert64.sys" || name === "PECAppCore.dll";
+      const verified = size > 1000 && !isDummy && (!isProtected || hasAuthenticodeSignature(found));
       return {
         name,
         sha256,
@@ -1588,6 +1653,11 @@ export function cleanAppBinaries(): CleanAppBinariesResult {
   const preservedFiles: string[] = [];
 
   const safeDelete = (filePath: string) => {
+    const base = path.basename(filePath).toLowerCase();
+    if (base === "windivert64.sys" || base === "pecappcore.dll" || base === "windivert.dll" || base === "proxybridgecore.dll") {
+      preservedFiles.push(path.relative(".", filePath).replace(/\\/g, "/"));
+      return;
+    }
     try {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -1734,6 +1804,24 @@ export const MINGW_GUI_CMD =
 export const MSVC_GUI_CMD =
   "cl.exe /O2 /std:c++17 /EHsc /DUNICODE /D_UNICODE /DNDEBUG /D_WIN32_WINNT=0x0601 /utf-8 main_imgui.cpp imgui\\imgui*.cpp imgui\\backends\\imgui_impl_win32.cpp imgui\\backends\\imgui_impl_dx11.cpp profile\\profile.c profile\\json.c res\\app.res /Fe:PEC-App.exe /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib shlwapi.lib shell32.lib advapi32.lib ole32.lib user32.lib gdi32.lib ws2_32.lib winhttp.lib comctl32.lib";
 
+function findExecutableInPath(name: string): string | null {
+  const isWin = process.platform === "win32";
+  const names = isWin && !name.toLowerCase().endsWith(".exe") ? [name, `${name}.exe`] : [name];
+  const pathDirs = (process.env.PATH || "").split(path.delimiter);
+  for (const dir of pathDirs) {
+    if (!dir) continue;
+    for (const n of names) {
+      const full = path.join(dir, n);
+      try {
+        if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+          return full;
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
 export function findMingwW64(): { gcc: string; gxx: string; windres: string } | null {
   if (process.env.PEC_FORCE_NO_COMPILER === "true") {
     return null;
@@ -1746,53 +1834,29 @@ export function findMingwW64(): { gcc: string; gxx: string; windres: string } | 
 
     let foundGcc = "";
     for (const name of gccNames) {
-      try {
-        const out = child_process
-          .execSync(isWin ? `where ${name}` : `which ${name}`, {
-            encoding: "utf-8",
-            stdio: ["ignore", "pipe", "ignore"],
-          })
-          .trim()
-          .split(/\r?\n/)[0];
-        if (out) {
-          foundGcc = out;
-          break;
-        }
-      } catch {}
+      const found = findExecutableInPath(name);
+      if (found) {
+        foundGcc = found;
+        break;
+      }
     }
 
     let foundGxx = "";
     for (const name of gxxNames) {
-      try {
-        const out = child_process
-          .execSync(isWin ? `where ${name}` : `which ${name}`, {
-            encoding: "utf-8",
-            stdio: ["ignore", "pipe", "ignore"],
-          })
-          .trim()
-          .split(/\r?\n/)[0];
-        if (out) {
-          foundGxx = out;
-          break;
-        }
-      } catch {}
+      const found = findExecutableInPath(name);
+      if (found) {
+        foundGxx = found;
+        break;
+      }
     }
 
     let foundWindres = "";
     for (const name of windresNames) {
-      try {
-        const out = child_process
-          .execSync(isWin ? `where ${name}` : `which ${name}`, {
-            encoding: "utf-8",
-            stdio: ["ignore", "pipe", "ignore"],
-          })
-          .trim()
-          .split(/\r?\n/)[0];
-        if (out) {
-          foundWindres = out;
-          break;
-        }
-      } catch {}
+      const found = findExecutableInPath(name);
+      if (found) {
+        foundWindres = found;
+        break;
+      }
     }
 
     if (foundGcc && foundWindres) {
@@ -1804,15 +1868,8 @@ export function findMingwW64(): { gcc: string; gxx: string; windres: string } | 
 
 export function findMakensis(): string | null {
   try {
-    const isWin = process.platform === "win32";
-    const out = child_process
-      .execSync(isWin ? "where makensis.exe" : "which makensis", {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      })
-      .trim()
-      .split(/\r?\n/)[0];
-    if (out && fs.existsSync(out)) return out;
+    const found = findExecutableInPath("makensis");
+    if (found) return found;
   } catch {}
   if (process.platform === "win32") {
     const stdNsis = path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "NSIS", "makensis.exe");
@@ -1826,28 +1883,10 @@ export function getToolchainDiagnostics(): ToolchainDiagnostics {
   const msvc = findMsvcVcvars();
   const makensis = findMakensis();
 
-  let hasWixl = false;
-  try {
-    const isWin = process.platform === "win32";
-    const wixlCmd = isWin ? "where wixl.exe" : "which wixl";
-    const out = child_process
-      .execSync(wixlCmd, { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
-      .trim();
-    if (out) hasWixl = true;
-  } catch {}
+  let hasWixl = Boolean(findExecutableInPath("wixl") || findExecutableInPath("msitools"));
   if (!hasWixl) {
     try {
-      const isWin = process.platform === "win32";
-      const msiCmd = isWin ? "where msitools.exe" : "which msitools";
-      const out = child_process
-        .execSync(msiCmd, { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
-        .trim();
-      if (out) hasWixl = true;
-    } catch {}
-  }
-  if (!hasWixl) {
-    try {
-      child_process.execFileSync("wixl", ["--version"], { windowsHide: true, stdio: "ignore" });
+      child_process.execFileSync("wixl", ["--version"], { windowsHide: true, timeout: 1500, stdio: "ignore" });
       hasWixl = true;
     } catch {}
   }
@@ -1861,7 +1900,7 @@ export function getToolchainDiagnostics(): ToolchainDiagnostics {
   if (hasWixl) {
     try {
       const out = child_process
-        .execSync("wixl --version", { encoding: "utf-8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] })
+        .execSync("wixl --version", { encoding: "utf-8", windowsHide: true, timeout: 1500, stdio: ["ignore", "pipe", "ignore"] })
         .trim();
       const m = out.match(/([\d.]+)/);
       if (m) wixlVersion = m[1];
@@ -1963,6 +2002,10 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
 
   const syncBinary = (sourcePath: string, name: string) => {
     if (fs.existsSync(sourcePath)) {
+      if ((name === "WinDivert64.sys" || name === "PECAppCore.dll") && !hasAuthenticodeSignature(sourcePath)) {
+        log(`[Security] Blocked attempt to sync unsigned ${name} from ${sourcePath}`);
+        return;
+      }
       fs.copyFileSync(sourcePath, path.join(winTemplatesDir, name));
       const rootWin = path.resolve("./templates/app/windows");
       if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
@@ -2208,7 +2251,9 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
     // Recover any missing or invalid templates into winTemplatesDir from .pristine or root templates
     for (const bin of [...requiredBinaries, "PEC-App-Setup.exe"]) {
       const targetPath = path.join(winTemplatesDir, bin);
-      if (!isValidBinary(targetPath)) {
+      const isProtected = bin === "WinDivert64.sys" || bin === "PECAppCore.dll";
+      const targetValid = isValidBinary(targetPath) && (!isProtected || hasAuthenticodeSignature(targetPath));
+      if (!targetValid) {
         const candidates = [
           path.join(pristineDir, bin),
           path.resolve("./templates/app/windows", bin),
@@ -2226,7 +2271,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
             path.join(pristineDir, "ProxyBridgeSvc.exe")
           );
         }
-        const validSrc = candidates.find((c) => isValidBinary(c));
+        const validSrc = candidates.find((c) => isValidBinary(c) && (!isProtected || hasAuthenticodeSignature(c)));
         if (validSrc) {
           try {
             fs.copyFileSync(validSrc, targetPath);
@@ -2234,7 +2279,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
           } catch {}
         }
       }
-      if (isValidBinary(targetPath) && !builtFiles.includes(bin)) {
+      if (isValidBinary(targetPath) && (!isProtected || hasAuthenticodeSignature(targetPath)) && !builtFiles.includes(bin)) {
         builtFiles.push(bin);
       }
     }
@@ -2290,6 +2335,10 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
 
   const syncBinary = (sourcePath: string, name: string) => {
     if (fs.existsSync(sourcePath)) {
+      if ((name === "WinDivert64.sys" || name === "PECAppCore.dll") && !hasAuthenticodeSignature(sourcePath)) {
+        log(`[Security] Blocked attempt to sync unsigned ${name} from ${sourcePath}`);
+        return;
+      }
       fs.copyFileSync(sourcePath, path.join(winTemplatesDir, name));
       const rootWin = path.resolve("./templates/app/windows");
       if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
@@ -2475,12 +2524,12 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
     path.join(pristineDir, "PECAppCore.dll"),
     path.resolve("./templates/app/windows/PECAppCore.dll"),
     path.resolve("./templates/app/windows/ProxyBridgeCore.dll"),
-  ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
+  ].find(p => fs.existsSync(p) && fs.statSync(p).size > 1000 && hasAuthenticodeSignature(p));
 
-  if ((!fs.existsSync(destCore) || fs.statSync(destCore).size < 1000) && fallbackCore) {
+  if ((!fs.existsSync(destCore) || fs.statSync(destCore).size < 1000 || !hasAuthenticodeSignature(destCore)) && fallbackCore) {
     fs.copyFileSync(fallbackCore, destCore);
     if (!builtFiles.includes("PECAppCore.dll")) builtFiles.push("PECAppCore.dll");
-  } else if (fs.existsSync(destCore) && !builtFiles.includes("PECAppCore.dll")) {
+  } else if (fs.existsSync(destCore) && hasAuthenticodeSignature(destCore) && !builtFiles.includes("PECAppCore.dll")) {
     builtFiles.push("PECAppCore.dll");
   }
 
@@ -2501,7 +2550,9 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   // Ensure signed WinDivert driver & Core binaries are present
   const ensureFromTemplates = (filename: string, sourceFallback?: string) => {
     const target = path.join(winTemplatesDir, filename);
-    if (!fs.existsSync(target) || fs.statSync(target).size < 1000) {
+    const isProtected = filename === "WinDivert64.sys" || filename === "PECAppCore.dll";
+    const targetNeedsUpdate = !fs.existsSync(target) || fs.statSync(target).size < 1000 || (isProtected && !hasAuthenticodeSignature(target));
+    if (targetNeedsUpdate) {
       const candidates = [
         path.resolve("./templates/app/windows", filename),
         path.join(pristineDir, filename),
@@ -2511,7 +2562,7 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
           path.resolve("./templates/app/windows", sourceFallback)
         );
       }
-      const src = candidates.find(p => fs.existsSync(p) && fs.statSync(p).size > 1000);
+      const src = candidates.find(p => fs.existsSync(p) && fs.statSync(p).size > 1000 && (!isProtected || hasAuthenticodeSignature(p)));
       if (src) {
         try { fs.copyFileSync(src, target); } catch {}
       }
@@ -2568,14 +2619,16 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
       const pristineP = path.join(path.resolve("./templates/app/windows"), ".pristine", name);
       const localPristineP = path.join(winTemplatesDir, ".pristine", name);
       const rootP = path.resolve("./templates/app/windows", name);
-      if (fs.existsSync(localPristineP) && fs.statSync(localPristineP).size > 1000) {
+      const isProtected = name === "WinDivert64.sys" || name === "PECAppCore.dll";
+      const canUse = (cand: string) => fs.existsSync(cand) && fs.statSync(cand).size > 1000 && (!isProtected || hasAuthenticodeSignature(cand));
+      if (canUse(localPristineP)) {
         try { fs.copyFileSync(localPristineP, p); } catch {}
-      } else if (fs.existsSync(pristineP) && fs.statSync(pristineP).size > 1000) {
+      } else if (canUse(pristineP)) {
         try { fs.copyFileSync(pristineP, p); } catch {}
-      } else if (fs.existsSync(rootP) && fs.statSync(rootP).size > 1000) {
+      } else if (canUse(rootP)) {
         try { fs.copyFileSync(rootP, p); } catch {}
       }
-      if (!fs.existsSync(p) || fs.statSync(p).size < 1000) {
+      if (!fs.existsSync(p) || fs.statSync(p).size < 1000 || (isProtected && !hasAuthenticodeSignature(p))) {
         stillMissing.push(name);
       } else {
         if (!builtFiles.includes(name)) builtFiles.push(name);

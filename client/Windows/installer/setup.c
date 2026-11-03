@@ -79,6 +79,49 @@ static BOOL      g_uninstall = FALSE;
 static BOOL      g_noRun = FALSE;
 static BOOL      g_completed = FALSE;
 static wchar_t   g_installDir[MAX_PATH] = {0};
+static FILE*     g_LogFile = NULL;
+
+static void InitLogFile(void)
+{
+    if (g_LogFile) return;
+    wchar_t tempPath[MAX_PATH];
+    if (GetTempPathW(MAX_PATH, tempPath) > 0) {
+        wchar_t logPath[MAX_PATH];
+        _snwprintf_s(logPath, MAX_PATH, _TRUNCATE, L"%lspec_setup.log", tempPath);
+        g_LogFile = _wfopen(logPath, L"a, ccs=UTF-8");
+        if (!g_LogFile) {
+            g_LogFile = _wfopen(logPath, L"a");
+        }
+    }
+}
+
+static void LogMessage(const wchar_t* format, ...)
+{
+    if (!g_LogFile) {
+        InitLogFile();
+    }
+    if (g_LogFile) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        fwprintf(g_LogFile, L"[%04d-%02d-%02d %02d:%02d:%02d] ",
+            st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+        va_list args;
+        va_start(args, format);
+        vfwprintf(g_LogFile, format, args);
+        va_end(args);
+        fwprintf(g_LogFile, L"\n");
+        fflush(g_LogFile);
+    }
+}
+
+static void CloseLogFile(void)
+{
+    if (g_LogFile) {
+        fflush(g_LogFile);
+        fclose(g_LogFile);
+        g_LogFile = NULL;
+    }
+}
 
 static void SetStatus(const wchar_t* text, int progress)
 {
@@ -356,9 +399,38 @@ static BOOL CopyFromSourceFolder(const wchar_t* srcDir, const wchar_t* destDir)
         wchar_t srcPath[MAX_PATH];
         wsprintfW(srcPath, L"%ls\\%ls", srcDir, files[i]);
         if (GetFileAttributesW(srcPath) != INVALID_FILE_ATTRIBUTES) {
-            if (!IsSignedBinaryExtension(files[i]) || !VerifyFileAuthenticode(srcPath)) {
+            if (!IsSignedBinaryExtension(files[i])) {
+                LogMessage(L"ERROR: File '%ls' does not have a recognized binary extension for verification.", files[i]);
                 return FALSE;
             }
+
+            char narrowFileName[MAX_PATH];
+            WideCharToMultiByte(CP_ACP, 0, files[i], -1, narrowFileName, MAX_PATH, NULL, NULL);
+
+            BOOL isWinDivertSys = (_stricmp(narrowFileName, "WinDivert64.sys") == 0) || (_wcsicmp(files[i], L"WinDivert64.sys") == 0);
+            BOOL isSigned = VerifyFileAuthenticode(srcPath);
+
+            if (isWinDivertSys) {
+                // Kernel driver verification is strictly mandatory (kernel protection)
+                if (!isSigned) {
+                    LogMessage(L"ERROR: Kernel driver '%ls' signature verification failed! Authenticode EV signature is strictly required.", files[i]);
+                    return FALSE;
+                }
+                LogMessage(L"INFO: Kernel driver '%ls' Authenticode EV signature verified successfully.", files[i]);
+            } else {
+                // User-mode binaries: log warning if unsigned, proceed unless corporate signature is enforced
+                if (!isSigned) {
+#if (defined(REQUIRE_CORPORATE_SIGNATURE) && REQUIRE_CORPORATE_SIGNATURE) || (defined(ENFORCE_STRICT_SIGNATURES) && ENFORCE_STRICT_SIGNATURES)
+                    LogMessage(L"ERROR: User-mode binary '%ls' is not digitally signed and corporate signature is enforced. Aborting.", files[i]);
+                    return FALSE;
+#else
+                    LogMessage(L"WARNING: User-mode binary '%ls' is not digitally signed. Continuing unpack.", files[i]);
+#endif
+                } else {
+                    LogMessage(L"INFO: User-mode binary '%ls' signature verified successfully.", files[i]);
+                }
+            }
+
             if (_wcsicmp(files[i], L"PEC-App.exe") == 0 || _wcsicmp(files[i], L"ProxyBridge.exe") == 0) {
                 hasApp = TRUE;
             }
@@ -511,7 +583,9 @@ static DWORD WINAPI InstallThread(LPVOID lpParam)
         wchar_t myDir[MAX_PATH];
         GetModuleFileNameW(NULL, myDir, MAX_PATH);
         for (DWORD i = (DWORD)wcslen(myDir); i > 0; i--) { if (myDir[i - 1] == L'\\') { myDir[i] = 0; break; } }
+        LogMessage(L"Falling back to copying files from source folder '%ls'...", myDir);
         if (!CopyFromSourceFolder(myDir, g_installDir)) {
+            LogMessage(L"ERROR: File copy and verification from '%ls' failed! Aborting installation.", myDir);
             if (!g_silent) {
                 MessageBoxW(g_hMain,
                     L"Failed to verify digital signature (Authenticode) of fallback installer files. Installation aborted.",
@@ -560,6 +634,7 @@ static DWORD WINAPI InstallThread(LPVOID lpParam)
     RegisterUninstallInfo(g_installDir);
 
     SetStatus(L"Installation successfully completed!", 100);
+    LogMessage(L"Installation successfully completed in '%ls'.", g_installDir);
     g_completed = TRUE;
 
     if (g_hBtnAction && IsWindow(g_hBtnAction)) {
@@ -711,6 +786,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmdLine, int nCmdSho
     (void)hPrev;
     g_hInst = hInst;
 
+    InitLogFile();
+    LogMessage(L"PEC-App Setup started (v%ls)", APP_VERSION);
+
     INITCOMMONCONTROLSEX icex;
     icex.dwSize = sizeof(icex);
     icex.dwICC = ICC_PROGRESS_CLASS | ICC_STANDARD_CLASSES;
@@ -740,6 +818,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmdLine, int nCmdSho
             WaitForSingleObject(hThread, 60000);
             CloseHandle(hThread);
         }
+        CloseLogFile();
         return 0;
     }
 
@@ -777,6 +856,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmdLine, int nCmdSho
         DispatchMessageW(&msg);
     }
 
+    CloseLogFile();
     return (int)msg.wParam;
 }
 

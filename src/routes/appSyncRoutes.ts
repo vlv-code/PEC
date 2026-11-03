@@ -331,6 +331,15 @@ export function createAppSyncRouter(
         }
       }
 
+      const theme = {
+        preset: assignedProfile?.colorPalette || appBldCfg.presetStyle || "cyber-blue",
+        layout: assignedProfile?.uiLayout || appBldCfg.uiLayout || "console",
+        mode: assignedProfile?.defaultThemeMode || appBldCfg.defaultThemeMode || "dark",
+        primary: assignedProfile?.themeColor || appBldCfg.themeColor || "#38bdf8",
+        background: assignedProfile?.themeBackground || appBldCfg.themeBackground || "#0b1120",
+        card: assignedProfile?.themeCard || appBldCfg.themeCard || "#131d36",
+      };
+
       res.json({
         ok: true,
         ...(issuedInstanceToken ? { instanceToken: issuedInstanceToken } : {}),
@@ -339,6 +348,7 @@ export function createAppSyncRouter(
         activeProxy: proxyPayload,
         availableProxies,
         serverRules,
+        theme,
         update: {
           hasUpdate,
           latestVersion,

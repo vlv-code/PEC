@@ -4,7 +4,16 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import child_process from "node:child_process";
-import { buildMsiPackage, buildMsiWithWix, getAppBuildConfig, extractPeVersion, getCoreModulesIntegrity } from "../src/appPackager.js";
+import {
+  buildMsiPackage,
+  buildMsiWithWix,
+  getAppBuildConfig,
+  extractPeVersion,
+  getCoreModulesIntegrity,
+  hasAuthenticodeSignature,
+  buildAppProfile,
+  cleanAppBinaries,
+} from "../src/appPackager.js";
 
 test("S-4: buildMsiPackage executes wixl via execFileSync with discrete array arguments", () => {
   const origExecFileSync = child_process.execFileSync;
@@ -251,4 +260,55 @@ test("Security: getCoreModulesIntegrity detects dummy / truncated binaries as un
     } catch {}
   }
 });
+
+test("Security: hasAuthenticodeSignature verifies signed WinDivert64.sys and PECAppCore.dll, rejects unsigned files", () => {
+  const sysPath = path.resolve("./templates/app/windows/WinDivert64.sys");
+  const corePath = path.resolve("./templates/app/windows/PECAppCore.dll");
+  const unsignedPath = path.resolve("./templates/app/windows/WinDivert.dll");
+
+  if (fs.existsSync(sysPath)) {
+    assert.equal(hasAuthenticodeSignature(sysPath), true, "WinDivert64.sys must have valid Authenticode signature");
+  }
+  if (fs.existsSync(corePath)) {
+    assert.equal(hasAuthenticodeSignature(corePath), true, "PECAppCore.dll must have valid Authenticode signature");
+  }
+  if (fs.existsSync(unsignedPath)) {
+    assert.equal(hasAuthenticodeSignature(unsignedPath), false, "WinDivert.dll is not Authenticode signed");
+  }
+
+  // Non-existent or dummy file
+  assert.equal(hasAuthenticodeSignature("non_existent_file.sys"), false);
+  const tmpDummy = path.join(os.tmpdir(), `dummy_${Date.now()}.dll`);
+  try {
+    fs.writeFileSync(tmpDummy, "MZ_DUMMY fake stub DLL content");
+    assert.equal(hasAuthenticodeSignature(tmpDummy), false);
+  } finally {
+    try { fs.unlinkSync(tmpDummy); } catch {}
+  }
+});
+
+test("Security: cleanAppBinaries never deletes WinDivert64.sys or PECAppCore.dll", () => {
+  const result = cleanAppBinaries();
+  for (const del of result.deletedFiles) {
+    const lower = del.toLowerCase();
+    assert.ok(!lower.includes("windivert64.sys"), "cleanAppBinaries must never delete WinDivert64.sys");
+    assert.ok(!lower.includes("pecappcore.dll"), "cleanAppBinaries must never delete PECAppCore.dll");
+  }
+});
+
+test("Profile: buildAppProfile preserves proxy password when provided in options or proxy node", () => {
+  const cfg = {
+    ...getAppBuildConfig(),
+    password: "secret_proxy_pass_123",
+  };
+  const profile = buildAppProfile(cfg, "https://127.0.0.1:3000") as any;
+  assert.ok(Array.isArray(profile.ProxyConfigs));
+  assert.ok(profile.ProxyConfigs.length > 0);
+  assert.strictEqual(
+    profile.ProxyConfigs[0].Password,
+    "secret_proxy_pass_123",
+    "buildAppProfile must preserve the proxy password instead of wiping to empty string"
+  );
+});
+
 

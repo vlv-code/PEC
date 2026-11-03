@@ -476,4 +476,34 @@ test("D7: availableProxies includes credentials user and pass for Windows C-clie
   }
 });
 
+test("App Sync API: returns theme object in sync response for dynamic corporate theming", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/app/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Fleet-Token": TEST_TOKEN,
+      },
+      body: JSON.stringify({
+        appInstanceId: "app_theme_test",
+        hostname: "WORKSTATION-THEME",
+        username: "corp_user",
+        version: "2.2.0",
+      }),
+    });
+
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.ok, true);
+    assert.ok(body.theme, "body.theme must be present in sync response");
+    assert.strictEqual(typeof body.theme.preset, "string");
+    assert.strictEqual(typeof body.theme.mode, "string");
+    assert.strictEqual(typeof body.theme.primary, "string");
+    assert.ok(body.theme.primary.startsWith("#"), "theme.primary should be a hex color");
+    assert.strictEqual(typeof body.theme.background, "string");
+    assert.strictEqual(typeof body.theme.card, "string");
+  });
+});
+
+
 
