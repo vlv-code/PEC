@@ -5162,12 +5162,47 @@
       }
 
       try {
-        let res = await adminFetch('/api/github/releases');
-        if (res.status === 404) {
-          res = await adminFetch('/api/releases/github');
+        let res = null;
+        try {
+          res = await adminFetch('/api/github/releases');
+          if (res.status === 404) {
+            res = await adminFetch('/api/releases/github');
+          }
+        } catch (netErr) {}
+
+        let data = null;
+        if (res && res.ok) {
+          data = await res.json();
+        } else {
+          // Direct fallback from browser to GitHub API if server is 404/500/offline
+          try {
+            const ghRes = await fetch('https://api.github.com/repos/vlv-code/PEC/releases', {
+              headers: { Accept: 'application/vnd.github.v3+json' }
+            });
+            if (ghRes.ok) {
+              const rawReleases = await ghRes.json();
+              const serverVer = (document.getElementById('versionReleaseBadge')?.getAttribute('data-server-version')) || '1.0.0';
+              const releases = Array.isArray(rawReleases) ? rawReleases.map(r => ({
+                tag: r.tag_name || '',
+                name: r.name || r.tag_name || '',
+                publishedAt: r.published_at || '',
+                htmlUrl: r.html_url || 'https://github.com/vlv-code/PEC/releases'
+              })) : [];
+              const latestRelease = releases[0] || null;
+              const latestVer = latestRelease ? (latestRelease.tag || '').replace(/^v/, '') : '';
+              const isUpdate = Boolean(latestVer && latestVer !== serverVer);
+              data = {
+                currentVersion: serverVer,
+                latestRelease,
+                releases,
+                updateAvailable: isUpdate,
+                hasUpdate: isUpdate
+              };
+            }
+          } catch (directErr) {}
         }
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
+
+        if (!data) throw new Error('Release check failed');
         cachedReleases = data;
 
         const isUpdate = Boolean(data.updateAvailable || data.hasUpdate);
@@ -5204,6 +5239,12 @@
         if (badge) {
           badge.textContent = currentLang === 'ru' ? 'Не удалось проверить' : 'Check failed';
           badge.className = 'badge badge-offline';
+        }
+        if (info) {
+          info.innerHTML = `<span style="color:var(--text-muted); font-size:11px;">${currentLang === 'ru' ? 'Релизы на GitHub:' : 'Releases on GitHub:'}</span>`;
+        }
+        if (list) {
+          list.innerHTML = `<div style="padding:4px 0; text-align:center;"><a href="https://github.com/vlv-code/PEC/releases" target="_blank" rel="noopener noreferrer" style="color:var(--primary); font-size:11.5px; text-decoration:none;">github.com/vlv-code/PEC/releases &rarr;</a></div>`;
         }
       }
     }
