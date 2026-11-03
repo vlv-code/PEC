@@ -405,6 +405,25 @@
       isGlobalBrandCustomUploaded = Boolean(currentGlobalBrandCustomDataUrl);
     } catch(e) {}
 
+    function setGlobalBrandIconSource(source) {
+      if (source !== 'custom') source = 'preset';
+      try { localStorage.setItem('pec_global_brand_icon_mode', source); } catch(e){}
+      const btnPreset = document.getElementById('optBrandIconPreset');
+      const btnCustom = document.getElementById('optBrandIconCustom');
+      const boxPreset = document.getElementById('boxBrandIconPreset');
+      const boxCustom = document.getElementById('boxBrandIconCustom');
+      if (btnPreset) btnPreset.classList.toggle('active', source === 'preset');
+      if (btnCustom) btnCustom.classList.toggle('active', source === 'custom');
+      if (boxPreset) boxPreset.style.display = source === 'preset' ? 'block' : 'none';
+      if (boxCustom) boxCustom.style.display = source === 'custom' ? 'block' : 'none';
+
+      if (source === 'custom' && !currentGlobalBrandCustomDataUrl) {
+        const fileInput = document.getElementById('globalBrandIconFileInput');
+        if (fileInput) fileInput.click();
+      }
+      applyThemeSyncToConstructors();
+    }
+
     function setGlobalBrandCustomIcon(dataUrl, isUploaded = false, triggerSync = true) {
       currentGlobalBrandCustomDataUrl = dataUrl || '';
       isGlobalBrandCustomUploaded = Boolean(isUploaded && dataUrl);
@@ -434,7 +453,8 @@
     }
 
     function clearGlobalBrandCustomIcon() {
-      setGlobalBrandCustomIcon('', false, true);
+      setGlobalBrandCustomIcon('', false, false);
+      setGlobalBrandIconSource('preset');
     }
 
     function onGlobalBrandIconFileSelected(e) {
@@ -452,12 +472,15 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, 128, 128);
             const pngDataUrl = canvas.toDataURL('image/png');
+            setGlobalBrandIconSource('custom');
             setGlobalBrandCustomIcon(pngDataUrl, true, true);
           } catch(err) {
+            setGlobalBrandIconSource('custom');
             setGlobalBrandCustomIcon(rawUrl, true, true);
           }
         };
         img.onerror = function() {
+          setGlobalBrandIconSource('custom');
           setGlobalBrandCustomIcon(rawUrl, true, true);
         };
         img.src = rawUrl;
@@ -554,6 +577,18 @@
       const currentMode = document.body.getAttribute('data-theme-mode') || 'dark';
       const currentIcon = localStorage.getItem('pec_global_brand_icon') || 'shield';
       const globalCustomPng = localStorage.getItem('pec_global_brand_custom_data_url') || currentGlobalBrandCustomDataUrl || '';
+      const iconSourceMode = localStorage.getItem('pec_global_brand_icon_mode') || (globalCustomPng ? 'custom' : 'preset');
+
+      const btnPreset = document.getElementById('optBrandIconPreset');
+      const btnCustom = document.getElementById('optBrandIconCustom');
+      const boxPreset = document.getElementById('boxBrandIconPreset');
+      const boxCustom = document.getElementById('boxBrandIconCustom');
+      if (btnPreset) btnPreset.classList.toggle('active', iconSourceMode === 'preset');
+      if (btnCustom) btnCustom.classList.toggle('active', iconSourceMode === 'custom');
+      if (boxPreset) boxPreset.style.display = iconSourceMode === 'preset' ? 'block' : 'none';
+      if (boxCustom) boxCustom.style.display = iconSourceMode === 'custom' ? 'block' : 'none';
+
+      const isCustomActive = iconSourceMode === 'custom' && Boolean(globalCustomPng);
 
       const iconMapEmoji = {
         shield: '🛡️',
@@ -573,7 +608,7 @@
 
       const dashBrandIcon = document.getElementById('dashboardBrandIcon');
       if (dashBrandIcon) {
-        if (globalCustomPng) {
+        if (isCustomActive) {
           dashBrandIcon.innerHTML = `<img src="${globalCustomPng}" style="width: 24px; height: 24px; border-radius: 4px; vertical-align: middle; object-fit: contain;" alt="logo" />`;
         } else {
           dashBrandIcon.textContent = iconMapEmoji[currentIcon] || '🛡️';
@@ -616,7 +651,7 @@
         const bldUploadBtn = document.querySelector('button[onclick*="iconFileInput"]');
         if (bldUploadBtn) bldUploadBtn.disabled = true;
 
-        if (globalCustomPng) {
+        if (isCustomActive) {
           if (typeof setCustomIconDataUrl === 'function') {
             setCustomIconDataUrl(globalCustomPng, true, false);
           }
@@ -646,7 +681,7 @@
         const appClearBtn = document.getElementById('btnAppClearIcon');
         if (appClearBtn) appClearBtn.disabled = true;
 
-        if (globalCustomPng) {
+        if (isCustomActive) {
           setAppCustomIconDataUrl(globalCustomPng, true, false);
         } else {
           setAppCustomIconDataUrl('', false, false);
@@ -863,6 +898,8 @@
         lblThemeDark: '🌙 Dark',
         lblThemeLight: '☀️ Light',
         lblGlobalBrandIcon: 'Corporate Brand Icon:',
+        lblBrandIconPreset: 'Emoji (Preset)',
+        lblBrandIconCustom: 'Custom Logo (PNG/SVG)',
         btnUploadCorporateIcon: 'Upload Logo (PNG / SVG)',
         lblSyncThemeWithApps: 'Synchronize theme and icon with extensions & apps',
         msgThemeLockedBySync: 'Synchronized with corporate dashboard appearance',
@@ -1266,6 +1303,8 @@
         lblThemeDark: '🌙 Темная',
         lblThemeLight: '☀️ Светлая',
         lblGlobalBrandIcon: 'Корпоративный значок:',
+        lblBrandIconPreset: 'Эмодзи',
+        lblBrandIconCustom: 'Свой логотип',
         btnUploadCorporateIcon: 'Загрузить логотип (PNG / SVG)',
         lblSyncThemeWithApps: 'Синхронизировать тему и значок с расширениями и приложениями',
         msgThemeLockedBySync: 'Синхронизировано с корпоративным оформлением панели',
@@ -5111,7 +5150,7 @@
       if (popover) popover.style.display = 'none';
     }
 
-    async function checkGitHubReleasesNow() {
+    async function refreshGitHubReleasesNow() {
       const badge = document.getElementById('hdrGhUpdateBadge');
       const info = document.getElementById('hdrGhLatestInfo');
       const list = document.getElementById('hdrGhReleasesList');
@@ -5234,6 +5273,7 @@
     window.setServerTheme = setServerTheme;
     window.setServerThemeMode = setServerThemeMode;
     window.setGlobalBrandIcon = setGlobalBrandIcon;
+    window.setGlobalBrandIconSource = setGlobalBrandIconSource;
     window.setGlobalBrandCustomIcon = setGlobalBrandCustomIcon;
     window.clearGlobalBrandCustomIcon = clearGlobalBrandCustomIcon;
     window.onGlobalBrandIconFileSelected = onGlobalBrandIconFileSelected;
@@ -5244,7 +5284,7 @@
     window.applyThemeSyncToConstructors = applyThemeSyncToConstructors;
     window.toggleVersionPopover = toggleVersionPopover;
     window.closeVersionPopover = closeVersionPopover;
-    window.checkGitHubReleasesNow = checkGitHubReleasesNow;
+    window.refreshGitHubReleasesNow = refreshGitHubReleasesNow;
     window.switchPreviewWindowTab = switchPreviewWindowTab;
     window.onAppRuleInheritModeChange = onAppRuleInheritModeChange;
     window.renderBranchAppSpecificRules = renderBranchAppSpecificRules;

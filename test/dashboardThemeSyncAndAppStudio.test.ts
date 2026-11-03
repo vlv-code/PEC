@@ -55,6 +55,10 @@ test("Dashboard Theme Modes & Corporate Sync UI elements exist", () => {
   assert.ok(html.includes('setServerThemeMode(\'light\')'), 'Light mode click handler must exist');
 
   // Global Brand Icon & Sync Checkbox
+  assert.ok(html.includes('id="optBrandIconPreset"'), 'optBrandIconPreset must exist');
+  assert.ok(html.includes('id="optBrandIconCustom"'), 'optBrandIconCustom must exist');
+  assert.ok(html.includes('id="boxBrandIconPreset"'), 'boxBrandIconPreset must exist');
+  assert.ok(html.includes('id="boxBrandIconCustom"'), 'boxBrandIconCustom must exist');
   assert.ok(html.includes('id="globalBrandIconSelect"'), 'globalBrandIconSelect must exist');
   assert.ok(html.includes('id="globalBrandIconFileInput"'), 'globalBrandIconFileInput must exist');
   assert.ok(html.includes('id="globalBrandCustomPreviewBox"'), 'globalBrandCustomPreviewBox must exist');
@@ -82,6 +86,8 @@ test("CSS styles for light theme mode and lock state are defined", () => {
   const css = fs.readFileSync(path.join(__dirname, "../public/dashboard.css"), "utf-8");
 
   assert.ok(css.includes('body[data-theme-mode="light"]'), 'CSS must define body[data-theme-mode="light"]');
+  assert.ok(css.includes('body:not([data-theme-mode="light"])[data-theme="light"]'), 'Enterprise Light must have dark mode styles');
+  assert.ok(css.includes('body[data-theme-mode="light"][data-theme="light"]'), 'Enterprise Light must have light mode styles');
   assert.ok(css.includes('.theme-sync-lock-banner'), 'CSS must define .theme-sync-lock-banner');
   assert.ok(css.includes('.locked-by-sync'), 'CSS must define .locked-by-sync');
   assert.ok(css.includes('max-height: calc(100vh - 80px)'), 'Popover must have max-height constraint');
@@ -92,12 +98,14 @@ test("dashboard.js exports and functions for theme mode and sync are defined", (
 
   assert.ok(js.includes('function setServerThemeMode('), 'setServerThemeMode function must exist');
   assert.ok(js.includes('function setGlobalBrandIcon('), 'setGlobalBrandIcon function must exist');
+  assert.ok(js.includes('function setGlobalBrandIconSource('), 'setGlobalBrandIconSource function must exist');
   assert.ok(js.includes('function setGlobalBrandCustomIcon('), 'setGlobalBrandCustomIcon function must exist');
   assert.ok(js.includes('function onGlobalBrandIconFileSelected('), 'onGlobalBrandIconFileSelected function must exist');
   assert.ok(js.includes('function setAppCustomIconDataUrl('), 'setAppCustomIconDataUrl function must exist');
   assert.ok(js.includes('function onAppIconFileSelected('), 'onAppIconFileSelected function must exist');
   assert.ok(js.includes('function toggleSyncThemeWithApps('), 'toggleSyncThemeWithApps function must exist');
   assert.ok(js.includes('function applyThemeSyncToConstructors('), 'applyThemeSyncToConstructors function must exist');
+  assert.ok(js.includes('window.setGlobalBrandIconSource = setGlobalBrandIconSource'), 'window.setGlobalBrandIconSource must be exported');
   assert.ok(js.includes('window.setServerThemeMode = setServerThemeMode'), 'window export for setServerThemeMode must exist');
   assert.ok(js.includes('window.setGlobalBrandIcon = setGlobalBrandIcon'), 'window export for setGlobalBrandIcon must exist');
   assert.ok(js.includes('window.setGlobalBrandCustomIcon = setGlobalBrandCustomIcon'), 'window export for setGlobalBrandCustomIcon must exist');

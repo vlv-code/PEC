@@ -111,24 +111,39 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <!-- 4. Global Corporate Brand Icon & Sync With Apps -->
             <div style="margin-bottom: 10px; padding-top: 8px; border-top: 1px dashed var(--border);">
               <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;" data-i18n="lblGlobalBrandIcon">Корпоративный значок:</div>
-              <select id="globalBrandIconSelect" onchange="setGlobalBrandIcon(this.value)" style="width: 100%; font-size: 11.5px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card-inner); color: var(--text); margin-bottom: 6px;">
-                <option value="shield">🛡️ Щит (Защита)</option>
-                <option value="network">🌐 Сеть (Сфера)</option>
-                <option value="terminal">💻 Терминал (Консоль)</option>
-                <option value="lock">🔒 Замок (VPN / Безопасность)</option>
-                <option value="rocket">🚀 Ракета (Скорость)</option>
-              </select>
-
-              <!-- Custom PNG / Image Upload (По аналогии с расширением) -->
-              <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px;">
-                <input type="file" id="globalBrandIconFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;" onchange="onGlobalBrandIconFileSelected(event)" />
-                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('globalBrandIconFileInput').click()" style="font-size: 11px; padding: 4px 8px; height: 28px; flex: 1; justify-content: center; display: inline-flex; align-items: center; gap: 5px;">
-                  <img src="/icons/folder.png" class="icon-inline" alt="folder">
-                  <span data-i18n="btnUploadCorporateIcon">Загрузить логотип (PNG / SVG)</span>
+              <!-- Icon source toggle: Emoji vs Custom logo -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
+                <button type="button" id="optBrandIconPreset" class="popover-layout-btn active" onclick="setGlobalBrandIconSource('preset')">
+                  <span style="font-size: 11px; font-weight: 600;" data-i18n="lblBrandIconPreset">Эмодзи</span>
                 </button>
-                <div id="globalBrandCustomPreviewBox" style="display: none; align-items: center; gap: 4px;">
-                  <img id="globalBrandCustomPreviewImg" src="" alt="Icon preview" style="width: 24px; height: 24px; border-radius: 4px; object-fit: contain; border: 1px solid var(--border); background: rgba(0,0,0,0.2);" />
-                  <button type="button" class="btn btn-sm" onclick="clearGlobalBrandCustomIcon()" title="Удалить логотип" style="padding: 2px 5px; font-size: 10px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;"><img src="/icons/cross.png" class="icon-inline-sm" alt="del"></button>
+                <button type="button" id="optBrandIconCustom" class="popover-layout-btn" onclick="setGlobalBrandIconSource('custom')">
+                  <span style="font-size: 11px; font-weight: 600;" data-i18n="lblBrandIconCustom">Свой логотип</span>
+                </button>
+              </div>
+
+              <!-- Preset Emoji Container -->
+              <div id="boxBrandIconPreset" style="display: block; margin-bottom: 6px;">
+                <select id="globalBrandIconSelect" onchange="setGlobalBrandIcon(this.value)" style="width: 100%; font-size: 11.5px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card-inner); color: var(--text); margin-bottom: 0;">
+                  <option value="shield">🛡️ Щит (Защита)</option>
+                  <option value="network">🌐 Сеть (Сфера)</option>
+                  <option value="terminal">💻 Терминал (Консоль)</option>
+                  <option value="lock">🔒 Замок (VPN / Безопасность)</option>
+                  <option value="rocket">🚀 Ракета (Скорость)</option>
+                </select>
+              </div>
+
+              <!-- Custom PNG / Image Upload Container -->
+              <div id="boxBrandIconCustom" style="display: none; margin-bottom: 6px;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                  <input type="file" id="globalBrandIconFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;" onchange="onGlobalBrandIconFileSelected(event)" />
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('globalBrandIconFileInput').click()" style="font-size: 11px; padding: 4px 8px; height: 28px; flex: 1; justify-content: center; display: inline-flex; align-items: center; gap: 5px;">
+                    <img src="/icons/folder.png" class="icon-inline" alt="folder">
+                    <span data-i18n="btnUploadCorporateIcon">Загрузить логотип (PNG / SVG)</span>
+                  </button>
+                  <div id="globalBrandCustomPreviewBox" style="display: none; align-items: center; gap: 4px;">
+                    <img id="globalBrandCustomPreviewImg" src="" alt="Icon preview" style="width: 24px; height: 24px; border-radius: 4px; object-fit: contain; border: 1px solid var(--border); background: rgba(0,0,0,0.2);" />
+                    <button type="button" class="btn btn-sm" onclick="clearGlobalBrandCustomIcon()" title="Удалить логотип" style="padding: 2px 5px; font-size: 10px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;"><img src="/icons/cross.png" class="icon-inline-sm" alt="del"></button>
+                  </div>
                 </div>
               </div>
 
@@ -156,10 +171,8 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
         <!-- 3. Version Badge with GitHub Updates Popover & GitHub Link -->
         <div style="position: relative; display: inline-block;">
-          <span id="versionReleaseBadge" data-server-version="${currentVersion}" class="header-badge" onclick="toggleVersionPopover(event)" title="PEC Server v${currentVersion} &amp; Релизы GitHub" style="cursor: pointer; position: relative;">
-            v${currentVersion}
-            <span id="versionUpdateDot" style="display: none; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; box-shadow: 0 0 5px #f59e0b;"></span>
-          </span>
+          <span id="versionReleaseBadge" data-server-version="${currentVersion}" class="header-badge" onclick="toggleVersionPopover(event)" title="PEC Server v${currentVersion} &amp; Релизы GitHub" style="cursor: pointer; position: relative;">v${currentVersion}</span>
+          <span id="versionUpdateDot" style="display: none; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; box-shadow: 0 0 5px #f59e0b; pointer-events: none;"></span>
 
           <!-- Compact GitHub Version Popover -->
           <div id="popoverVersionRelease" class="customization-popover" style="display: none; width: 300px; right: 0; left: auto;" onclick="event.stopPropagation()">
@@ -175,7 +188,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               <div id="hdrGhLatestInfo" style="font-size: 11.5px; margin-bottom: 8px; color: var(--text);"></div>
               <div id="hdrGhReleasesList" style="max-height: 120px; overflow-y: auto; background: var(--bg-card-subtle); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin-bottom: 8px; font-size: 11px;"></div>
               <div style="display: flex; justify-content: space-between; gap: 6px; pt: 6px; border-top: 1px solid var(--border);">
-                <button type="button" onclick="checkGitHubReleasesNow()" class="btn-secondary" style="font-size: 11px; padding: 4px 8px; flex: 1;" data-i18n="btnCheckGhReleases">Проверить</button>
+                <button type="button" onclick="refreshGitHubReleasesNow()" class="btn-secondary" style="font-size: 11px; padding: 4px 8px; flex: 1;" data-i18n="btnCheckGhReleases">Проверить</button>
                 <a href="https://github.com/vlv-code/PEC/releases" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="font-size: 11px; padding: 4px 8px; text-decoration: none;">GitHub Релизы</a>
               </div>
             </div>
@@ -426,6 +439,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                   <select id="branchAppInheritProfileSelect" style="font-size: 12px; margin-bottom: 6px; width: 100%;" onchange="onBranchAppInheritProfileChange()">
                     <option value="">-- Наследовать по назначению флота --</option>
                   </select>
+                  <select id="appRoutingProfileSelect" style="display: none;"></select>
                 </div>
                 <div style="margin-bottom: 6px;">
                   <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Режим применения правил:</div>
