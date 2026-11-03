@@ -968,6 +968,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                                     ru->enabled = rEnabled;
                                                     ru->localhost = 0;
                                                     ru->cfgStoredId = 1;
+                                                    ru->isCorporate = 1;
 
                                                     wchar_t* wi = (wchar_t*)malloc(PB_HOSTS_MAX * sizeof(wchar_t));
                                                     wchar_t* wd = (wchar_t*)malloc(PB_HOSTS_MAX * sizeof(wchar_t));
@@ -989,17 +990,57 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
 
                                                 if (newRuleCount > 0)
                                                 {
-                                                    BOOL rulesDiffer = (g_profile.ruleCount != newRuleCount);
+                                                    // Merge:
+                                                    // 1. Corporate rules from server always take precedence (slots 0 .. newRuleCount - 1).
+                                                    // 2. Custom local user rules (!isCorporate) are preserved after corporate rules.
+                                                    PBRule mergedRules[PB_MAX_RULE];
+                                                    int mergedCount = 0;
+                                                    ZeroMemory(mergedRules, sizeof(mergedRules));
+
+                                                    for (int i = 0; i < newRuleCount && mergedCount < PB_MAX_RULE; i++)
+                                                    {
+                                                        mergedRules[mergedCount] = newRules[i];
+                                                        mergedRules[mergedCount].isCorporate = 1;
+                                                        mergedCount++;
+                                                    }
+
+                                                    for (int i = 0; i < g_profile.ruleCount && mergedCount < PB_MAX_RULE; i++)
+                                                    {
+                                                        if (!g_profile.rule[i].isCorporate)
+                                                        {
+                                                            // Deduplicate if user rule exactly matches a corporate rule definition
+                                                            BOOL dupOfCorp = FALSE;
+                                                            for (int c = 0; c < newRuleCount; c++)
+                                                            {
+                                                                if (wcscmp(g_profile.rule[i].proc, newRules[c].proc) == 0 &&
+                                                                    wcscmp(g_profile.rule[i].hosts, newRules[c].hosts) == 0 &&
+                                                                    wcscmp(g_profile.rule[i].ports, newRules[c].ports) == 0 &&
+                                                                    _wcsicmp(g_profile.rule[i].proto, newRules[c].proto) == 0 &&
+                                                                    _wcsicmp(g_profile.rule[i].action, newRules[c].action) == 0)
+                                                                {
+                                                                    dupOfCorp = TRUE;
+                                                                    break;
+                                                                }
+                                                            }
+                                                            if (!dupOfCorp)
+                                                            {
+                                                                mergedRules[mergedCount++] = g_profile.rule[i];
+                                                            }
+                                                        }
+                                                    }
+
+                                                    BOOL rulesDiffer = (g_profile.ruleCount != mergedCount);
                                                     if (!rulesDiffer)
                                                     {
-                                                        for (int i = 0; i < newRuleCount; i++)
+                                                        for (int i = 0; i < mergedCount; i++)
                                                         {
-                                                            if (wcscmp(g_profile.rule[i].proc, newRules[i].proc) != 0 ||
-                                                                wcscmp(g_profile.rule[i].hosts, newRules[i].hosts) != 0 ||
-                                                                wcscmp(g_profile.rule[i].ports, newRules[i].ports) != 0 ||
-                                                                _wcsicmp(g_profile.rule[i].proto, newRules[i].proto) != 0 ||
-                                                                _wcsicmp(g_profile.rule[i].action, newRules[i].action) != 0 ||
-                                                                g_profile.rule[i].enabled != newRules[i].enabled)
+                                                            if (wcscmp(g_profile.rule[i].proc, mergedRules[i].proc) != 0 ||
+                                                                wcscmp(g_profile.rule[i].hosts, mergedRules[i].hosts) != 0 ||
+                                                                wcscmp(g_profile.rule[i].ports, mergedRules[i].ports) != 0 ||
+                                                                _wcsicmp(g_profile.rule[i].proto, mergedRules[i].proto) != 0 ||
+                                                                _wcsicmp(g_profile.rule[i].action, mergedRules[i].action) != 0 ||
+                                                                g_profile.rule[i].enabled != mergedRules[i].enabled ||
+                                                                g_profile.rule[i].isCorporate != mergedRules[i].isCorporate)
                                                             {
                                                                 rulesDiffer = TRUE;
                                                                 break;
@@ -1008,13 +1049,14 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                                     }
                                                     if (rulesDiffer)
                                                     {
-                                                        g_profile.ruleCount = newRuleCount;
-                                                        for (int i = 0; i < newRuleCount; i++)
+                                                        g_profile.ruleCount = mergedCount;
+                                                        for (int i = 0; i < mergedCount; i++)
                                                         {
-                                                            g_profile.rule[i] = newRules[i];
+                                                            g_profile.rule[i] = mergedRules[i];
                                                         }
                                                         PB_ProfileSave(g_activeProfile, &g_profile);
-                                                        PB_WriteAppLog("PecSync: Правила маршрутизации (%d) обновлены с сервера", newRuleCount);
+                                                        PB_WriteAppLog("PecSync: Правила маршрутизации синхронизированы (%d корп., %d польз.)",
+                                                            newRuleCount, mergedCount - newRuleCount);
                                                         if (g_hSyncMainWnd)
                                                         {
                                                             PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);

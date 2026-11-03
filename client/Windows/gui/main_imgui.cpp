@@ -1184,6 +1184,7 @@ static void RenderRulesTab()
     if (ImGui::Button(u8"Клонировать") && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount && g_profile.ruleCount < PB_MAX_RULE) {
         PBRule clone = g_profile.rule[g_selectedRuleIdx];
         clone.nativeId = 0;
+        clone.isCorporate = 0;
         _snwprintf_s(clone.name, 128, _TRUNCATE, L"%s (копия)", g_profile.rule[g_selectedRuleIdx].name);
         g_profile.rule[g_profile.ruleCount] = clone;
         EngineAddRule(&g_profile.rule[g_profile.ruleCount]);
@@ -1256,22 +1257,33 @@ static void RenderRulesTab()
                 ImGui::SetTooltip(u8"Редактировать правило");
             }
 
-            // Column 2: Rule Target / Name with clean row selection
+            // Column 2: Rule Target / Name with corporate / custom indicator
             ImGui::TableSetColumnIndex(2);
+            if (r->isCorporate) {
+                ImGui::TextColored(PecTheme::Primary, u8"[Корп]");
+            } else {
+                ImGui::TextColored(PecTheme::Success, u8"[Польз]");
+            }
+            ImGui::SameLine(0, 6.0f);
+
             std::string displayRule = (!name.empty() && name != "PEC-App Rule" && name != "*")
                                       ? name
                                       : (!proc.empty() ? proc : hosts);
             if (displayRule.empty()) displayRule = "*";
 
+            char selId[256];
+            snprintf(selId, sizeof(selId), "%s##rulesel%d", displayRule.c_str(), i);
             bool isSelected = (g_selectedRuleIdx == i);
-            if (ImGui::Selectable(displayRule.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick)) {
+            if (ImGui::Selectable(selId, isSelected, ImGuiSelectableFlags_AllowDoubleClick)) {
                 g_selectedRuleIdx = i;
                 if (ImGui::IsMouseDoubleClicked(0)) {
                     OpenRuleModal(i);
                 }
             }
             if (ImGui::IsItemHovered()) {
-                std::string tip = "Название: " + (name.empty() ? "(по умолчанию)" : name) +
+                std::string kind = r->isCorporate ? u8"Корпоративное правило (управляется сервером)" : u8"Пользовательское правило (локальное)";
+                std::string tip = kind +
+                                  "\nНазвание: " + (name.empty() ? "(по умолчанию)" : name) +
                                   "\nПроцессы: " + (proc.empty() ? "*" : proc) +
                                   "\nДомены / Порты: " + (hosts.empty() ? "*" : hosts) + " : " + (ports.empty() ? "*" : ports);
                 ImGui::SetTooltip("%s", tip.c_str());
@@ -1315,6 +1327,15 @@ static void RenderRulesTab()
 
     if (ImGui::BeginPopupModal(ruleModalTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Spacing();
+
+        if (g_isEditRule && g_editRuleIdx >= 0 && g_editRuleIdx < g_profile.ruleCount) {
+            if (g_profile.rule[g_editRuleIdx].isCorporate) {
+                ImGui::TextColored(PecTheme::Primary, u8"ℹ Корпоративное правило (синхронизируется с сервера)");
+            } else {
+                ImGui::TextColored(PecTheme::Success, u8"ℹ Пользовательское правило (локальное)");
+            }
+            ImGui::Spacing();
+        }
 
         ImGui::Text(u8"Название:");
         ImGui::InputText("##rmName", g_rmName, sizeof(g_rmName));
@@ -1384,6 +1405,7 @@ static void RenderRulesTab()
             } else if (g_profile.ruleCount < PB_MAX_RULE) {
                 target = &g_profile.rule[g_profile.ruleCount++];
                 ZeroMemory(target, sizeof(*target));
+                target->isCorporate = 0;
             }
 
             if (target) {

@@ -274,6 +274,7 @@ export function createAppSyncRouter(
         protocol: string;
         action: string;
         enabled: boolean;
+        isCorporate?: boolean;
       }> = [];
 
       // 1. Process rules configured in App Builder / Desktop Constructor
@@ -288,6 +289,7 @@ export function createAppSyncRouter(
             protocol: (pr.protocol || "BOTH").toUpperCase(),
             action: (pr.action || "PROXY").toUpperCase(),
             enabled: true,
+            isCorporate: true,
           });
         }
       }
@@ -307,6 +309,7 @@ export function createAppSyncRouter(
             protocol: "BOTH",
             action: r.action === "block" ? "BLOCK" : (r.action === "direct" ? "DIRECT" : "PROXY"),
             enabled: true,
+            isCorporate: true,
           });
         }
       }

@@ -352,6 +352,7 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
       Action: action,
       IsEnabled: true,
       ProxyConfigId: 1,
+      IsCorporate: true,
     };
   });
 

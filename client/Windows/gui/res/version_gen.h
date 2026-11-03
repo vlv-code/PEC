@@ -23,4 +23,14 @@
 #define APP_VERSION L"1.0.5"
 #endif
 
+#ifndef PEC_DEFAULT_SERVER_URL
+#define PEC_DEFAULT_SERVER_URL "https://update.example.com"
+#define PEC_DEFAULT_SERVER_URL_W L"https://update.example.com"
+#endif
+
+#ifndef PEC_DEFAULT_FLEET_TOKEN
+#define PEC_DEFAULT_FLEET_TOKEN "test-admin-token"
+#define PEC_DEFAULT_FLEET_TOKEN_W L"test-admin-token"
+#endif
+
 #endif // VERSION_GEN_H

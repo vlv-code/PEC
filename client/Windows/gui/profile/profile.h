@@ -45,6 +45,7 @@ typedef struct {
     int     enabled;
     int     localhost;            // 1 = connections to localhost (127.x / ::1) matching this rule are proxied too
     UINT32  cfgStoredId;          // ProxyConfigId as written in the profile
+    int     isCorporate;          // 1 = managed corporate rule (synced from server), 0 = local custom user rule
 } PBRule;
 
 typedef struct {

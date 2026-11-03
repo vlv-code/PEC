@@ -679,6 +679,7 @@ void PB_ProfileLoad(const wchar_t* name, PBProfile* p)
                 ru->enabled = json_bool(r, "IsEnabled", 1);
                 ru->localhost = json_bool(r, "LocalhostViaProxy", oldGlobalLocalhost);
                 ru->cfgStoredId = (UINT32)json_long(r, "ProxyConfigId", 0);
+                ru->isCorporate = json_bool(r, "IsCorporate", 0);
             }
 
         normalize_cfg_ids(p);
@@ -819,7 +820,8 @@ BOOL PB_ProfileSave(const wchar_t* name, const PBProfile* p)
         sb_put(&b, "      \"IsEnabled\": "); sb_put(&b, r->enabled ? "true" : "false"); sb_put(&b, ",\n");
         sb_put(&b, "      \"LocalhostViaProxy\": "); sb_put(&b, r->localhost ? "true" : "false"); sb_put(&b, ",\n");
         snprintf(tmp, sizeof(tmp), "%u", r->cfgStoredId);
-        sb_put(&b, "      \"ProxyConfigId\": "); sb_put(&b, tmp); sb_put(&b, "\n");
+        sb_put(&b, "      \"ProxyConfigId\": "); sb_put(&b, tmp); sb_put(&b, ",\n");
+        sb_put(&b, "      \"IsCorporate\": "); sb_put(&b, r->isCorporate ? "true" : "false"); sb_put(&b, "\n");
         sb_put(&b, "    }");
     }
     sb_put(&b, p->ruleCount ? "\n  ],\n" : "],\n");
