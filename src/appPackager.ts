@@ -1502,7 +1502,16 @@ export function parseAppVersion(rawVersion?: string): {
   };
 }
 
-export function writeVersionGenHeaders(clientWinDir: string, appVer: ReturnType<typeof parseAppVersion>): void {
+export function writeVersionGenHeaders(
+  clientWinDir: string,
+  appVer: ReturnType<typeof parseAppVersion>,
+  serverUrl?: string,
+  fleetToken?: string
+): void {
+  const envPublicBase = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  const defaultServerUrl = (serverUrl || envPublicBase || getAppBuildConfig().defaultServerUrl || "http://127.0.0.1:3000").replace(/\/+$/, "");
+  const defaultFleetToken = (fleetToken || process.env.EXT_SHARED_TOKEN || getAppBuildConfig().defaultToken || "corp-proxy-secret-token-change-me").trim();
+
   const content = `#ifndef VERSION_GEN_H
 #define VERSION_GEN_H
 
@@ -1526,6 +1535,16 @@ export function writeVersionGenHeaders(clientWinDir: string, appVer: ReturnType<
 
 #ifndef APP_VERSION
 #define APP_VERSION L"${appVer.version}"
+#endif
+
+#ifndef PEC_DEFAULT_SERVER_URL
+#define PEC_DEFAULT_SERVER_URL "${defaultServerUrl}"
+#define PEC_DEFAULT_SERVER_URL_W L"${defaultServerUrl}"
+#endif
+
+#ifndef PEC_DEFAULT_FLEET_TOKEN
+#define PEC_DEFAULT_FLEET_TOKEN "${defaultFleetToken}"
+#define PEC_DEFAULT_FLEET_TOKEN_W L"${defaultFleetToken}"
 #endif
 
 #endif // VERSION_GEN_H

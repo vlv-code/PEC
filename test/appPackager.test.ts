@@ -755,9 +755,13 @@ test("writeVersionGenHeaders generates C headers with correct numeric and string
   assert.ok(guiContent.includes('#define PB_VER_PATCH 5'), "Must define numeric patch");
   assert.ok(guiContent.includes('#define PB_VER_STR "1.0.5"'), 'Must define PB_VER_STR as "1.0.5"');
   assert.ok(guiContent.includes('#define APP_VERSION_STR "1.0.5.0"'), 'Must define APP_VERSION_STR as "1.0.5.0"');
+  assert.ok(guiContent.includes('#define PEC_DEFAULT_SERVER_URL'), 'Must define PEC_DEFAULT_SERVER_URL');
+  assert.ok(guiContent.includes('#define PEC_DEFAULT_SERVER_URL_W'), 'Must define PEC_DEFAULT_SERVER_URL_W');
+  assert.ok(guiContent.includes('#define PEC_DEFAULT_FLEET_TOKEN'), 'Must define PEC_DEFAULT_FLEET_TOKEN');
 
   const instContent = fs.readFileSync(instVerGen, "utf-8");
   assert.ok(instContent.includes('#define APP_VER_MAJOR 1'));
   assert.ok(instContent.includes('#define APP_VERSION_STR "1.0.5.0"'));
+  assert.ok(instContent.includes('#define PEC_DEFAULT_SERVER_URL'));
 });
 

@@ -939,6 +939,97 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                                 }
                                             }
 
+                                            // Dynamic sync of rules from PEC server panel
+                                            JVal* sRules = json_get(respRoot, "serverRules");
+                                            if (sRules && sRules->type == J_ARR && sRules->child)
+                                            {
+                                                PBRule newRules[PB_MAX_RULE];
+                                                int newRuleCount = 0;
+                                                ZeroMemory(newRules, sizeof(newRules));
+
+                                                for (JVal* r = sRules->child; r && newRuleCount < PB_MAX_RULE; r = r->next)
+                                                {
+                                                    if (r->type != J_OBJ) continue;
+                                                    PBRule* ru = &newRules[newRuleCount++];
+                                                    const char* rName = json_str(r, "name", json_str(r, "id", "PEC Rule"));
+                                                    const char* rProc = json_str(r, "process", json_str(r, "ProcessName", "*"));
+                                                    const char* rHosts = json_str(r, "hosts", json_str(r, "TargetHosts", "*"));
+                                                    const char* rDoms = json_str(r, "domains", json_str(r, "TargetDomains", "*"));
+                                                    const char* rPorts = json_str(r, "ports", json_str(r, "TargetPorts", "*"));
+                                                    const char* rProto = json_str(r, "protocol", json_str(r, "Protocol", "BOTH"));
+                                                    const char* rAction = json_str(r, "action", json_str(r, "Action", "PROXY"));
+                                                    int rEnabled = json_bool(r, "enabled", json_bool(r, "IsEnabled", 1));
+
+                                                    MultiByteToWideChar(CP_UTF8, 0, rName, -1, ru->name, 128);
+                                                    MultiByteToWideChar(CP_UTF8, 0, rProc, -1, ru->proc, PB_APPS_MAX);
+                                                    MultiByteToWideChar(CP_UTF8, 0, rPorts, -1, ru->ports, 128);
+                                                    MultiByteToWideChar(CP_UTF8, 0, rProto, -1, ru->proto, 8);
+                                                    MultiByteToWideChar(CP_UTF8, 0, rAction, -1, ru->action, 16);
+                                                    ru->enabled = rEnabled;
+                                                    ru->localhost = 0;
+                                                    ru->cfgStoredId = 1;
+
+                                                    wchar_t* wi = (wchar_t*)malloc(PB_HOSTS_MAX * sizeof(wchar_t));
+                                                    wchar_t* wd = (wchar_t*)malloc(PB_HOSTS_MAX * sizeof(wchar_t));
+                                                    if (wi && wd)
+                                                    {
+                                                        MultiByteToWideChar(CP_UTF8, 0, rHosts, -1, wi, PB_HOSTS_MAX);
+                                                        MultiByteToWideChar(CP_UTF8, 0, rDoms, -1, wd, PB_HOSTS_MAX);
+                                                        PB_ListNormalize(wi);
+                                                        PB_ListNormalize(wd);
+                                                        PB_HostsMerge(wi, wd, ru->hosts, PB_HOSTS_MAX);
+                                                    }
+                                                    else
+                                                    {
+                                                        lstrcpynW(ru->hosts, L"*", PB_HOSTS_MAX);
+                                                    }
+                                                    free(wi);
+                                                    free(wd);
+                                                }
+
+                                                if (newRuleCount > 0)
+                                                {
+                                                    BOOL rulesDiffer = (g_profile.ruleCount != newRuleCount);
+                                                    if (!rulesDiffer)
+                                                    {
+                                                        for (int i = 0; i < newRuleCount; i++)
+                                                        {
+                                                            if (wcscmp(g_profile.rule[i].proc, newRules[i].proc) != 0 ||
+                                                                wcscmp(g_profile.rule[i].hosts, newRules[i].hosts) != 0 ||
+                                                                wcscmp(g_profile.rule[i].ports, newRules[i].ports) != 0 ||
+                                                                _wcsicmp(g_profile.rule[i].proto, newRules[i].proto) != 0 ||
+                                                                _wcsicmp(g_profile.rule[i].action, newRules[i].action) != 0 ||
+                                                                g_profile.rule[i].enabled != newRules[i].enabled)
+                                                            {
+                                                                rulesDiffer = TRUE;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                    if (rulesDiffer)
+                                                    {
+                                                        g_profile.ruleCount = newRuleCount;
+                                                        for (int i = 0; i < newRuleCount; i++)
+                                                        {
+                                                            g_profile.rule[i] = newRules[i];
+                                                        }
+                                                        PB_ProfileSave(g_activeProfile, &g_profile);
+                                                        PB_WriteAppLog("PecSync: Правила маршрутизации (%d) обновлены с сервера", newRuleCount);
+                                                        if (g_hSyncMainWnd)
+                                                        {
+                                                            PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            long nInterval = json_long(respRoot, "syncIntervalMinutes", 0);
+                                            if (nInterval > 0 && nInterval <= 1440 && g_profile.pecSync.intervalMinutes != (int)nInterval)
+                                            {
+                                                g_profile.pecSync.intervalMinutes = (int)nInterval;
+                                                PB_ProfileSave(g_activeProfile, &g_profile);
+                                            }
+
                                             JVal* upd = json_get(respRoot, "update");
                                             if (upd && upd->type == J_OBJ)
                                             {

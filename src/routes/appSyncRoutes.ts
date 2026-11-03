@@ -18,7 +18,7 @@ import { ProxyNode } from "../types.js";
 import { getActiveRelease } from "../releases.js";
 import { resolveProfileForInstance, expandRuleDomains } from "../routing.js";
 import { getBuildConfig as getExtensionBuildConfig } from "../packager.js";
-import { DEFAULT_APP_VERSION } from "../appPackager.js";
+import { DEFAULT_APP_VERSION, getAppBuildConfig } from "../appPackager.js";
 import { isNewerVersion } from "../utils/semver.js";
 import { getAppBuildInfoPath } from "../storage.js";
 
@@ -262,7 +262,9 @@ export function createAppSyncRouter(
           (hasUpdate ? ` [Update -> v${latestVersion}]` : "")
       );
 
-      const assignedProfile = resolveProfileForInstance(effectivePairedExtId);
+      const targetProfileId = effectivePairedExtId || cleanAppId;
+      const assignedProfile = resolveProfileForInstance(targetProfileId);
+      const appBldCfg = getAppBuildConfig();
       const serverRules: Array<{
         id: string;
         process: string;
@@ -274,13 +276,30 @@ export function createAppSyncRouter(
         enabled: boolean;
       }> = [];
 
+      // 1. Process rules configured in App Builder / Desktop Constructor
+      if (Array.isArray(appBldCfg.processRules)) {
+        for (const pr of appBldCfg.processRules) {
+          serverRules.push({
+            id: pr.id || `proc_rule_${serverRules.length + 1}`,
+            process: pr.processName || "*",
+            hosts: pr.targetHosts || "*",
+            ports: pr.targetPorts || "*",
+            domains: pr.targetDomains || "*",
+            protocol: (pr.protocol || "BOTH").toUpperCase(),
+            action: (pr.action || "PROXY").toUpperCase(),
+            enabled: true,
+          });
+        }
+      }
+
+      // 2. Domain rules from assigned routing profile (if any)
       if (assignedProfile && Array.isArray(assignedProfile.rules)) {
         for (let i = 0; i < assignedProfile.rules.length; i++) {
           const r = assignedProfile.rules[i];
           if (!r.enabled) continue;
           const expanded = expandRuleDomains(r);
           serverRules.push({
-            id: r.id || `rule_${i + 1}`,
+            id: r.id || `rule_${serverRules.length + 1}`,
             process: "*",
             hosts: "*",
             ports: "*",
@@ -296,6 +315,7 @@ export function createAppSyncRouter(
         ok: true,
         ...(issuedInstanceToken ? { instanceToken: issuedInstanceToken } : {}),
         allowUserProxySwitch: allowUserSwitch,
+        syncIntervalMinutes: appBldCfg.syncIntervalMinutes || 15,
         activeProxy: proxyPayload,
         availableProxies,
         serverRules,

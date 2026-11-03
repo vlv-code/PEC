@@ -91,6 +91,8 @@ test("App Sync API: registers desktop client, returns proxy info, and pairs with
     assert.ok(body.update);
     assert.strictEqual(body.update.hasUpdate, false);
     assert.ok(Array.isArray(body.serverRules), "serverRules should be an array");
+    assert.ok(body.serverRules.length > 0, "serverRules should contain processRules and routing rules");
+    assert.ok(typeof body.syncIntervalMinutes === "number", "syncIntervalMinutes must be returned");
 
     // Verify desktop instance registered
     const desktopInstances = getActiveDesktopInstances();

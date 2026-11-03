@@ -385,6 +385,20 @@ static BOOL CopyFromSourceFolder(const wchar_t* srcDir, const wchar_t* destDir)
         }
     }
 
+    // Step 3: Copy configuration profile (pec_profile.pbprofile) if present in source package
+    wchar_t profSrc[MAX_PATH], profDest[MAX_PATH];
+    wsprintfW(profSrc, L"%ls\\pec_profile.pbprofile", srcDir);
+    wsprintfW(profDest, L"%ls\\pec_profile.pbprofile", destDir);
+    if (GetFileAttributesW(profSrc) != INVALID_FILE_ATTRIBUTES) {
+        CopyFileW(profSrc, profDest, FALSE);
+    }
+    wchar_t defSrc[MAX_PATH], defDest[MAX_PATH];
+    wsprintfW(defSrc, L"%ls\\Default.pbprofile", srcDir);
+    wsprintfW(defDest, L"%ls\\Default.pbprofile", destDir);
+    if (GetFileAttributesW(defSrc) != INVALID_FILE_ATTRIBUTES) {
+        CopyFileW(defSrc, defDest, FALSE);
+    }
+
     return TRUE;
 }
 

@@ -59,6 +59,14 @@
 #include "pec_imgui_theme.h"
 #include "res/resource.h"
 
+#if defined(__has_include)
+#if __has_include("res/version_gen.h")
+#include "res/version_gen.h"
+#elif __has_include("version_gen.h")
+#include "version_gen.h"
+#endif
+#endif
+
 extern "C" {
 #include "profile/profile.h"
 #include "api/pb_api.h"
@@ -2143,19 +2151,38 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
             PB_ProfileDefaults(&g_profile, g_activeProfile);
         }
 
-        // Server URL Auto-Heal: When loading the profile at startup, check if %APPDATA% has
-        // serverUrl equal to "http://127.0.0.1:3000" (or empty). If so, and the local cand profile
-        // (pec_profile.pbprofile in the executable's directory) has a valid remote HTTPS serverUrl
-        // (starts with "https://"), automatically upgrade g_profile.pecSync.serverUrl and fleetToken
-        // to match cand, and save the profile!
+        // 1. Command line override: --server <url>
+        const wchar_t* cmdLine = GetCommandLineW();
+        if (cmdLine) {
+            const wchar_t* srvArg = wcsstr(cmdLine, L"--server");
+            if (!srvArg) srvArg = wcsstr(cmdLine, L"-server");
+            if (srvArg) {
+                srvArg += (srvArg[1] == L'-' ? 8 : 7);
+                while (*srvArg == L' ' || *srvArg == L'=' || *srvArg == L'\"') srvArg++;
+                wchar_t cliUrl[512] = { 0 };
+                int ci = 0;
+                while (*srvArg && *srvArg != L' ' && *srvArg != L'\"' && ci < 511) {
+                    cliUrl[ci++] = *srvArg++;
+                }
+                cliUrl[ci] = 0;
+                if (ci > 0) {
+                    lstrcpynW(g_profile.pecSync.serverUrl, cliUrl, 512);
+                    g_profile.pecSync.enabled = 1;
+                    PB_ProfileSave(g_activeProfile, &g_profile);
+                }
+            }
+        }
+
+        // 2. Server URL Auto-Heal: Check candidate profile in application folder
         bool isLocalOrEmpty = (g_profile.pecSync.serverUrl[0] == 0 ||
                                wcscmp(g_profile.pecSync.serverUrl, L"http://127.0.0.1:3000") == 0);
         if (isLocalOrEmpty && candExists) {
             PBProfile* candProf = (PBProfile*)calloc(1, sizeof(PBProfile));
             if (candProf) {
                 PB_ProfileLoad(cand, candProf);
-                bool candIsHttps = (_wcsnicmp(candProf->pecSync.serverUrl, L"https://", 8) == 0);
-                if (candIsHttps || (g_profile.pecSync.serverUrl[0] == 0 && candProf->pecSync.serverUrl[0] != 0)) {
+                bool candHasUrl = (candProf->pecSync.serverUrl[0] != 0 &&
+                                   wcscmp(candProf->pecSync.serverUrl, L"http://127.0.0.1:3000") != 0);
+                if (candHasUrl) {
                     lstrcpynW(g_profile.pecSync.serverUrl, candProf->pecSync.serverUrl, 512);
                     lstrcpynW(g_profile.pecSync.fleetToken, candProf->pecSync.fleetToken, 256);
                     g_profile.pecSync.intervalMinutes = candProf->pecSync.intervalMinutes;
@@ -2168,6 +2195,46 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
                 free(candProf);
             }
         }
+
+        // 3. Registry Fallback: MSI / GPO writes to HKLM\Software\PEC-App
+        isLocalOrEmpty = (g_profile.pecSync.serverUrl[0] == 0 ||
+                          wcscmp(g_profile.pecSync.serverUrl, L"http://127.0.0.1:3000") == 0);
+        if (isLocalOrEmpty) {
+            HKEY hReg = NULL;
+            if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\PEC-App", 0, KEY_READ, &hReg) == ERROR_SUCCESS ||
+                RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\PEC-App", 0, KEY_READ, &hReg) == ERROR_SUCCESS) {
+                wchar_t regUrl[512] = { 0 };
+                DWORD regUrlSize = sizeof(regUrl);
+                if (RegQueryValueExW(hReg, L"ServerUrl", NULL, NULL, (LPBYTE)regUrl, &regUrlSize) == ERROR_SUCCESS && regUrl[0] != 0) {
+                    lstrcpynW(g_profile.pecSync.serverUrl, regUrl, 512);
+                    wchar_t regTok[256] = { 0 };
+                    DWORD regTokSize = sizeof(regTok);
+                    if (RegQueryValueExW(hReg, L"FleetToken", NULL, NULL, (LPBYTE)regTok, &regTokSize) == ERROR_SUCCESS && regTok[0] != 0) {
+                        lstrcpynW(g_profile.pecSync.fleetToken, regTok, 256);
+                    }
+                    g_profile.pecSync.enabled = 1;
+                    PB_ProfileSave(g_activeProfile, &g_profile);
+                }
+                RegCloseKey(hReg);
+            }
+        }
+
+        // 4. Primary Bootstrap Data baked into binary at compile time (like in Chrome extension)
+#if defined(PEC_DEFAULT_SERVER_URL_W)
+        isLocalOrEmpty = (g_profile.pecSync.serverUrl[0] == 0 ||
+                          wcscmp(g_profile.pecSync.serverUrl, L"http://127.0.0.1:3000") == 0);
+        if (isLocalOrEmpty && PEC_DEFAULT_SERVER_URL_W[0] != 0 &&
+            wcscmp(PEC_DEFAULT_SERVER_URL_W, L"http://127.0.0.1:3000") != 0) {
+            lstrcpynW(g_profile.pecSync.serverUrl, PEC_DEFAULT_SERVER_URL_W, 512);
+#if defined(PEC_DEFAULT_FLEET_TOKEN_W)
+            lstrcpynW(g_profile.pecSync.fleetToken, PEC_DEFAULT_FLEET_TOKEN_W, 256);
+#endif
+            g_profile.pecSync.intervalMinutes = 15;
+            g_profile.pecSync.enabled = 1;
+            PB_ProfileSave(g_activeProfile, &g_profile);
+        }
+#endif
+
         if (g_profile.pecSync.serverUrl[0] == 0) {
             lstrcpynW(g_profile.pecSync.serverUrl, L"http://127.0.0.1:3000", 512);
             lstrcpynW(g_profile.pecSync.fleetToken, L"corp-proxy-secret-token-change-me", 256);
