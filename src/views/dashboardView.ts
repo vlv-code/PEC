@@ -31,17 +31,14 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
         <p id="appSubtitle" style="font-size: 14px; color: var(--text-muted);" data-i18n="appSubtitle">Enterprise Proxy Synchronization</p>
       </div>
       <div class="header-controls">
-        <!-- Version Badge -->
-        <span id="versionReleaseBadge" data-server-version="${currentVersion}" class="header-badge" onclick="toggleCustomizationPopover(event)" title="PEC Server v${currentVersion} &amp; Appearance">v${currentVersion}</span>
-
-        <!-- GitHub Repository Link -->
-        <a href="https://github.com/vlv-code/PEC" target="_blank" rel="noopener noreferrer" id="btnGithubLink" class="btn-icon" data-i18n-title="btnGithubTitle" title="GitHub: vlv-code/PEC">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+        <!-- 1. Refresh All (Icon Only - far left) -->
+        <button id="btnRefreshAll" onclick="refreshAll()" class="btn-icon" data-i18n-title="btnRefreshAllTitle" title="Обновить всё">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
-        </a>
+        </button>
 
-        <!-- Server Customization Popover Trigger (Palette Icon) -->
+        <!-- 2. Server Customization (Palette Icon) & Language Switcher -->
         <div style="position: relative; display: inline-block;">
           <button type="button" id="btnCustomization" onclick="toggleCustomizationPopover(event)" class="btn-icon" data-i18n-title="btnCustomizationTitle" title="Кастомизация оформления">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -111,19 +108,47 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
           <button type="button" id="btnLangRu" class="lang-btn active" onclick="setLanguage('ru')">RU</button>
         </div>
 
-        <span class="badge-status">
-          <span class="dot"></span>
-          <span id="lblGatewayStatus" data-i18n="statusGatewayActive">Шлюз активен</span>
-        </span>
-        
-        <!-- Refresh All (Icon Only) -->
-        <button id="btnRefreshAll" onclick="refreshAll()" class="btn-icon" data-i18n-title="btnRefreshAllTitle" title="Обновить всё">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-          </svg>
-        </button>
+        <!-- 3. Version Badge with GitHub Updates Popover & GitHub Link -->
+        <div style="position: relative; display: inline-block;">
+          <span id="versionReleaseBadge" data-server-version="${currentVersion}" class="header-badge" onclick="toggleVersionPopover(event)" title="PEC Server v${currentVersion} &amp; Релизы GitHub" style="cursor: pointer; position: relative;">
+            v${currentVersion}
+            <span id="versionUpdateDot" style="display: none; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; box-shadow: 0 0 5px #f59e0b;"></span>
+          </span>
 
-        <!-- Log out (Icon Only) - revokes the server session -->
+          <!-- Compact GitHub Version Popover -->
+          <div id="popoverVersionRelease" class="customization-popover" style="display: none; width: 300px; right: 0; left: auto;" onclick="event.stopPropagation()">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);">
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);" data-i18n="titleGhVersionControl">Версии и релизы GitHub</span>
+              <button type="button" onclick="closeVersionPopover()" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1;">&times;</button>
+            </div>
+            <div id="headerGhReleaseContent">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11.5px; color: var(--text-muted);">Текущая: <strong style="color: var(--primary);">v${currentVersion}</strong></span>
+                <span id="hdrGhUpdateBadge" class="badge badge-online" style="font-size: 10px;">Проверка...</span>
+              </div>
+              <div id="hdrGhLatestInfo" style="font-size: 11.5px; margin-bottom: 8px; color: var(--text);"></div>
+              <div id="hdrGhReleasesList" style="max-height: 120px; overflow-y: auto; background: var(--bg-card-subtle); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin-bottom: 8px; font-size: 11px;"></div>
+              <div style="display: flex; justify-content: space-between; gap: 6px; pt: 6px; border-top: 1px solid var(--border);">
+                <button type="button" onclick="checkGitHubReleasesNow()" class="btn-secondary" style="font-size: 11px; padding: 4px 8px; flex: 1;" data-i18n="btnCheckGhReleases">Проверить</button>
+                <a href="https://github.com/vlv-code/PEC/releases" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="font-size: 11px; padding: 4px 8px; text-decoration: none;">GitHub Релизы</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- GitHub Repository Link -->
+        <a href="https://github.com/vlv-code/PEC" target="_blank" rel="noopener noreferrer" id="btnGithubLink" class="btn-icon" data-i18n-title="btnGithubTitle" title="GitHub: vlv-code/PEC">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+        </a>
+
+        <!-- 4. Minimized Pulsing Status Dot with Tooltip -->
+        <span class="badge-status-dot" id="lblGatewayStatus" title="Шлюз активен" data-i18n-title="statusGatewayActive">
+          <span class="dot"></span>
+        </span>
+
+        <!-- 5. Log out (Icon Only - far right) -->
         <button id="btnLogout" class="btn-icon" data-i18n-title="btnLogoutTitle" title="Выйти">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -173,15 +198,15 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
     <!-- ==================== TAB 1: ROUTING & GEOBASES ==================== -->
     <div id="tab-routing" class="tab-pane active">
-      <!-- Routing Branch Switcher (Extensions vs Desktop App) -->
+      <!-- Routing Switcher (Extensions vs Desktop App) -->
       <div style="display: flex; gap: 8px; margin-bottom: 16px; background: var(--bg-card-subtle, rgba(255,255,255,0.03)); padding: 6px; border-radius: 8px; border: 1px solid var(--border);">
         <button type="button" id="btnBranchExt" class="tab-btn active" onclick="switchRoutingBranch('ext')" style="flex: 1; justify-content: center; font-size: 13px; font-weight: 600; padding: 8px 16px;">
           <img src="/icons/palette.png" class="icon-inline" alt="ext">
-          <span data-i18n="branchExtTitle">Ветка 1: Правила расширений браузера (Домены, URL, Геобазы)</span>
+          <span data-i18n="branchExtTitle">Правила расширений браузера (Домены, URL, Геобазы)</span>
         </button>
         <button type="button" id="btnBranchApp" class="tab-btn" onclick="switchRoutingBranch('app')" style="flex: 1; justify-content: center; font-size: 13px; font-weight: 600; padding: 8px 16px;">
           <img src="/icons/desktop.png" class="icon-inline" alt="app">
-          <span data-i18n="branchAppTitle">Ветка 2: Правила приложения PEC-App (Процессы, L3/L4, WinDivert)</span>
+          <span data-i18n="branchAppTitle">Правила приложения PEC-App (Процессы, L3/L4, WinDivert)</span>
         </button>
       </div>
 
@@ -323,12 +348,12 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
       </div>
       </div>
 
-      <!-- ==================== BRANCH 2: DESKTOP APP PROCESS & L3/L4 RULES ==================== -->
+      <!-- ==================== DESKTOP APP PROCESS & L3/L4 RULES ==================== -->
       <div id="branchAppView" style="display: none;">
         <div class="card">
           <h2>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span data-i18n="titleAppRoutingBranch">Ветка правил приложения PEC-App (L3/L4 & Процессы)</span>
+              <span data-i18n="titleAppRoutingBranch">Правила приложения PEC-App (L3/L4 & Процессы)</span>
               <span class="badge badge-active" style="font-size: 11px;">WinDivert / Packet Filter</span>
             </div>
             <div style="display: flex; gap: 8px;">
@@ -349,11 +374,29 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                   По умолчанию правила браузерных расширений <strong>отключены</strong> для десктопного приложения. В десктопе действуют изолированные правила фильтрации процессов и портов (L3/L4). При включении доменные правила расширений будут дополнительно транслироваться в приложение при синхронизации.
                 </div>
               </div>
-              <div id="branchAppInheritProfileContainer" style="min-width: 240px; display: none;">
-                <label style="font-size: 12px; font-weight: 600;" data-i18n="lblBranchAppInheritProfile">Профиль расширений для подмешивания:</label>
-                <select id="branchAppInheritProfileSelect" style="font-size: 12px; margin-bottom: 0;" onchange="onBranchAppInheritProfileChange()">
-                  <option value="">-- Наследовать по назначению флота --</option>
-                </select>
+              <div id="branchAppInheritProfileContainer" style="min-width: 300px; display: none;">
+                <div style="margin-bottom: 8px;">
+                  <label style="font-size: 12px; font-weight: 600;" data-i18n="lblBranchAppInheritProfile">Профиль расширений для подмешивания:</label>
+                  <select id="branchAppInheritProfileSelect" style="font-size: 12px; margin-bottom: 6px; width: 100%;" onchange="onBranchAppInheritProfileChange()">
+                    <option value="">-- Наследовать по назначению флота --</option>
+                  </select>
+                </div>
+                <div style="margin-bottom: 6px;">
+                  <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Режим применения правил:</div>
+                  <div style="display: flex; gap: 14px; font-size: 11.5px;">
+                    <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+                      <input type="radio" name="appRuleInheritMode" id="appRuleInheritModeAll" value="all" checked onchange="onAppRuleInheritModeChange()" />
+                      <span>Целиком весь профиль</span>
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+                      <input type="radio" name="appRuleInheritMode" id="appRuleInheritModeSpecific" value="specific" onchange="onAppRuleInheritModeChange()" />
+                      <span>Выбрать конкретные правила</span>
+                    </label>
+                  </div>
+                </div>
+                <div id="branchAppSpecificRulesContainer" style="display: none; max-height: 150px; overflow-y: auto; background: var(--bg-card-subtle); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-top: 6px;">
+                  <!-- Dynamically populated checklist -->
+                </div>
               </div>
             </div>
           </div>
@@ -947,38 +990,32 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
               <span data-i18n="titleAppThemes">Темы и визуальный стиль</span>
             </h2>
 
+            <!-- Unified Theme Palette Selector -->
             <div style="margin-bottom: 12px;">
-              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;" data-i18n="lblAppPresetStyle">Готовые темы оформления:</div>
-              <select id="appPresetStyle" onchange="onAppPresetChange(this.value)" style="margin-bottom: 10px;">
-                <option value="cyber-blue" selected>Cyber Blue (Технологичный неоновый синий)</option>
-                <option value="dark-obsidian">Dark Obsidian (Глубокий обсидиановый)</option>
-                <option value="emerald-secops">Emerald SecOps (Изумрудный SecOps)</option>
-                <option value="nordic-arctic">Nordic Arctic (Скандинавский арктический лед)</option>
-                <option value="enterprise-light">Enterprise Light (Корпоративный светлый)</option>
-              </select>
-
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Цветовая палитра:</div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button type="button" class="preset-chip active" id="chipAppPresetCyber" onclick="setAppPresetTheme('cyber-blue')">
+                <button type="button" class="preset-chip active" id="chipAppPaletteCyber" onclick="setAppPalette('cyber')">
                   <span class="color-swatch" style="background: #38bdf8;"></span>
                   <span>Cyber Blue</span>
                 </button>
-                <button type="button" class="preset-chip" id="chipAppPresetObsidian" onclick="setAppPresetTheme('dark-obsidian')">
+                <button type="button" class="preset-chip" id="chipAppPaletteObsidian" onclick="setAppPalette('obsidian')">
                   <span class="color-swatch" style="background: #c084fc;"></span>
                   <span>Dark Obsidian</span>
                 </button>
-                <button type="button" class="preset-chip" id="chipAppPresetNord" onclick="setAppPresetTheme('nordic-arctic')">
+                <button type="button" class="preset-chip" id="chipAppPaletteNord" onclick="setAppPalette('nord')">
                   <span class="color-swatch" style="background: #88c0d0;"></span>
                   <span>Nordic Arctic</span>
                 </button>
-                <button type="button" class="preset-chip" id="chipAppPresetEmerald" onclick="setAppPresetTheme('emerald-secops')">
+                <button type="button" class="preset-chip" id="chipAppPaletteEmerald" onclick="setAppPalette('emerald')">
                   <span class="color-swatch" style="background: #34d399;"></span>
                   <span>Emerald SecOps</span>
                 </button>
-                <button type="button" class="preset-chip" id="chipAppPresetLight" onclick="setAppPresetTheme('enterprise-light')">
+                <button type="button" class="preset-chip" id="chipAppPaletteLight" onclick="setAppPalette('light')">
                   <span class="color-swatch" style="background: #2563eb; border: 1px solid #cbd5e1;"></span>
                   <span>Enterprise Light</span>
                 </button>
               </div>
+              <input type="hidden" id="appPresetStyle" value="cyber-blue" />
             </div>
 
             <!-- Theme Geometry: Rounded (Console) vs Sharp (Terminal) -->
@@ -1028,68 +1065,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
           </div>
 
-          <!-- 3. Process Routing Rules Card -->
-          <div class="card">
-            <h2>
-              <span data-i18n="titleAppRoutingRules">Правила маршрутизации процессов</span>
-              <button type="button" id="btnAddAppRule" onclick="addNewAppProcessRule()" class="btn-secondary" style="font-size: 11px; padding: 4px 8px;">+ Добавить правило</button>
-            </h2>
-
-            <!-- Import from Central Routing Profiles -->
-            <div style="background: var(--bg-hover, rgba(255,255,255,0.03)); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px;">
-              <div style="font-size: 11px; font-weight: 600; color: var(--text-color); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                <span>🌐</span>
-                <span data-i18n="lblAppImportRouting">Импорт правил из вкладки Маршрутизация:</span>
-              </div>
-              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                <select id="appRoutingProfileSelect" style="flex: 1; min-width: 200px; font-size: 12px; margin-bottom: 0;">
-                  <option value="">-- Выберите профиль маршрутизации --</option>
-                </select>
-                <button type="button" id="btnAppImportRoutingRules" onclick="importSelectedRoutingProfileRules()" class="btn-secondary" style="font-size: 11px; padding: 6px 12px;" data-i18n="btnAppImportRules">⚡ Импортировать правила в клиент</button>
-              </div>
-              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">
-                Загружает сайты и пресеты из центрального профиля и преобразует их в правила процессов PEC-App (с портами и протоколами).
-              </div>
-            </div>
-
-            <!-- Optional extension rules mixing toggle -->
-            <div style="background: var(--bg-card-subtle, rgba(255,255,255,0.02)); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px;">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; margin: 0;">
-                <input type="checkbox" id="appIncludeExtensionRules" onchange="onAppConfigChangeLive()" style="margin: 0; width: 16px; height: 16px;" />
-                <span data-i18n="lblIncludeExtensionRules">Опционально подмешивать доменные правила расширений в десктоп-агент (по умолчанию отключено)</span>
-              </label>
-            </div>
-
-            <!-- Quick Rule Presets -->
-            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
-              <span style="font-size: 11px; color: var(--text-muted); align-self: center;" data-i18n="lblQuickRules">Быстрые пресеты:</span>
-              <button type="button" class="btn-secondary" style="font-size: 10px; padding: 3px 8px;" onclick="applyAppRulePreset('blocked_sites')">🌐 Сайты через прокси (YouTube, X, Insta)</button>
-              <button type="button" class="btn-secondary" style="font-size: 10px; padding: 3px 8px;" onclick="applyAppRulePreset('browsers')">Браузеры Direct</button>
-              <button type="button" class="btn-secondary" style="font-size: 10px; padding: 3px 8px;" onclick="applyAppRulePreset('devtools')">Разработка (curl, git, docker)</button>
-              <button type="button" class="btn-secondary" style="font-size: 10px; padding: 3px 8px;" onclick="applyAppRulePreset('tunnel')">Полный туннель (*)</button>
-            </div>
-
-            <div class="table-container" style="max-height: 280px; overflow-y: auto;">
-              <table id="appProcessRulesTable" style="width: 100%; font-size: 12px;">
-                <thead>
-                  <tr>
-                    <th>Процессы</th>
-                    <th>Сайты / Домены</th>
-                    <th>IP / Сети</th>
-                    <th>Порты</th>
-                    <th>Протокол</th>
-                    <th>Действие</th>
-                    <th>Удалить</th>
-                  </tr>
-                </thead>
-                <tbody id="appProcessRulesBody">
-                  <!-- Rows generated dynamically -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- 4. Startup & Service Behavior Card -->
+          <!-- 3. Startup & Service Behavior Card -->
           <div class="card">
             <h2>
               <span data-i18n="titleAppBehavior">Системные службы и запуск</span>
@@ -1238,28 +1214,67 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
 
                 <!-- Preview Window Navigation Tabs -->
                 <div class="mockup-tabs">
-                  <button type="button" class="mockup-tab-btn active" id="btnPrevTabRules" onclick="switchPreviewWindowTab('rules')">Маршрутизация</button>
-                  <button type="button" class="mockup-tab-btn" id="btnPrevTabProxy" onclick="switchPreviewWindowTab('proxy')">Прокси</button>
-                  <button type="button" class="mockup-tab-btn" id="btnPrevTabSettings" onclick="switchPreviewWindowTab('settings')">Настройки</button>
+                  <button type="button" class="mockup-tab-btn active" id="btnPrevTabMain" onclick="switchPreviewWindowTab('main')">Главная</button>
+                  <button type="button" class="mockup-tab-btn" id="btnPrevTabTraffic" onclick="switchPreviewWindowTab('traffic')">Трафик</button>
+                  <button type="button" class="mockup-tab-btn" id="btnPrevTabRules" onclick="switchPreviewWindowTab('rules')">Правила</button>
                   <button type="button" class="mockup-tab-btn" id="btnPrevTabLog" onclick="switchPreviewWindowTab('log')">Журнал</button>
+                  <button type="button" class="mockup-tab-btn" id="btnPrevTabSettings" onclick="switchPreviewWindowTab('settings')">Настройки</button>
+                </div>
+
+                <!-- Preview Window Tab Content: Main -->
+                <div id="prevTabMain" class="mockup-tab-content active">
+                  <div style="background: var(--app-card); border-radius: 6px; padding: 10px; margin-bottom: 8px; border: 1px solid var(--border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <span style="font-size: 11px; color: #94a3b8;">Состояние службы:</span>
+                      <span class="mockup-proxy-pill" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);">● Сервер: Активен (18 ms)</span>
+                    </div>
+                    <button type="button" style="width: 100%; padding: 8px; font-size: 12px; font-weight: 700; background: var(--app-accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;">
+                      ⚡ Туннель активен (PROXY)
+                    </button>
+                    <div style="margin-top: 8px; font-size: 10.5px; color: #94a3b8; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                      <div>Фильтр ядра: <strong style="color: #10b981;">WinDivert64.sys</strong></div>
+                      <div>Локальный релей: <strong style="color: var(--app-accent);">127.0.0.1:34010</strong></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Preview Window Tab Content: Traffic -->
+                <div id="prevTabTraffic" class="mockup-tab-content" style="display: none;">
+                  <div style="font-size: 10.5px; color: #94a3b8; margin-bottom: 4px;">Активные перехваты соединений L3/L4:</div>
+                  <div style="max-height: 140px; overflow-y: auto; background: var(--app-card); border: 1px solid var(--border); border-radius: 4px; font-size: 10.5px;">
+                    <div style="display: grid; grid-template-columns: 50px 70px 1fr 50px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 600; color: #94a3b8;">
+                      <span>Время</span><span>Процесс</span><span>Назначение</span><span>Действие</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 50px 70px 1fr 50px; padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
+                      <span style="color: #64748b;">13:40:02</span><span>curl.exe</span><span style="overflow:hidden; text-overflow:ellipsis;">api.github.com:443</span><span style="color: var(--app-accent); font-weight: 600;">PROXY</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 50px 70px 1fr 50px; padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
+                      <span style="color: #64748b;">13:40:08</span><span>git.exe</span><span style="overflow:hidden; text-overflow:ellipsis;">github.com:22</span><span style="color: var(--app-accent); font-weight: 600;">PROXY</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 50px 70px 1fr 50px; padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.03); align-items: center;">
+                      <span style="color: #64748b;">13:40:15</span><span>msedge.exe</span><span style="overflow:hidden; text-overflow:ellipsis;">internal.corp:80</span><span style="color: #10b981; font-weight: 600;">DIRECT</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Preview Window Tab Content: Rules -->
-                <div id="prevTabRules" class="mockup-tab-content active">
+                <div id="prevTabRules" class="mockup-tab-content" style="display: none;">
                   <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">Перехватываемые процессы:</div>
                   <div id="mockupRulesList" class="mockup-rules-container">
                     <!-- Populated dynamically -->
                   </div>
                 </div>
 
-                <!-- Preview Window Tab Content: Proxy -->
-                <div id="prevTabProxy" class="mockup-tab-content" style="display: none;">
-                  <div class="mockup-card-block">
-                    <div style="font-size: 11px; color: #94a3b8;">Активный узел корпоративной сети:</div>
-                    <div id="prevActiveProxyDetails" style="font-size: 12px; font-weight: 600; margin-top: 4px; color: var(--app-accent);">
-                      SOCKS5 &bull; 127.0.0.1:1080
-                    </div>
+                <!-- Preview Window Tab Content: Log -->
+                <div id="prevTabLog" class="mockup-tab-content" style="display: none;">
+                  <div class="mockup-log-console" id="mockupLogConsole" style="max-height: 120px; overflow-y: auto;">
+                    [PEC-App] WinDivert driver initialized (x64)<br>
+                    [Engine] Rules loaded: 4 filters active<br>
+                    [Engine] ProxyBridge listening on localhost:34010<br>
+                    [Sync] Periodic fleet sync scheduled every 30s<br>
+                    <span style="color: #10b981;">[Ready] Transparent packet filter active.</span>
                   </div>
+                  <button type="button" class="btn-secondary" style="font-size: 10px; padding: 3px 6px; margin-top: 6px; width: 100%;">📋 Скопировать весь лог</button>
                 </div>
 
                 <!-- Preview Window Tab Content: Settings -->
@@ -1274,17 +1289,6 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                     <div style="font-size: 11px; display: flex; justify-content: space-between;">
                       <span>Служба Windows:</span> <strong id="prevServiceVal" style="color: #64748b;">ВЫКЛ</strong>
                     </div>
-                  </div>
-                </div>
-
-                <!-- Preview Window Tab Content: Log -->
-                <div id="prevTabLog" class="mockup-tab-content" style="display: none;">
-                  <div class="mockup-log-console" id="mockupLogConsole">
-                    [PEC-App] WinDivert driver initialized (x64)<br>
-                    [Engine] Rules loaded: 2 process filters active<br>
-                    [Engine] Packet filter attached to TCP outbound: 80, 443<br>
-                    [Sync] Periodic fleet sync scheduled every 15 min<br>
-                    <span style="color: #10b981;">[Ready] Transparent routing active.</span>
                   </div>
                 </div>
 

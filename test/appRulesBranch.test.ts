@@ -87,7 +87,16 @@ test("App Rules Branch: Desktop sync excludes extension rules by default, includ
       {
         id: "rule_domain_youtube",
         name: "YouTube Rule",
+        targetType: "wildcard",
         pattern: "*.youtube.com",
+        action: "proxy",
+        enabled: true
+      },
+      {
+        id: "rule_domain_github",
+        name: "GitHub Rule",
+        targetType: "wildcard",
+        pattern: "*.github.com",
         action: "proxy",
         enabled: true
       }
@@ -156,6 +165,33 @@ test("App Rules Branch: Desktop sync excludes extension rules by default, includ
     const body2 = await res2.json();
     assert.strictEqual(body2.ok, true);
     const extRules2 = body2.serverRules.filter((r: any) => String(r.id).startsWith("ext_rule_"));
-    assert.ok(extRules2.length > 0, "Extension rules must be included when includeExtensionRules is true");
+    assert.ok(extRules2.length >= 2, "All extension rules must be included when inheritRuleIds is empty");
+
+    // Case 3: inheritRuleIds is specified -> only selected extension rules are injected
+    saveAppBuildConfig({
+      includeExtensionRules: true,
+      inheritRoutingProfileId: testProfile.id,
+      inheritRuleIds: ["rule_domain_youtube"]
+    });
+
+    const res3 = await fetch(`${base}/api/app/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Fleet-Token": TEST_TOKEN
+      },
+      body: JSON.stringify({
+        appInstanceId: "app_branch_test_3",
+        hostname: "WORKSTATION-BRANCH-3",
+        username: "CORP\\dev3",
+        version: "2.2.0"
+      })
+    });
+    assert.strictEqual(res3.status, 200);
+    const body3 = await res3.json();
+    assert.strictEqual(body3.ok, true);
+    const extRules3 = body3.serverRules.filter((r: any) => String(r.id).startsWith("ext_rule_"));
+    assert.strictEqual(extRules3.length, 1, "Only specific extension rule selected must be included");
+    assert.strictEqual(extRules3[0].domains, "*.youtube.com");
   });
 });

@@ -264,6 +264,7 @@ export interface AppBuildConfig {
   defaultProxyId: string;
   inheritRoutingProfileId?: string;
   includeExtensionRules?: boolean;
+  inheritRuleIds?: string[];
   processRules: AppProcessRule[];
   updatedAt?: string;
 }

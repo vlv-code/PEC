@@ -314,6 +314,13 @@ function renderCorporateRules(rules, profileName, defaultPolicy) {
     countBadge.textContent = ruleList.length;
   }
 
+  try {
+    const saved = localStorage.getItem("pec_corp_rules_expanded");
+    if (saved === null && ruleList.length > 3) {
+      setCorpRulesExpanded(false, false);
+    }
+  } catch (_) {}
+
   if (!ruleList.length) {
     container.innerHTML = '<div class="empty-rules" id="corpRulesEmpty">Правила маршрутизации не заданы (все запросы по умолчанию)</div>';
     return;
@@ -379,6 +386,23 @@ function renderCorporateRules(rules, profileName, defaultPolicy) {
   });
 }
 
+function setCorpRulesExpanded(expanded, saveToStorage) {
+  const card = document.getElementById("cardCorporateRules");
+  const body = document.getElementById("corpRulesBody");
+  const chevron = document.getElementById("corpRulesToggleChevron");
+  const header = document.getElementById("corpRulesHeader");
+  const isExp = Boolean(expanded);
+  if (card) card.classList.toggle("expanded", isExp);
+  if (body) body.style.display = isExp ? "block" : "none";
+  if (header) header.setAttribute("aria-expanded", isExp ? "true" : "false");
+  if (chevron) chevron.textContent = isExp ? "▲" : "▼";
+  if (saveToStorage) {
+    try {
+      localStorage.setItem("pec_corp_rules_expanded", isExp ? "true" : "false");
+    } catch (_) {}
+  }
+}
+
 window.addEventListener("message", function(e) {
   if (e.data && e.data.type === "UPDATE_SIM_STATE") {
     window.applyPopupState(e.data.state);
@@ -428,6 +452,34 @@ function initPopup() {
       window.switchPopupTab(tab.dataset.tab || tab.id);
     });
   });
+
+  // Corporate rules accordion
+  const corpRulesHeader = document.getElementById("corpRulesHeader");
+  if (corpRulesHeader) {
+    const toggleCorpRules = () => {
+      const card = document.getElementById("cardCorporateRules");
+      const isCurrentlyExpanded = card ? card.classList.contains("expanded") : false;
+      setCorpRulesExpanded(!isCurrentlyExpanded, true);
+    };
+    corpRulesHeader.addEventListener("click", toggleCorpRules);
+    corpRulesHeader.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleCorpRules();
+      }
+    });
+
+    let savedState = null;
+    try {
+      savedState = localStorage.getItem("pec_corp_rules_expanded");
+    } catch (_) {}
+
+    if (savedState !== null) {
+      setCorpRulesExpanded(savedState === "true", false);
+    } else {
+      setCorpRulesExpanded(false, false);
+    }
+  }
 
   // Day/Night theme toggler
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {

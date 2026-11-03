@@ -308,6 +308,13 @@ export function createAppSyncRouter(
           for (let i = 0; i < extProfile.rules.length; i++) {
             const r = extProfile.rules[i];
             if (!r.enabled) continue;
+            if (
+              Array.isArray(appBldCfg.inheritRuleIds) &&
+              appBldCfg.inheritRuleIds.length > 0 &&
+              !appBldCfg.inheritRuleIds.includes(r.id)
+            ) {
+              continue;
+            }
             const expanded = expandRuleDomains(r);
             serverRules.push({
               id: r.id?.startsWith("ext_rule_") ? r.id : `ext_rule_${r.id || i + 1}`,

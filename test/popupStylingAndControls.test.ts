@@ -132,4 +132,36 @@ test("background.js implements native dot indicator with proxy/direct/bypass/err
   );
 });
 
+test("popupHtmlTemplate and extension/popup.html specify constrained geometry and slim scrollbars", () => {
+  const templateHtml = renderPopupHtml();
+  const rawHtml = fs.readFileSync(path.resolve("extension/popup.html"), "utf8");
+
+  for (const html of [templateHtml, rawHtml]) {
+    assert.ok(html.includes("html, body"), "html, body geometry rule must exist");
+    assert.ok(html.includes("max-height: 580px;"), "body max-height must be 580px to prevent window-level overflow");
+    assert.ok(html.includes("::-webkit-scrollbar"), "Custom slim webkit-scrollbar must be styled");
+    assert.ok(html.includes("width: 5px;"), "Scrollbar width must be slim (5px)");
+  }
+});
+
+test("corporate rules card has collapsible accordion structure and chevron", () => {
+  const templateHtml = renderPopupHtml();
+  const rawHtml = fs.readFileSync(path.resolve("extension/popup.html"), "utf8");
+
+  for (const html of [templateHtml, rawHtml]) {
+    assert.ok(html.includes('id="corpRulesHeader"'), "corpRulesHeader must exist");
+    assert.ok(html.includes('id="corpRulesToggleChevron"'), "corpRulesToggleChevron must exist");
+    assert.ok(html.includes('id="corpRulesBody"'), "corpRulesBody must exist");
+    assert.ok(html.includes('id="tabRulesDefaultPolicy"'), "tabRulesDefaultPolicy must exist");
+  }
+});
+
+test("popup.js implements setCorpRulesExpanded and persists state under pec_corp_rules_expanded", () => {
+  const js = fs.readFileSync(path.resolve("extension/popup.js"), "utf8");
+
+  assert.ok(js.includes("setCorpRulesExpanded"), "popup.js must contain setCorpRulesExpanded function");
+  assert.ok(js.includes("pec_corp_rules_expanded"), "popup.js must persist state to localStorage with key pec_corp_rules_expanded");
+  assert.ok(js.includes("corpRulesHeader"), "popup.js must bind click listener to corpRulesHeader");
+});
+
 

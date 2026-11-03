@@ -392,7 +392,7 @@
       if (!popover) return;
       const isOpen = popover.style.display !== 'none';
       if (isOpen) {
-        closeCustomizationPopover();
+        closeCustomizationPopover(); closeVersionPopover();
       } else {
         popover.style.display = 'block';
         if (btn) btn.classList.add('active');
@@ -695,8 +695,8 @@
         lblAppThemeColor: 'Accent Color',
         lblAppThemeBg: 'Window Background',
         lblAppThemeCard: 'Card Background',
-        branchExtTitle: 'Branch 1: Browser Extensions (Domains, URLs, GeoBases)',
-        branchAppTitle: 'Branch 2: PEC-App Desktop (Processes, L3/L4, WinDivert)',
+        branchExtTitle: 'Browser Extensions (Domains, URLs, GeoBases)',
+        branchAppTitle: 'PEC-App Desktop (Processes, L3/L4, WinDivert)',
         titleAppRoutingBranch: 'Desktop App Routing Rules (L3/L4 & Process Filtering)',
         btnSaveAppRules: 'Save Desktop App Rules',
         lblIncludeExtensionRules: 'Optionally inject extension domain rules into desktop client (disabled by default)',
@@ -1089,9 +1089,9 @@
         lblAppThemeColor: 'Акцентный цвет',
         lblAppThemeBg: 'Фон окна',
         lblAppThemeCard: 'Фон карточек',
-        branchExtTitle: 'Ветка 1: Правила расширений браузера (Домены, URL, Геобазы)',
-        branchAppTitle: 'Ветка 2: Правила приложения PEC-App (Процессы, L3/L4, WinDivert)',
-        titleAppRoutingBranch: 'Ветка правил десктоп-приложения PEC-App (L3/L4 и процессы)',
+        branchExtTitle: 'Правила расширений браузера (Домены, URL, Геобазы)',
+        branchAppTitle: 'Правила приложения PEC-App (Процессы, L3/L4, WinDivert)',
+        titleAppRoutingBranch: 'Правила десктоп-приложения PEC-App (L3/L4 & Процессы)',
         btnSaveAppRules: 'Сохранить правила десктоп-агента',
         lblIncludeExtensionRules: 'Опционально подмешивать доменные правила расширений в десктоп-агент (по умолчанию отключено)',
         lblBranchAppInheritProfile: 'Профиль расширений для подмешивания:',
@@ -3475,6 +3475,18 @@
           const bSel = document.getElementById('branchAppInheritProfileSelect');
           if (bSel) bSel.value = cfg.inheritRoutingProfileId;
         }
+
+        const isSpecific = Array.isArray(cfg.inheritRuleIds) && cfg.inheritRuleIds.length > 0;
+        const radAll = document.getElementById('appRuleInheritModeAll');
+        const radSpec = document.getElementById('appRuleInheritModeSpecific');
+        if (radAll && radSpec) {
+          radAll.checked = !isSpecific;
+          radSpec.checked = isSpecific;
+          onAppRuleInheritModeChange();
+        }
+        if (cfg.inheritRoutingProfileId) {
+          renderBranchAppSpecificRules(cfg.inheritRoutingProfileId, cfg.inheritRuleIds || []);
+        }
         currentAppThemeMode = cfg.defaultThemeMode || 'dark';
         const btnDark = document.getElementById('btnAppModeDark');
         const btnLight = document.getElementById('btnAppModeLight');
@@ -4702,7 +4714,184 @@
         if (btn) btn.disabled = false;
       }
     }
-    window.loadAppStudioConfig = loadAppStudioConfig;
+    
+    const APP_PALETTES = {
+      cyber: { accent: '#38bdf8', bg: '#0b1120', card: '#131d36', style: 'cyber-blue' },
+      obsidian: { accent: '#c084fc', bg: '#0d1117', card: '#161b22', style: 'dark-obsidian' },
+      nord: { accent: '#88c0d0', bg: '#242933', card: '#2e3440', style: 'nordic-arctic' },
+      emerald: { accent: '#34d399', bg: '#06130d', card: '#0b1f16', style: 'emerald-secops' },
+      light: { accent: '#2563eb', bg: '#f1f5f9', card: '#ffffff', style: 'enterprise-light' }
+    };
+
+    function setAppPalette(paletteKey) {
+      const p = APP_PALETTES[paletteKey];
+      if (!p) return;
+      isAppStudioDirty = true;
+
+      const colorEl = document.getElementById('appThemeColor');
+      const bgEl = document.getElementById('appThemeBackground');
+      const cardEl = document.getElementById('appThemeCard');
+      const styleEl = document.getElementById('appPresetStyle');
+
+      if (colorEl) colorEl.value = p.accent;
+      if (bgEl) bgEl.value = p.bg;
+      if (cardEl) cardEl.value = p.card;
+      if (styleEl) styleEl.value = p.style;
+
+      ['Cyber', 'Obsidian', 'Nord', 'Emerald', 'Light'].forEach(name => {
+        const chip = document.getElementById('chipAppPalette' + name);
+        if (chip) {
+          if (name.toLowerCase() === paletteKey) chip.classList.add('active');
+          else chip.classList.remove('active');
+        }
+      });
+
+      updateAppLivePreview();
+    }
+
+    function toggleVersionPopover(e) {
+      if (e) e.stopPropagation();
+      const popover = document.getElementById('popoverVersionRelease');
+      if (!popover) return;
+      const isVisible = popover.style.display === 'block';
+      closeCustomizationPopover();
+      popover.style.display = isVisible ? 'none' : 'block';
+      if (!isVisible) {
+        checkGitHubReleasesNow();
+      }
+    }
+
+    function closeVersionPopover() {
+      const popover = document.getElementById('popoverVersionRelease');
+      if (popover) popover.style.display = 'none';
+    }
+
+    async function checkGitHubReleasesNow() {
+      const badge = document.getElementById('hdrGhUpdateBadge');
+      const info = document.getElementById('hdrGhLatestInfo');
+      const list = document.getElementById('hdrGhReleasesList');
+      const updateDot = document.getElementById('versionUpdateDot');
+
+      if (badge) {
+        badge.textContent = currentLang === 'ru' ? 'Проверка...' : 'Checking...';
+        badge.className = 'badge badge-online';
+      }
+
+      try {
+        const res = await adminFetch('/api/releases/github');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        cachedReleases = data;
+
+        const isUpdate = Boolean(data.updateAvailable || data.hasUpdate);
+        if (updateDot) {
+          updateDot.style.display = isUpdate ? 'block' : 'none';
+        }
+
+        if (badge) {
+          if (isUpdate) {
+            badge.textContent = currentLang === 'ru' ? 'Доступно обновление!' : 'Update Available!';
+            badge.className = 'badge badge-action-direct';
+          } else {
+            badge.textContent = currentLang === 'ru' ? 'Актуальная версия' : 'Up to date';
+            badge.className = 'badge badge-online';
+          }
+        }
+
+        if (info && data.latestRelease) {
+          info.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>${currentLang === 'ru' ? 'Последний релиз:' : 'Latest:'} <strong>${esc(data.latestRelease.name || data.latestRelease.tag || '')}</strong></span>
+            <span style="font-size:10px; color:var(--text-muted);">${data.latestRelease.publishedAt ? new Date(data.latestRelease.publishedAt).toLocaleDateString() : ''}</span>
+          </div>`;
+        }
+
+        if (list && Array.isArray(data.releases) && data.releases.length > 0) {
+          list.innerHTML = data.releases.slice(0, 4).map(r => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+              <span style="font-weight:600; color:var(--primary);">${esc(r.tag || r.name)}</span>
+              <a href="${esc(r.htmlUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--text-muted); text-decoration:none; font-size:10px;">Открыть &rarr;</a>
+            </div>
+          `).join('');
+        }
+      } catch (err) {
+        if (badge) {
+          badge.textContent = currentLang === 'ru' ? 'Не удалось проверить' : 'Check failed';
+          badge.className = 'badge badge-offline';
+        }
+      }
+    }
+
+    function switchPreviewWindowTab(tabKey) {
+      const tabs = ['main', 'traffic', 'rules', 'log', 'settings'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('btnPrevTab' + t.charAt(0).toUpperCase() + t.slice(1));
+        const pane = document.getElementById('prevTab' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (btn) {
+          if (t === tabKey) btn.classList.add('active');
+          else btn.classList.remove('active');
+        }
+        if (pane) {
+          pane.style.display = (t === tabKey) ? 'block' : 'none';
+        }
+      });
+    }
+
+    let cachedRoutingProfilesList = [];
+
+    function onAppRuleInheritModeChange() {
+      const isSpecific = document.getElementById('appRuleInheritModeSpecific')?.checked;
+      const container = document.getElementById('branchAppSpecificRulesContainer');
+      if (container) {
+        container.style.display = isSpecific ? 'block' : 'none';
+      }
+    }
+
+    async function renderBranchAppSpecificRules(profileId, selectedRuleIds = []) {
+      const container = document.getElementById('branchAppSpecificRulesContainer');
+      if (!container) return;
+
+      if (!profileId) {
+        container.innerHTML = '<div style="color:var(--text-muted); font-size:11px;">' + (currentLang === 'ru' ? 'Выберите профиль расширений выше' : 'Select extension profile above') + '</div>';
+        return;
+      }
+
+      try {
+        if (!cachedRoutingProfilesList || cachedRoutingProfilesList.length === 0) {
+          const res = await adminFetch('/api/routing/profiles');
+          if (res.ok) cachedRoutingProfilesList = (await res.json()) || [];
+        }
+
+        const profile = cachedRoutingProfilesList.find(p => p.id === profileId);
+        if (!profile || !Array.isArray(profile.rules) || profile.rules.length === 0) {
+          container.innerHTML = '<div style="color:var(--text-muted); font-size:11px;">' + (currentLang === 'ru' ? 'В этом профиле нет правил' : 'No rules in this profile') + '</div>';
+          return;
+        }
+
+        let html = '<div style="font-size:10.5px; font-weight:600; color:var(--text-muted); margin-bottom:4px;">' + (currentLang === 'ru' ? 'Отметьте правила для подмешивания в клиент:' : 'Select rules to inject:') + '</div>';
+        profile.rules.forEach(r => {
+          const isChecked = selectedRuleIds.length === 0 || selectedRuleIds.includes(r.id);
+          const actColor = r.action === 'block' ? '#ef4444' : (r.action === 'direct' ? '#10b981' : '#38bdf8');
+          html += `<label style="display:flex; align-items:center; gap:6px; margin-bottom:4px; cursor:pointer; font-size:11px;">
+            <input type="checkbox" class="branch-app-rule-checkbox" value="${esc(r.id)}" ${isChecked ? 'checked' : ''} style="margin:0; width:14px; height:14px;" />
+            <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:${actColor};"></span>
+            <span style="font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis;">${esc(r.name || r.pattern || r.id)}</span>
+            <span style="font-size:10px; color:${actColor}; font-weight:bold; text-transform:uppercase;">${esc(r.action || 'proxy')}</span>
+          </label>`;
+        });
+
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = '<div style="color:var(--danger); font-size:11px;">Ошибка загрузки правил</div>';
+      }
+    }
+window.loadAppStudioConfig = loadAppStudioConfig;
+    window.setAppPalette = setAppPalette;
+    window.toggleVersionPopover = toggleVersionPopover;
+    window.closeVersionPopover = closeVersionPopover;
+    window.checkGitHubReleasesNow = checkGitHubReleasesNow;
+    window.switchPreviewWindowTab = switchPreviewWindowTab;
+    window.onAppRuleInheritModeChange = onAppRuleInheritModeChange;
+    window.renderBranchAppSpecificRules = renderBranchAppSpecificRules;
     window.switchRoutingBranch = switchRoutingBranch;
     window.onBranchAppIncludeExtRulesChange = onBranchAppIncludeExtRulesChange;
     window.onBranchAppInheritProfileChange = onBranchAppInheritProfileChange;

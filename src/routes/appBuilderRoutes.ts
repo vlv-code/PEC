@@ -200,6 +200,7 @@ export function createAppBuilderRouter(
       rules: cfg.processRules || [],
       includeExtensionRules: Boolean(cfg.includeExtensionRules),
       inheritRoutingProfileId: cfg.inheritRoutingProfileId || "",
+      inheritRuleIds: Array.isArray(cfg.inheritRuleIds) ? cfg.inheritRuleIds : [],
     });
   });
 
@@ -215,12 +216,18 @@ export function createAppBuilderRouter(
       if (req.body?.inheritRoutingProfileId !== undefined) {
         updates.inheritRoutingProfileId = String(req.body.inheritRoutingProfileId || "").trim();
       }
+      if (req.body?.inheritRuleIds !== undefined) {
+        updates.inheritRuleIds = Array.isArray(req.body.inheritRuleIds)
+          ? req.body.inheritRuleIds.map((id: any) => String(id).trim()).filter(Boolean)
+          : [];
+      }
       const updated = saveAppBuildConfig(updates);
       res.json({
         ok: true,
         rules: updated.processRules,
         includeExtensionRules: updated.includeExtensionRules,
         inheritRoutingProfileId: updated.inheritRoutingProfileId,
+        inheritRuleIds: updated.inheritRuleIds || [],
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

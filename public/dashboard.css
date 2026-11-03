@@ -723,13 +723,32 @@
       box-sizing: border-box;
       line-height: 1;
     }
-    .badge-status .dot {
-      width: 7px;
-      height: 7px;
+    .badge-status-dot {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      cursor: pointer;
+      box-sizing: border-box;
+      transition: all 0.2s;
+    }
+    .badge-status-dot:hover {
+      background: rgba(16, 185, 129, 0.24);
+      border-color: rgba(16, 185, 129, 0.5);
+    }
+    .badge-status .dot,
+    .badge-status-dot .dot {
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       background: var(--success);
       animation: pulse 2s infinite;
       flex-shrink: 0;
+      box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
     }
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }

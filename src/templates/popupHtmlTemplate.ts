@@ -224,16 +224,47 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 380px;
+      min-width: 380px;
+      max-width: 380px;
+      box-sizing: border-box;
+      margin: 0;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+    }
     body {
       width: 380px;
+      min-width: 380px;
+      max-width: 380px;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
-      padding: 14px;
+      padding: 12px 14px;
+      max-height: 580px;
+      overflow-y: auto;
+      overflow-x: hidden;
       font-size: 13px;
       line-height: 1.4;
       user-select: none;
       transition: background 0.2s, color 0.2s;
+    }
+
+    /* Custom slim scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.35);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.6);
     }
     header {
       display: flex;
@@ -398,7 +429,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 12px 14px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     .tab-content > .card:last-child {
       margin-bottom: 0;
@@ -494,6 +525,25 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
+    }
+    .card-header.accordion-header {
+      cursor: pointer;
+      user-select: none;
+      transition: opacity 0.15s;
+    }
+    .card-header.accordion-header:hover {
+      opacity: 0.85;
+    }
+    .accordion-chevron {
+      font-size: 10px;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      text-align: center;
+      line-height: 1;
     }
     .card-title {
       font-weight: 700;
@@ -720,7 +770,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
 
     .user-rules-list {
-      max-height: 140px;
+      max-height: 120px;
       overflow-y: auto;
       border-top: 1px solid var(--border);
       padding-top: 6px;
@@ -887,7 +937,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
 
   <!-- TAB 2: Routing -->
   <div class="tab-content" id="tab-routing">
-    <div class="card" id="cardProxySelector" style="margin-bottom: 12px;">
+    <div class="card" id="cardProxySelector" style="margin-bottom: 8px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <span style="font-weight: 600; font-size: 12px; color: var(--text);">🌐 ${t.isRu ? "Прокси-сервер" : "Proxy Server"}</span>
         <span id="activeProxyProtocolBadge" class="badge badge-action-proxy" style="font-size: 10px;">HTTP</span>
@@ -897,20 +947,27 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       </select>
     </div>
 
-    <div class="card" id="cardCorporateRules">
-      <div class="card-header">
-        <span class="card-title">${t.corpRules || "Корпоративные правила"} <span id="corpRulesCountBadge" class="badge" style="font-size: 10px; margin-left: 4px;">0</span></span>
-        <span class="tag corp-tag" id="corpProfileNameBadge">${t.fromServer || "От сервера"}</span>
+    <div class="card" id="cardCorporateRules" style="margin-bottom: 8px;">
+      <div class="card-header accordion-header" id="corpRulesHeader" role="button" tabindex="0" aria-expanded="false" title="${t.isRu ? "Нажмите, чтобы развернуть/свернуть правила" : "Click to expand/collapse rules"}" style="cursor: pointer; user-select: none; margin-bottom: 0;">
+        <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+          <span class="card-title">${t.corpRules || "Корпоративные правила"} <span id="corpRulesCountBadge" class="badge" style="font-size: 10px; margin-left: 2px;">0</span></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+          <span class="tag" id="tabRulesDefaultPolicy" style="font-size: 9px; padding: 1px 5px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">DIRECT</span>
+          <span id="corpRulesToggleChevron" class="accordion-chevron">▼</span>
+        </div>
       </div>
-      <div class="row" style="margin-top: 6px;">
-        <span class="label">${t.defaultFallback}</span>
-        <span class="tag" id="tabRulesDefaultPolicy">DIRECT</span>
-      </div>
-      <div id="corpRulesContainer" style="margin-top: 10px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
-        <div class="empty-rules" id="corpRulesEmpty">${t.isRu ? "Правила маршрутизации не заданы (все запросы по умолчанию)" : "No routing rules defined (all requests follow default policy)"}</div>
-      </div>
-      <div class="rules-notice" style="margin-top: 8px;">
-        ${t.rulesNotice}
+      <div id="corpRulesBody" style="display: none; margin-top: 8px;">
+        <div class="row" style="margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px dashed var(--border);">
+          <span class="label">${t.isRu ? "Профиль" : "Profile"}</span>
+          <span class="tag corp-tag" id="corpProfileNameBadge">${t.fromServer || "От сервера"}</span>
+        </div>
+        <div id="corpRulesContainer" style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+          <div class="empty-rules" id="corpRulesEmpty">${t.isRu ? "Правила маршрутизации не заданы (все запросы по умолчанию)" : "No routing rules defined (all requests follow default policy)"}</div>
+        </div>
+        <div class="rules-notice" style="margin-top: 8px;">
+          ${t.rulesNotice}
+        </div>
       </div>
     </div>
 
