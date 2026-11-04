@@ -361,7 +361,7 @@
       if (typeof initTabsAccessibility === 'function') initTabsAccessibility();
       if (typeof initModalBackdropHandlers === 'function') initModalBackdropHandlers();
       if (typeof initHashRouting === 'function') initHashRouting();
-      refreshAll();
+      refreshAll(true);
       startDashboardTimers();
     }
 
@@ -1002,7 +1002,7 @@
         }
 
         if (typeof setAppPalette === 'function') {
-          setAppPalette(currentTheme);
+          setAppPalette(currentTheme, false);
         }
         if (typeof setAppThemeMode === 'function') {
           setAppThemeMode(currentMode);
@@ -5807,10 +5807,10 @@
       light: { accent: '#2563eb', bg: '#f1f5f9', card: '#ffffff', style: 'enterprise-light' }
     };
 
-    function setAppPalette(paletteKey) {
+    function setAppPalette(paletteKey, isUserAction = true) {
       const p = APP_PALETTES[paletteKey];
       if (!p) return;
-      isAppStudioDirty = true;
+      if (isUserAction) isAppStudioDirty = true;
 
       const colorEl = document.getElementById('appThemeColor');
       const bgEl = document.getElementById('appThemeBackground');
@@ -8393,8 +8393,8 @@ ${JSON.stringify(json, null, 2)}`;
     window.initTabsAccessibility = initTabsAccessibility;
     window.initModalBackdropHandlers = initModalBackdropHandlers;
 
-    async function refreshAll() {
-      if (hasUnsavedRouting || (typeof isAppStudioDirty !== 'undefined' && isAppStudioDirty)) {
+    async function refreshAll(isInitialBoot = false) {
+      if (!isInitialBoot && (hasUnsavedRouting || (typeof isAppStudioDirty !== 'undefined' && isAppStudioDirty))) {
         const isRu = currentLang === 'ru';
         const ok = await pecConfirm({
           title: isRu ? 'Несохраненные изменения' : 'Unsaved Changes',
