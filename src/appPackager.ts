@@ -62,6 +62,7 @@ export function ensurePristineTemplates(): void {
 
   const binaries = [
     "PEC-App.exe",
+    "PEC-App-classic.exe",
     "PEC-CLI.exe",
     "PECAppSvc.exe",
     "PEC-App-Setup.exe",
@@ -144,6 +145,7 @@ export const DEFAULT_APP_BUILD_CONFIG: AppBuildConfig = {
   startMinimizedToTray: true,
   installAsService: false,
   trafficLogging: true,
+  legacyWin7: false,
   defaultProxyId: "",
   includeExtensionRules: false,
   processRules: [
@@ -1031,20 +1033,40 @@ export function assembleAppPackage(
 
   const resolveTemplateBinary = (name: string): string | null => {
     const isProtected = name === "WinDivert64.sys" || name === "PECAppCore.dll";
-    const candidates = [
+    const candidates: string[] = [];
+    if (name === "PEC-App.exe" && cfg.legacyWin7) {
+      candidates.push(
+        path.join(winTemplatesDir, "PEC-App-classic.exe"),
+        path.resolve("./templates/app/windows", "PEC-App-classic.exe"),
+        path.resolve("./templates/app/windows/.pristine", "PEC-App-classic.exe"),
+        path.resolve("./client/Windows/gui", "PEC-App-classic.exe"),
+        path.resolve("./client/Windows", "PEC-App-classic.exe")
+      );
+    }
+    candidates.push(
       path.join(winTemplatesDir, name),
       path.resolve("./templates/app/windows", name),
       path.resolve("./client/Windows/gui", name),
       path.resolve("./client/Windows/installer", name),
       path.resolve("./client/Windows/src/service", name),
       path.resolve("./client/Windows", name),
-    ];
+    );
+    if (name === "PEC-App.exe" && !cfg.legacyWin7) {
+      candidates.push(
+        path.resolve("./templates/app/windows/.pristine", "PEC-App.exe"),
+        path.resolve("./client/Windows", "PEC-App.exe")
+      );
+    }
     for (const c of candidates) {
       if (fs.existsSync(c)) {
         try {
-          if (fs.statSync(c).size > 1000) {
+          const sz = fs.statSync(c).size;
+          if (sz > 1000) {
             if (isProtected && c.includes("client") && !hasAuthenticodeSignature(c)) {
               console.warn(`[Security] Ignored unsigned ${name} candidate in client directory: ${c}`);
+              continue;
+            }
+            if (name === "PEC-App.exe" && !cfg.legacyWin7 && sz < 500000) {
               continue;
             }
             return c;
@@ -1252,20 +1274,40 @@ export function packageApp(baseUrl: string): AppBuildInfo {
   const winTemplatesDir = path.join(getTemplatesAppDir(), "windows");
   const resolveTemplateBinary = (name: string): string | null => {
     const isProtected = name === "WinDivert64.sys" || name === "PECAppCore.dll";
-    const candidates = [
+    const candidates: string[] = [];
+    if (name === "PEC-App.exe" && cfg.legacyWin7) {
+      candidates.push(
+        path.join(winTemplatesDir, "PEC-App-classic.exe"),
+        path.resolve("./templates/app/windows", "PEC-App-classic.exe"),
+        path.resolve("./templates/app/windows/.pristine", "PEC-App-classic.exe"),
+        path.resolve("./client/Windows/gui", "PEC-App-classic.exe"),
+        path.resolve("./client/Windows", "PEC-App-classic.exe")
+      );
+    }
+    candidates.push(
       path.join(winTemplatesDir, name),
       path.resolve("./templates/app/windows", name),
       path.resolve("./client/Windows/gui", name),
       path.resolve("./client/Windows/installer", name),
       path.resolve("./client/Windows/src/service", name),
       path.resolve("./client/Windows", name),
-    ];
+    );
+    if (name === "PEC-App.exe" && !cfg.legacyWin7) {
+      candidates.push(
+        path.resolve("./templates/app/windows/.pristine", "PEC-App.exe"),
+        path.resolve("./client/Windows", "PEC-App.exe")
+      );
+    }
     for (const c of candidates) {
       if (fs.existsSync(c)) {
         try {
-          if (fs.statSync(c).size > 1000) {
+          const sz = fs.statSync(c).size;
+          if (sz > 1000) {
             if (isProtected && c.includes("client") && !hasAuthenticodeSignature(c)) {
               console.warn(`[Security] Ignored unsigned ${name} candidate in client directory: ${c}`);
+              continue;
+            }
+            if (name === "PEC-App.exe" && !cfg.legacyWin7 && sz < 500000) {
               continue;
             }
             return c;
@@ -2030,44 +2072,78 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
       }
     } catch {}
 
-    const mainImgui = path.join(guiDir, "main_imgui.cpp");
-    if (fs.existsSync(mainImgui)) {
-      log("[GUI] Compiling PEC-App DirectX 11 ImGui GUI with x86_64-w64-mingw32-g++...");
-      let mingwGuiCmd = MINGW_GUI_CMD.replace(/^x86_64-w64-mingw32-g\+\+/, `"${gxxBin}"`);
-      mingwGuiCmd = mingwGuiCmd.replace(/main_imgui\.cpp/, `-I res main_imgui.cpp`);
-      const imguiDir = path.join(guiDir, "imgui");
-      if (fs.existsSync(imguiDir)) {
-        const imguiFiles = fs.readdirSync(imguiDir)
-          .filter((f) => f.startsWith("imgui") && f.endsWith(".cpp"))
-          .map((f) => `imgui/${f}`)
-          .join(" ");
-        if (imguiFiles) {
-          mingwGuiCmd = mingwGuiCmd.replace("imgui/imgui*.cpp", imguiFiles);
-        }
-      }
-      try {
-        child_process.execSync(mingwGuiCmd, { cwd: guiDir, stdio: "pipe" });
-      } catch (guiErr: any) {
-        const guiDetails = (guiErr?.stderr?.toString() || "") + " " + (guiErr?.stdout?.toString() || "");
-        log(`[GUI] DirectX 11 ImGui build note: ${guiDetails.trim()}. Falling back to native Win32 GUI...`);
-        child_process.execSync(
-          `"${mingw.gcc}" -O2 -s -mwindows -static -static-libgcc -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi -lwintrust`,
-          { cwd: guiDir, stdio: "pipe" }
-        );
-      }
-    } else {
-      log("[GUI] Compiling PEC-App.exe with x86_64-w64-mingw32-gcc...");
+    const cfg = getAppBuildConfig();
+    const isLegacyWin7 = Boolean(cfg.legacyWin7);
+
+    if (isLegacyWin7) {
+      log("[GUI] Compiling PEC-App Windows 7 / Classic Win32 GUI (main.c) with x86_64-w64-mingw32-gcc...");
       child_process.execSync(
         `"${mingw.gcc}" -O2 -s -mwindows -static -static-libgcc -municode -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601 -I res main.c profile/profile.c res.res -o PEC-App.exe -luser32 -lgdi32 -lcomctl32 -lshell32 -lcomdlg32 -lwinhttp -ladvapi32 -lws2_32 -luxtheme -ldwmapi -lcrypt32 -lole32 -lshlwapi -lwintrust`,
         { cwd: guiDir, stdio: "pipe" }
       );
-    }
+      const builtGui = path.join(guiDir, "PEC-App.exe");
+      if (fs.existsSync(builtGui)) {
+        syncBinary(builtGui, "PEC-App-classic.exe");
+        syncBinary(builtGui, "PEC-App.exe");
+        builtFiles.push("PEC-App.exe");
+        log(`[GUI] Successfully compiled Windows 7 Classic PEC-App.exe via MinGW (${Math.round(fs.statSync(builtGui).size / 1024)} KB)`);
+      }
+    } else {
+      const mainImgui = path.join(guiDir, "main_imgui.cpp");
+      let compiledModern = false;
+      if (fs.existsSync(mainImgui)) {
+        log("[GUI] Compiling PEC-App DirectX 11 ImGui GUI with x86_64-w64-mingw32-g++...");
+        let mingwGuiCmd = MINGW_GUI_CMD.replace(/^x86_64-w64-mingw32-g\+\+/, `"${gxxBin}"`);
+        mingwGuiCmd = mingwGuiCmd.replace(/main_imgui\.cpp/, `-I res main_imgui.cpp`);
+        const imguiDir = path.join(guiDir, "imgui");
+        if (fs.existsSync(imguiDir)) {
+          const imguiFiles = fs.readdirSync(imguiDir)
+            .filter((f) => f.startsWith("imgui") && f.endsWith(".cpp"))
+            .map((f) => `imgui/${f}`)
+            .join(" ");
+          if (imguiFiles) {
+            mingwGuiCmd = mingwGuiCmd.replace("imgui/imgui*.cpp", imguiFiles);
+          }
+        }
+        try {
+          const mingwGuiCmdD3d47 = mingwGuiCmd.replace("-ld3dcompiler", "-ld3dcompiler_47 -ld3dcompiler");
+          child_process.execSync(mingwGuiCmdD3d47, { cwd: guiDir, stdio: "pipe" });
+          compiledModern = true;
+        } catch (guiErr: any) {
+          try {
+            const mingwGuiCmdDirect = mingwGuiCmd.replace("-ld3dcompiler", "-ld3dcompiler_47");
+            child_process.execSync(mingwGuiCmdDirect, { cwd: guiDir, stdio: "pipe" });
+            compiledModern = true;
+          } catch (guiErr2: any) {
+            const guiDetails = (guiErr2?.stderr?.toString() || "") + " " + (guiErr2?.stdout?.toString() || "");
+            log(`[GUI] DirectX 11 ImGui build note: ${guiDetails.trim()}. Preserving verified modern DirectX 11 ImGui template.`);
+          }
+        }
+      }
 
-    const builtGui = path.join(guiDir, "PEC-App.exe");
-    if (fs.existsSync(builtGui)) {
-      syncBinary(builtGui, "PEC-App.exe");
-      builtFiles.push("PEC-App.exe");
-      log(`[GUI] Successfully compiled PEC-App.exe via MinGW (${Math.round(fs.statSync(builtGui).size / 1024)} KB)`);
+      const builtGui = path.join(guiDir, "PEC-App.exe");
+      if (compiledModern && fs.existsSync(builtGui) && fs.statSync(builtGui).size > 500000) {
+        syncBinary(builtGui, "PEC-App.exe");
+        builtFiles.push("PEC-App.exe");
+        log(`[GUI] Successfully compiled modern PEC-App.exe via MinGW (${Math.round(fs.statSync(builtGui).size / 1024)} KB)`);
+      } else {
+        const pristineDir = path.join(path.resolve("./templates/app/windows"), ".pristine");
+        const modernTemplates = [
+          path.join(winTemplatesDir, "PEC-App.exe"),
+          path.join(pristineDir, "PEC-App.exe"),
+          path.resolve("./templates/app/windows/PEC-App.exe"),
+          path.resolve("./client/Windows/PEC-App.exe"),
+        ];
+        const validModern = modernTemplates.find(p => fs.existsSync(p) && fs.statSync(p).size > 500000);
+        if (validModern) {
+          const target = path.join(winTemplatesDir, "PEC-App.exe");
+          if (!fs.existsSync(target) || fs.statSync(target).size < 500000) {
+            fs.copyFileSync(validModern, target);
+          }
+          if (!builtFiles.includes("PEC-App.exe")) builtFiles.push("PEC-App.exe");
+          log(`[GUI] Verified modern DirectX 11 ImGui template in place (${Math.round(fs.statSync(validModern).size / 1024)} KB)`);
+        }
+      }
     }
 
     if (fs.existsSync(cliDir)) {
@@ -2355,16 +2431,19 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   if (process.env.SKIP_NATIVE_REBUILD !== "true" && vcvars && fs.existsSync(guiDir)) {
     try {
       log(`[Toolchain] Native MSVC compiler detected: ${vcvars}`);
-      const mainImgui = path.join(guiDir, "main_imgui.cpp");
-      if (fs.existsSync(mainImgui)) {
-        log(`[GUI] Compiling PEC-App DirectX 11 ImGui GUI v${appVer.version} with MSVC (rc.exe + cl.exe)...`);
-        const clCmd = MSVC_GUI_CMD.replace(/^cl\.exe/, `cl.exe ${msvcGuiDefines}`);
-        const guiCmd = `call "${vcvars}" x64 >nul && cd /d "${guiDir}" && pushd res && rc /nologo ${msvcRcAppDefines} /fo ..\\res\\app.res app.rc && popd && copy /y res\\app.res res.res >nul 2>&1 && copy /y res\\app.res app.res >nul 2>&1 && ${clCmd}`;
-        child_process.execSync(guiCmd, { shell: "cmd.exe", windowsHide: true, stdio: "pipe" });
-      } else {
-        log(`[GUI] Compiling PEC-App GUI v${appVer.version} with MSVC (rc.exe + cl.exe)...`);
+      const isLegacyWin7 = Boolean(cfg.legacyWin7);
+      if (isLegacyWin7) {
+        log(`[GUI] Compiling PEC-App Windows 7 Classic GUI v${appVer.version} with MSVC (rc.exe + cl.exe)...`);
         const guiCmd = `call "${vcvars}" x64 >nul && cd /d "${guiDir}" && pushd res && rc /nologo ${msvcRcAppDefines} /fo ..\\app.res app.rc && popd && cl.exe /nologo /utf-8 /O1 /Os /MT /GL /Gy /GS /guard:cf /sdl /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /DUNICODE /D_UNICODE ${msvcGuiDefines} main.c profile\\profile.c app.res /Fe:PEC-App.exe /link /LTCG /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /RELEASE /DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /guard:cf /CETCOMPAT user32.lib gdi32.lib comctl32.lib shell32.lib comdlg32.lib winhttp.lib advapi32.lib ws2_32.lib wintrust.lib`;
         child_process.execSync(guiCmd, { shell: "cmd.exe", windowsHide: true, stdio: "pipe" });
+      } else {
+        const mainImgui = path.join(guiDir, "main_imgui.cpp");
+        if (fs.existsSync(mainImgui)) {
+          log(`[GUI] Compiling PEC-App DirectX 11 ImGui GUI v${appVer.version} with MSVC (rc.exe + cl.exe)...`);
+          const clCmd = MSVC_GUI_CMD.replace(/^cl\.exe/, `cl.exe ${msvcGuiDefines}`);
+          const guiCmd = `call "${vcvars}" x64 >nul && cd /d "${guiDir}" && pushd res && rc /nologo ${msvcRcAppDefines} /fo ..\\res\\app.res app.rc && popd && copy /y res\\app.res res.res >nul 2>&1 && copy /y res\\app.res app.res >nul 2>&1 && ${clCmd}`;
+          child_process.execSync(guiCmd, { shell: "cmd.exe", windowsHide: true, stdio: "pipe" });
+        }
       }
 
       const builtGui = path.join(guiDir, "PEC-App.exe");

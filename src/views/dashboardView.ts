@@ -1164,6 +1164,10 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
                 <input type="checkbox" id="appTrafficLogging" onchange="onAppConfigChangeLive()" />
                 <span data-i18n="lblAppTrafficLogging">Логирование соединений</span>
               </label>
+              <label for="appLegacyWin7" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+                <input type="checkbox" id="appLegacyWin7" onchange="onAppConfigChangeLive()" />
+                <span data-i18n="lblAppLegacyWin7">Собрать для Windows 7 (Classic Win32 GUI)</span>
+              </label>
             </div>
 
             <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">

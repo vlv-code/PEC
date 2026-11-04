@@ -1452,6 +1452,7 @@
         lblAppStartMinimized: 'Start Minimized to System Tray',
         lblAppInstallService: 'Install as Windows Service',
         lblAppTrafficLogging: 'Connection Traffic Logging',
+        lblAppLegacyWin7: 'Build for Windows 7 (Classic Win32 GUI)',
         titleAppLivePreview: 'Interactive Desktop Live Preview',
         subAppLivePreview: 'Reactive simulator of native PEC-App desktop client with real-time theme styling:',
 
@@ -1857,6 +1858,7 @@
         lblAppStartMinimized: 'Сворачивать в системный трей',
         lblAppInstallService: 'Служба Windows (Background Service)',
         lblAppTrafficLogging: 'Логирование соединений',
+        lblAppLegacyWin7: 'Собрать для Windows 7 (Классический Win32 GUI)',
         titleAppLivePreview: 'Интерактивный предпросмотр приложения',
         subAppLivePreview: 'Реактивный симулятор десктопного окна PEC-App с применением темы и правил в реальном времени:',
 
@@ -4504,6 +4506,7 @@
         const minEl = document.getElementById('appStartMinimized');
         const serviceEl = document.getElementById('appInstallService');
         const logEl = document.getElementById('appTrafficLogging');
+        const legacyWin7El = document.getElementById('appLegacyWin7');
         const syncIntervalEl = document.getElementById('appSyncIntervalMinutes');
 
         if (nameEl) nameEl.value = cfg.name || 'PEC - Proxy Client';
@@ -4525,6 +4528,7 @@
         if (minEl) minEl.checked = cfg.startMinimizedToTray !== false;
         if (serviceEl) serviceEl.checked = cfg.installAsService === true;
         if (logEl) logEl.checked = cfg.trafficLogging !== false;
+        if (legacyWin7El) legacyWin7El.checked = cfg.legacyWin7 === true;
         if (syncIntervalEl) syncIntervalEl.value = cfg.syncIntervalMinutes || 15;
 
         const inclExtEl = document.getElementById('branchAppIncludeExtensionRules');
@@ -4858,6 +4862,7 @@
       const minEl = document.getElementById('appStartMinimized');
       const serviceEl = document.getElementById('appInstallService');
       const logEl = document.getElementById('appTrafficLogging');
+      const legacyWin7El = document.getElementById('appLegacyWin7');
       const syncIntervalEl = document.getElementById('appSyncIntervalMinutes');
       const parsedInterval = syncIntervalEl ? parseInt(syncIntervalEl.value, 10) : 15;
 
@@ -4881,6 +4886,7 @@
         startMinimizedToTray: minEl ? minEl.checked : true,
         installAsService: serviceEl ? serviceEl.checked : false,
         trafficLogging: logEl ? logEl.checked : false,
+        legacyWin7: legacyWin7El ? legacyWin7El.checked : false,
         processRules: currentAppRules || []
       };
     }

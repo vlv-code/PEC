@@ -267,6 +267,7 @@ export interface AppBuildConfig {
   startMinimizedToTray: boolean;
   installAsService: boolean;
   trafficLogging: boolean;
+  legacyWin7?: boolean;
   defaultProxyId: string;
   inheritRoutingProfileId?: string;
   includeExtensionRules?: boolean;

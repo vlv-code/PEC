@@ -198,6 +198,10 @@ export function createAppBuilderRouter(
         }
       }
 
+      if (updates.legacyWin7 !== undefined) {
+        updates.legacyWin7 = Boolean(updates.legacyWin7);
+      }
+
       const updated = saveAppBuildConfig(updates);
       res.json({ ok: true, ...updated });
     } catch (err: unknown) {
@@ -235,6 +239,10 @@ export function createAppBuilderRouter(
           ? req.body.inheritRuleIds.map((id: any) => String(id).trim()).filter(Boolean)
           : [];
       }
+      if (updates.legacyWin7 !== undefined) {
+        updates.legacyWin7 = Boolean(updates.legacyWin7);
+      }
+
       const updated = saveAppBuildConfig(updates);
       res.json({
         ok: true,
@@ -326,6 +334,9 @@ export function createAppBuilderRouter(
           if (!isNaN(sim) && sim >= 1 && sim <= 1440) {
             updates.syncIntervalMinutes = Math.round(sim);
           }
+        }
+        if (updates.legacyWin7 !== undefined) {
+          updates.legacyWin7 = Boolean(updates.legacyWin7);
         }
         saveAppBuildConfig(updates);
       }

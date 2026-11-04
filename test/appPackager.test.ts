@@ -45,6 +45,7 @@ test("saveAppBuildConfig updates configuration atomically and persists", () => {
     name: "Custom Enterprise Proxy Client",
     presetStyle: "emerald-sentinel",
     trafficLogging: true,
+    legacyWin7: true,
   });
 
   assert.strictEqual(updated.name, "Custom Enterprise Proxy Client");
@@ -56,6 +57,9 @@ test("saveAppBuildConfig updates configuration atomically and persists", () => {
   assert.strictEqual(fileContent.name, "Custom Enterprise Proxy Client");
   assert.strictEqual(fileContent.presetStyle, "emerald-sentinel");
   assert.strictEqual(fileContent.trafficLogging, true);
+  assert.strictEqual(fileContent.legacyWin7, true);
+
+  saveAppBuildConfig({ legacyWin7: false });
 
   // No temporary files left behind
   const dir = path.dirname(getAppBuildConfigPath());
