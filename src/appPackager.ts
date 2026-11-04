@@ -988,8 +988,10 @@ export const buildMsiWithWix = buildMsiPackage;
 export function assembleAppPackage(
   baseUrl?: string,
   config?: AppBuildConfig,
-  destinationDir?: string
+  destinationDir?: string,
+  logger?: (msg: string) => void
 ): AppPackageResult {
+  const log = logger || ((msg: string) => console.log(`[appPackager] ${msg}`));
   const cfg = config || getAppBuildConfig();
   const targetDir = destinationDir || path.join(getReleasesDir(), "apps", cfg.version || DEFAULT_APP_VERSION);
   if (!fs.existsSync(targetDir)) {
@@ -1296,7 +1298,7 @@ export function packageApp(baseUrl: string): AppBuildInfo {
   const profileBuffer = Buffer.from(profileJson, "utf-8");
 
   // 1. Windows Package (DirectX 11 ImGui Standalone, no web server or ui/ directory)
-  const winPackage = assembleAppPackage(effectiveBaseUrl, cfg, targetReleasesDir);
+  const winPackage = assembleAppPackage(effectiveBaseUrl, cfg, targetReleasesDir, log);
   const winZipBuffer = fs.readFileSync(winPackage.zipPath);
   const winSha256 = winPackage.sha256;
 
