@@ -164,4 +164,48 @@ test("popup.js implements setCorpRulesExpanded and persists state under pec_corp
   assert.ok(js.includes("corpRulesHeader"), "popup.js must bind click listener to corpRulesHeader");
 });
 
+test("popupHtmlTemplate and popup.html support ancestor and body data-theme='light' selectors across all palettes", () => {
+  const templateHtml = renderPopupHtml();
+  const rawHtml = fs.readFileSync(path.resolve("extension/popup.html"), "utf8");
+
+  for (const html of [templateHtml, rawHtml]) {
+    // Both inline script and CSS must support setting data-theme on html or body
+    assert.ok(html.includes('[data-theme="light"] [data-palette="obsidian"]'), "Must support light theme selector with ancestor html/root");
+    assert.ok(html.includes(':root[data-theme="light"] [data-palette="obsidian"]'), "Must support :root[data-theme='light'] high specificity selector");
+    assert.ok(html.includes('[data-theme="light"] [data-palette="cyber"]'), "Must support cyber palette light mode ancestor selector");
+    assert.ok(html.includes('[data-theme="light"] [data-palette="nord"]'), "Must support nord palette light mode ancestor selector");
+  }
+});
+
+test("dashboard.css ensures high contrast for active studio theme mode button in light mode", () => {
+  const css = fs.readFileSync(path.resolve("public/dashboard.css"), "utf8");
+
+  assert.ok(
+    css.includes('body[data-theme-mode="light"] .studio-mode-btn.active'),
+    "dashboard.css must style studio-mode-btn.active under data-theme-mode='light'"
+  );
+  assert.ok(
+    css.includes('body[data-theme-mode="light"] .studio-mode-btn.active span'),
+    "dashboard.css must enforce contrast on text span under data-theme-mode='light'"
+  );
+});
+
+test("dashboard.js updateLivePreview synchronizes data-theme on html and updates version tag", () => {
+  const js = fs.readFileSync(path.resolve("public/dashboard.js"), "utf8");
+
+  assert.ok(
+    js.includes("UPDATE_STUDIO_VERSION"),
+    "dashboard.js must broadcast UPDATE_STUDIO_VERSION message to live simulator"
+  );
+  assert.ok(
+    js.includes("doc.replace(/<span class=\"version-tag\">"),
+    "dashboard.js must substitute current version into version-tag in live preview"
+  );
+  assert.ok(
+    js.includes("doc.replace(/<html([^>]*)>/i"),
+    "dashboard.js must synchronize data-theme attribute on html in live preview"
+  );
+});
+
+
 

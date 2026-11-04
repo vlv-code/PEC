@@ -1818,7 +1818,7 @@
     .studio-mode-btn.active {
       border-color: var(--primary) !important;
       background: rgba(var(--primary-rgb), 0.28) !important;
-      color: #ffffff !important;
+      color: #ffffff;
       box-shadow: 0 0 14px rgba(var(--primary-rgb), 0.4), inset 0 0 0 1px var(--primary) !important;
       font-weight: 700 !important;
     }
@@ -1846,11 +1846,17 @@
 
     /* Light theme overrides */
     body[data-theme="light"] .studio-layout-btn.active,
-    body[data-theme="light"] .studio-mode-btn.active {
-      background: rgba(37, 99, 235, 0.12);
-      border-color: #2563eb;
-      color: #2563eb;
-      box-shadow: 0 1px 3px rgba(37, 99, 235, 0.15);
+    body[data-theme="light"] .studio-mode-btn.active,
+    body[data-theme-mode="light"] .studio-layout-btn.active,
+    body[data-theme-mode="light"] .studio-mode-btn.active {
+      background: rgba(var(--primary-rgb), 0.14) !important;
+      border-color: var(--primary) !important;
+      color: var(--primary) !important;
+      box-shadow: 0 1px 3px rgba(var(--primary-rgb), 0.15) !important;
+    }
+    body[data-theme="light"] .studio-mode-btn.active span,
+    body[data-theme-mode="light"] .studio-mode-btn.active span {
+      color: var(--primary) !important;
     }
 
     .studio-layout-btn:active,

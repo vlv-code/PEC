@@ -789,14 +789,14 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             </div>
           </div>
 
-          <div class="grid-form-2col">
+          <div class="grid-form-1-15">
             <div>
               <label for="bldVersion" data-i18n="lblVersion">Version</label>
               <input type="text" id="bldVersion" oninput="onConfigChangeLive()" placeholder="1.2.0" />
             </div>
             <div>
-              <label for="bldSyncInterval" data-i18n="lblSyncInterval">Sync Interval</label>
-              <select id="bldSyncInterval" onchange="onConfigChangeLive()">
+              <label for="bldSyncInterval" data-i18n="lblSyncInterval" title="Интервал синхронизации" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Sync Interval</label>
+              <select id="bldSyncInterval" onchange="onConfigChangeLive()" style="width: 100%;">
                 <option value="1" data-i18n="optSync1">Every 1 minute (test)</option>
                 <option value="2" data-i18n="optSync2">Every 2 minutes</option>
                 <option value="5" data-i18n="optSync5">Every 5 minutes</option>

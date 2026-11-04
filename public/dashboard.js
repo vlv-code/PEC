@@ -3296,11 +3296,16 @@
       const iframe = document.getElementById('previewFrame');
       if (iframe && iframe.contentWindow) {
         try {
+          const currentVersionVal = (document.getElementById('bldVersion') && document.getElementById('bldVersion').value.trim()) || '1.0.0';
           iframe.contentWindow.postMessage({
             type: 'UPDATE_STUDIO_THEME',
             palette: activeStudioPalette,
             layout: activeStudioLayout,
             themeMode: activeStudioThemeMode
+          }, '*');
+          iframe.contentWindow.postMessage({
+            type: 'UPDATE_STUDIO_VERSION',
+            version: currentVersionVal
           }, '*');
         } catch (e) {}
       }
@@ -3598,6 +3603,7 @@
     }
 
     function onConfigChangeLive() {
+      updateLivePreview();
       clearTimeout(builderDebounceTimer);
       builderDebounceTimer = setTimeout(async () => {
         await saveBuilderConfigOnly(false);
@@ -3895,11 +3901,15 @@
                 'if (btn) btn.textContent = e.data.state.bypassActive ? "Включить прокси" : "Временно отключить";' +
               '}' +
             '} else if (e.data && e.data.type === "UPDATE_STUDIO_THEME") {' +
+              'if (document.documentElement && e.data.themeMode) document.documentElement.setAttribute("data-theme", e.data.themeMode);' +
               'if (document.body) {' +
                 'if (e.data.palette) document.body.setAttribute("data-palette", e.data.palette);' +
                 'if (e.data.layout) document.body.setAttribute("data-layout", e.data.layout);' +
                 'if (e.data.themeMode) document.body.setAttribute("data-theme", e.data.themeMode);' +
               '}' +
+            '} else if (e.data && e.data.type === "UPDATE_STUDIO_VERSION") {' +
+              'var vTag = document.querySelector(".version-tag");' +
+              'if (vTag && e.data.version) vTag.textContent = "v" + e.data.version;' +
             '}' +
           '} catch (err) { console.error("Error handling simulated message:", err); }' +
         '});' +
@@ -3949,6 +3959,12 @@
 
       try {
         let doc = htmlContent;
+        const currentVersionVal = (document.getElementById('bldVersion') && document.getElementById('bldVersion').value.trim()) || '1.0.0';
+        doc = doc.replace(/<span class="version-tag">[^<]*<\/span>/i, '<span class="version-tag">v' + currentVersionVal + '</span>');
+        doc = doc.replace(/<html([^>]*)>/i, function(match, attrs) {
+          let clean = attrs.replace(/\s*data-theme="[^"]*"/g, '');
+          return '<html' + clean + ' data-theme="' + activeStudioThemeMode + '">';
+        });
         doc = doc.replace(/<body([^>]*)>/i, function(match, attrs) {
           let clean = attrs.replace(/\s*data-palette="[^"]*"/g, '')
                            .replace(/\s*data-layout="[^"]*"/g, '')

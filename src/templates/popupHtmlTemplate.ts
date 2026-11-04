@@ -69,7 +69,16 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   <script>
     try {
       var m = localStorage.getItem("pec_theme_mode") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
-      if (m) document.documentElement.setAttribute("data-theme", m);
+      if (m) {
+        document.documentElement.setAttribute("data-theme", m);
+        if (document.body) {
+          document.body.setAttribute("data-theme", m);
+        } else {
+          document.addEventListener("DOMContentLoaded", function() {
+            if (document.body) document.body.setAttribute("data-theme", m);
+          });
+        }
+      }
     } catch(e) {}
   </script>
   <style>
@@ -116,50 +125,50 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
 
     /* 6 Color Palettes (WCAG AA Compliant High-Contrast) */
     [data-palette="cyber"] { --primary: #38bdf8; --primary-rgb: 56, 189, 248; }
-    [data-palette="cyber"]:not([data-theme="light"]), [data-palette="cyber"][data-theme="dark"] {
+    [data-palette="cyber"]:not([data-theme="light"]), [data-palette="cyber"][data-theme="dark"], [data-theme="dark"] [data-palette="cyber"] {
       --bg: #090e1a; --card: #111a2e; --card-inner: #16223b; --border: #1e2c4a; --text: #f1f5f9; --text-muted: #94a3b8;
     }
-    [data-palette="cyber"][data-theme="light"] {
+    :root[data-theme="light"] [data-palette="cyber"], [data-theme="light"] [data-palette="cyber"], [data-theme="light"][data-palette="cyber"], [data-palette="cyber"][data-theme="light"] {
       --bg: #f0f9ff; --card: #ffffff; --card-inner: #e0f2fe; --border: #bae6fd; --text: #0f172a; --text-muted: #0369a1; --primary: #0284c7; --primary-rgb: 2, 132, 199;
     }
 
     [data-palette="obsidian"] { --primary: #c084fc; --primary-rgb: 192, 132, 252; }
-    [data-palette="obsidian"]:not([data-theme="light"]), [data-palette="obsidian"][data-theme="dark"] {
+    [data-palette="obsidian"]:not([data-theme="light"]), [data-palette="obsidian"][data-theme="dark"], [data-theme="dark"] [data-palette="obsidian"] {
       --bg: #0d1117; --card: #161b22; --card-inner: #21262d; --border: #30363d; --text: #f0f6fc; --text-muted: #8b949e;
     }
-    [data-palette="obsidian"][data-theme="light"] {
+    :root[data-theme="light"] [data-palette="obsidian"], [data-theme="light"] [data-palette="obsidian"], [data-theme="light"][data-palette="obsidian"], [data-palette="obsidian"][data-theme="light"] {
       --bg: #faf5ff; --card: #ffffff; --card-inner: #f3e8ff; --border: #e9d5ff; --text: #1e1b4b; --text-muted: #6b21a8; --primary: #7e22ce; --primary-rgb: 126, 34, 206;
     }
 
     [data-palette="nord"] { --primary: #88c0d0; --primary-rgb: 136, 192, 208; }
-    [data-palette="nord"]:not([data-theme="light"]), [data-palette="nord"][data-theme="dark"] {
+    [data-palette="nord"]:not([data-theme="light"]), [data-palette="nord"][data-theme="dark"], [data-theme="dark"] [data-palette="nord"] {
       --bg: #242933; --card: #2e3440; --card-inner: #3b4252; --border: #4c566a; --text: #eceff4; --text-muted: #d8dee9;
     }
-    [data-palette="nord"][data-theme="light"] {
+    :root[data-theme="light"] [data-palette="nord"], [data-theme="light"] [data-palette="nord"], [data-theme="light"][data-palette="nord"], [data-palette="nord"][data-theme="light"] {
       --bg: #f8fafc; --card: #ffffff; --card-inner: #e2e8f0; --border: #cbd5e1; --text: #1e293b; --text-muted: #0e7490; --primary: #0e7490; --primary-rgb: 14, 116, 144;
     }
 
     [data-palette="emerald"] { --primary: #34d399; --primary-rgb: 52, 211, 153; }
-    [data-palette="emerald"]:not([data-theme="light"]), [data-palette="emerald"][data-theme="dark"] {
+    [data-palette="emerald"]:not([data-theme="light"]), [data-palette="emerald"][data-theme="dark"], [data-theme="dark"] [data-palette="emerald"] {
       --bg: #06130d; --card: #0b1f16; --card-inner: #112e21; --border: #133a2a; --text: #ecfdf5; --text-muted: #6ee7b7;
     }
-    [data-palette="emerald"][data-theme="light"] {
+    :root[data-theme="light"] [data-palette="emerald"], [data-theme="light"] [data-palette="emerald"], [data-theme="light"][data-palette="emerald"], [data-palette="emerald"][data-theme="light"] {
       --bg: #f0fdf4; --card: #ffffff; --card-inner: #dcfce7; --border: #bbf7d0; --text: #064e3b; --text-muted: #047857; --primary: #059669; --primary-rgb: 5, 150, 105;
     }
 
     [data-palette="light"] { --primary: #3b82f6; --primary-rgb: 59, 130, 246; }
-    [data-palette="light"]:not([data-theme="light"]), [data-palette="light"][data-theme="dark"] {
+    [data-palette="light"]:not([data-theme="light"]), [data-palette="light"][data-theme="dark"], [data-theme="dark"] [data-palette="light"] {
       --bg: #0f172a; --card: #1e293b; --card-inner: #283548; --border: #334155; --text: #f8fafc; --text-muted: #94a3b8;
     }
-    [data-palette="light"][data-theme="light"] {
+    :root[data-theme="light"] [data-palette="light"], [data-theme="light"] [data-palette="light"], [data-theme="light"][data-palette="light"], [data-palette="light"][data-theme="light"] {
       --bg: #f1f5f9; --card: #ffffff; --card-inner: #e2e8f0; --border: #cbd5e1; --text: #0f172a; --text-muted: #475569; --primary: #2563eb; --primary-rgb: 37, 99, 235;
     }
 
     [data-palette="amber"] { --primary: #f59e0b; --primary-rgb: 245, 158, 11; }
-    [data-palette="amber"]:not([data-theme="light"]), [data-palette="amber"][data-theme="dark"] {
+    [data-palette="amber"]:not([data-theme="light"]), [data-palette="amber"][data-theme="dark"], [data-theme="dark"] [data-palette="amber"] {
       --bg: #1c1307; --card: #261805; --card-inner: #3d2406; --border: #78350f; --text: #fef3c7; --text-muted: #fde68a;
     }
-    [data-palette="amber"][data-theme="light"] {
+    :root[data-theme="light"] [data-palette="amber"], [data-theme="light"] [data-palette="amber"], [data-theme="light"][data-palette="amber"], [data-palette="amber"][data-theme="light"] {
       --bg: #fffbeb; --card: #ffffff; --card-inner: #fef3c7; --border: #fde68a; --text: #78350f; --text-muted: #92400e; --primary: #b45309; --primary-rgb: 180, 83, 9;
     }
 
@@ -797,7 +806,10 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     [data-theme="light"][data-palette="emerald"] .btn-primary-sm,
     [data-palette="cyber"][data-theme="light"] .btn-primary-sm,
     [data-palette="nord"][data-theme="light"] .btn-primary-sm,
-    [data-palette="emerald"][data-theme="light"] .btn-primary-sm {
+    [data-palette="emerald"][data-theme="light"] .btn-primary-sm,
+    [data-theme="light"] [data-palette="cyber"] .btn-primary-sm,
+    [data-theme="light"] [data-palette="nord"] .btn-primary-sm,
+    [data-theme="light"] [data-palette="emerald"] .btn-primary-sm {
       color: #0f172a !important;
     }
 
