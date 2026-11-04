@@ -3971,6 +3971,12 @@
                            .replace(/\s*data-theme="[^"]*"/g, '');
           return '<body' + clean + ' data-palette="' + activeStudioPalette + '" data-layout="' + activeStudioLayout + '" data-theme="' + activeStudioThemeMode + '">';
         });
+        // Override the early inline theme detection script in <head> so preview always uses activeStudioThemeMode
+        doc = doc.replace(/var m = localStorage\.getItem\("pec_theme_mode"\)[^;]*;/gi, 'var m = ' + JSON.stringify(activeStudioThemeMode) + ';');
+        if (activeStudioThemeMode === 'light') {
+          doc = doc.replace(/--bg:\s*#0b1120\s*!important;?/gi, '')
+                   .replace(/--card:\s*#131d36\s*!important;?/gi, '');
+        }
         // NB: built with RegExp so that \s and \. are real regex escapes - a
         // plain string literal would turn '\s' into 's' and never match.
         const popupScriptRegex = new RegExp('<script[^>]*src="popup\\.js"[^>]*>\\s*</script>', 'i');
@@ -5471,7 +5477,7 @@
             const badgeBg = act === 'proxy' ? 'rgba(2, 132, 199, 0.15)' : act === 'direct' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
             return `<div class="mockup-rule-item">
               <div>
-                <div style="font-weight: 600; color: #f8fafc;">${esc(r.processName || '*')}</div>
+                <div style="font-weight: 600; color: var(--app-text, #f8fafc);">${esc(r.processName || '*')}</div>
                 ${(r.targetDomains && r.targetDomains !== '*') ? `<div style="font-size: 10px; color: var(--app-accent, #0284c7); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;" title="${esc(r.targetDomains)}">🌐 ${esc(r.targetDomains)}</div>` : ''}
               </div>
               <div style="display: flex; gap: 6px; align-items: center;">
@@ -5816,11 +5822,11 @@
     }
     
     const APP_PALETTES = {
-      cyber: { accent: '#38bdf8', bg: '#0b1120', card: '#131d36', style: 'cyber-blue' },
-      obsidian: { accent: '#c084fc', bg: '#0d1117', card: '#161b22', style: 'dark-obsidian' },
-      nord: { accent: '#88c0d0', bg: '#242933', card: '#2e3440', style: 'nordic-arctic' },
-      emerald: { accent: '#34d399', bg: '#06130d', card: '#0b1f16', style: 'emerald-secops' },
-      light: { accent: '#2563eb', bg: '#f1f5f9', card: '#ffffff', style: 'enterprise-light' }
+      cyber: { accent: '#38bdf8', bg: '#0b1120', card: '#131d36', lightBg: '#f0f9ff', lightCard: '#ffffff', style: 'cyber-blue' },
+      obsidian: { accent: '#c084fc', bg: '#0d1117', card: '#161b22', lightBg: '#faf5ff', lightCard: '#ffffff', style: 'dark-obsidian' },
+      nord: { accent: '#88c0d0', bg: '#242933', card: '#2e3440', lightBg: '#f8fafc', lightCard: '#ffffff', style: 'nordic-arctic' },
+      emerald: { accent: '#34d399', bg: '#06130d', card: '#0b1f16', lightBg: '#f0fdf4', lightCard: '#ffffff', style: 'emerald-secops' },
+      light: { accent: '#2563eb', bg: '#f1f5f9', card: '#ffffff', lightBg: '#f1f5f9', lightCard: '#ffffff', style: 'enterprise-light' }
     };
 
     function setAppPalette(paletteKey, isUserAction = true) {
@@ -5832,10 +5838,11 @@
       const bgEl = document.getElementById('appThemeBackground');
       const cardEl = document.getElementById('appThemeCard');
       const styleEl = document.getElementById('appPresetStyle');
+      const isLight = currentAppThemeMode === 'light';
 
       if (colorEl) colorEl.value = p.accent;
-      if (bgEl) bgEl.value = p.bg;
-      if (cardEl) cardEl.value = p.card;
+      if (bgEl) bgEl.value = isLight ? (p.lightBg || '#f8fafc') : p.bg;
+      if (cardEl) cardEl.value = isLight ? (p.lightCard || '#ffffff') : p.card;
       if (styleEl) styleEl.value = p.style;
 
       ['Cyber', 'Obsidian', 'Nord', 'Emerald', 'Light'].forEach(name => {

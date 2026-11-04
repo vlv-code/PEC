@@ -48,13 +48,19 @@ static void ApplyProfileTheme(const PBTheme* t, HWND hwnd)
 
     if (g_isLightMode)
     {
+        // Guard against stale or dark background/card values in a light mode profile
+        if (GetRValue(t->background) < 160 || GetGValue(t->background) < 160 || GetBValue(t->background) < 160)
+            g_colBg = RGB(0xF8, 0xFA, 0xFC);
+        if (GetRValue(t->card) < 160 || GetGValue(t->card) < 160 || GetBValue(t->card) < 160)
+            g_colPanel = RGB(0xFF, 0xFF, 0xFF);
+
         g_colText    = RGB(0x0F, 0x17, 0x2A);   // slate-900 (WCAG AAA high contrast dark slate text)
         g_colDim     = RGB(0x64, 0x74, 0x8B);   // slate-500
         g_colLine    = RGB(0xCB, 0xD5, 0xE1);   // slate-300
         g_colTab     = RGB(0xE2, 0xE8, 0xF0);   // slate-200
-        g_colTabSel  = t->card;                 // active tab bg (#ffffff)
+        g_colTabSel  = g_colPanel;              // active tab bg (#ffffff)
         g_colTabHot  = RGB(0xF1, 0xF5, 0xF9);   // slate-100
-        g_colMenu    = t->card;                 // menu bar bg (#ffffff)
+        g_colMenu    = g_colPanel;              // menu bar bg (#ffffff)
         g_colMenuHot = RGB(0xE2, 0xE8, 0xF0);   // slate-200
     }
     else

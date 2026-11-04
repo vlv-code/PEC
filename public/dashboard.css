@@ -1747,6 +1747,35 @@
       width: 0;
       height: 0;
     }
+    body[data-theme-mode="light"] .browser-mock {
+      background: var(--card);
+      border-color: var(--border);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+    body[data-theme-mode="light"] .browser-top {
+      background: var(--card-inner);
+      border-bottom-color: var(--border);
+    }
+    body[data-theme-mode="light"] .browser-address-bar {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    body[data-theme-mode="light"] .browser-ext-icon {
+      background: var(--card);
+      border: 1px solid var(--border);
+    }
+    body[data-theme-mode="light"] .browser-ext-icon:hover {
+      background: var(--card-inner);
+    }
+    body[data-theme-mode="light"] .preview-canvas {
+      background: radial-gradient(circle at 50% 20%, #f1f5f9, #e2e8f0);
+    }
+    body[data-theme-mode="light"] .popup-frame-box {
+      background: var(--card);
+      border-color: var(--border);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+    }
     .preset-chip {
       padding: 6px 10px;
       border-radius: 6px;
