@@ -35,6 +35,7 @@
 #include <mutex>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 #if defined(_MSC_VER) || defined(__clang__)
 #pragma comment(lib, "d3d11.lib")
@@ -771,7 +772,7 @@ static void OpenLogsFolder()
     ShellExecuteW(nullptr, L"open", logDir, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
-static void OpenLogFile()
+[[maybe_unused]] static void OpenLogFile()
 {
     wchar_t logFile[MAX_PATH];
     PB_GetLogFilePath(logFile, MAX_PATH);
@@ -1125,6 +1126,142 @@ static void RenderShieldBadge(float size = 28.0f)
     ImGui::Dummy(ImVec2(size, size));
 }
 
+// -----------------------------------------------------------------------------
+// Vector Country Flag & Action Icon Buttons
+// -----------------------------------------------------------------------------
+static bool RenderFlagButton(const char* id, int langIndex, bool active)
+{
+    ImVec2 btnSize(30.0f, 24.0f);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    if (active) {
+        ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::CardBg);
+        ImGui::PushStyleColor(ImGuiCol_Border, PecTheme::HoverAccent);
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::FrameBg);
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, active ? 1.5f : 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+
+    bool clicked = ImGui::Button(id, btnSize);
+    bool hovered = ImGui::IsItemHovered();
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+
+    if (hovered) {
+        ImGui::SetTooltip(langIndex == 0 ? "Русский (RU)" : "English (EN)");
+    }
+
+    float flagW = 20.0f;
+    float flagH = 13.0f;
+    float fx = pos.x + (btnSize.x - flagW) * 0.5f;
+    float fy = pos.y + (btnSize.y - flagH) * 0.5f;
+    ImVec2 fmin(fx, fy);
+    ImVec2 fmax(fx + flagW, fy + flagH);
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->PushClipRect(fmin, fmax, true);
+
+    if (langIndex == 0) {
+        // Russian Flag (White, Blue, Red horizontal tricolor)
+        float stripeH = flagH / 3.0f;
+        drawList->AddRectFilled(ImVec2(fx, fy), ImVec2(fx + flagW, fy + stripeH), IM_COL32(255, 255, 255, 255));
+        drawList->AddRectFilled(ImVec2(fx, fy + stripeH), ImVec2(fx + flagW, fy + stripeH * 2.0f), IM_COL32(0, 57, 166, 255));
+        drawList->AddRectFilled(ImVec2(fx, fy + stripeH * 2.0f), ImVec2(fx + flagW, fy + flagH), IM_COL32(213, 43, 30, 255));
+    } else {
+        // UK Flag / Union Jack (Blue base, White/Red diagonals, White/Red cross)
+        drawList->AddRectFilled(fmin, fmax, IM_COL32(1, 33, 105, 255));
+        drawList->AddLine(ImVec2(fx, fy), ImVec2(fx + flagW, fy + flagH), IM_COL32(255, 255, 255, 255), 3.0f);
+        drawList->AddLine(ImVec2(fx, fy + flagH), ImVec2(fx + flagW, fy), IM_COL32(255, 255, 255, 255), 3.0f);
+        drawList->AddLine(ImVec2(fx, fy), ImVec2(fx + flagW, fy + flagH), IM_COL32(200, 16, 46, 255), 1.2f);
+        drawList->AddLine(ImVec2(fx, fy + flagH), ImVec2(fx + flagW, fy), IM_COL32(200, 16, 46, 255), 1.2f);
+        float cx = fx + flagW * 0.5f;
+        float cy = fy + flagH * 0.5f;
+        drawList->AddRectFilled(ImVec2(fx, cy - 2.5f), ImVec2(fx + flagW, cy + 2.5f), IM_COL32(255, 255, 255, 255));
+        drawList->AddRectFilled(ImVec2(cx - 2.5f, fy), ImVec2(cx + 2.5f, fy + flagH), IM_COL32(255, 255, 255, 255));
+        drawList->AddRectFilled(ImVec2(fx, cy - 1.2f), ImVec2(fx + flagW, cy + 1.2f), IM_COL32(200, 16, 46, 255));
+        drawList->AddRectFilled(ImVec2(cx - 1.2f, fy), ImVec2(cx + 2.5f, fy + flagH), IM_COL32(200, 16, 46, 255));
+    }
+
+    drawList->PopClipRect();
+    drawList->AddRect(fmin, fmax, IM_COL32(0, 0, 0, 70), 1.0f);
+
+    return clicked;
+}
+
+static bool RenderSyncButton(const char* id, const char* tooltip)
+{
+    ImVec2 btnSize(28.0f, 26.0f);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::FrameBg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, PecTheme::CardBg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, PecTheme::HoverAccent);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+
+    bool clicked = ImGui::Button(id, btnSize);
+    bool hovered = ImGui::IsItemHovered();
+    bool active = ImGui::IsItemActive();
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+
+    if (tooltip && hovered) {
+        ImGui::SetTooltip("%s", tooltip);
+    }
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    float cx = pos.x + btnSize.x * 0.5f;
+    float cy = pos.y + btnSize.y * 0.5f;
+    float r = 5.5f;
+
+    ImU32 iconCol = ImGui::ColorConvertFloat4ToU32(
+        active ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) :
+        (hovered ? PecTheme::HoverAccent : PecTheme::TextPrimary)
+    );
+
+    float baseAngle = g_isSyncing ? ((float)ImGui::GetTime() * 8.0f) : 0.0f;
+    const float PI = 3.1415926535f;
+
+    // Arc 1 (Top-Right)
+    float a1_start = baseAngle + 0.25f * PI;
+    float a1_end   = baseAngle + 1.05f * PI;
+    drawList->PathArcTo(ImVec2(cx, cy), r, a1_start, a1_end, 12);
+    drawList->PathStroke(iconCol, 0, 1.8f);
+
+    float tip1_x = cx + r * cosf(a1_end);
+    float tip1_y = cy + r * sinf(a1_end);
+    float dir1_x = -sinf(a1_end);
+    float dir1_y =  cosf(a1_end);
+    float norm1_x = -dir1_y;
+    float norm1_y =  dir1_x;
+    ImVec2 tri1_p0(tip1_x + dir1_x * 1.5f, tip1_y + dir1_y * 1.5f);
+    ImVec2 tri1_p1(tip1_x - dir1_x * 3.5f + norm1_x * 3.0f, tip1_y - dir1_y * 3.5f + norm1_y * 3.0f);
+    ImVec2 tri1_p2(tip1_x - dir1_x * 3.5f - norm1_x * 3.0f, tip1_y - dir1_y * 3.5f - norm1_y * 3.0f);
+    drawList->AddTriangleFilled(tri1_p0, tri1_p1, tri1_p2, iconCol);
+
+    // Arc 2 (Bottom-Left)
+    float a2_start = baseAngle + 1.25f * PI;
+    float a2_end   = baseAngle + 2.05f * PI;
+    drawList->PathArcTo(ImVec2(cx, cy), r, a2_start, a2_end, 12);
+    drawList->PathStroke(iconCol, 0, 1.8f);
+
+    float tip2_x = cx + r * cosf(a2_end);
+    float tip2_y = cy + r * sinf(a2_end);
+    float dir2_x = -sinf(a2_end);
+    float dir2_y =  cosf(a2_end);
+    float norm2_x = -dir2_y;
+    float norm2_y =  dir2_x;
+    ImVec2 tri2_p0(tip2_x + dir2_x * 1.5f, tip2_y + dir2_y * 1.5f);
+    ImVec2 tri2_p1(tip2_x - dir2_x * 3.5f + norm2_x * 3.0f, tip2_y - dir2_y * 3.5f + norm2_y * 3.0f);
+    ImVec2 tri2_p2(tip2_x - dir2_x * 3.5f - norm2_x * 3.0f, tip2_y - dir2_y * 3.5f - norm2_y * 3.0f);
+    drawList->AddTriangleFilled(tri2_p0, tri2_p1, tri2_p2, iconCol);
+
+    return clicked;
+}
+
 static void RenderHeader()
 {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 6.0f));
@@ -1151,16 +1288,6 @@ static void RenderHeader()
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("%s", T(S_TOOLTIP_EXT_WAIT));
         }
-    }
-
-    // Engine Health Status Pill (WIN-15)
-    ImGui::SameLine(0, 10.0f);
-    if (!g_engineStarted) {
-        RenderPill(T(S_STATUS_ENGINE_ERR), ImVec4(0.35f, 0.10f, 0.10f, 1.0f), PecTheme::DangerRed);
-    } else if (g_lastSyncError != 0) {
-        RenderPill(T(S_STATUS_ENGINE_DEGRADED), ImVec4(0.35f, 0.25f, 0.05f, 1.0f), PecTheme::WarningAlert);
-    } else {
-        RenderPill(T(S_STATUS_ENGINE_OK), ImVec4(0.08f, 0.28f, 0.18f, 1.0f), PecTheme::SuccessDirect);
     }
 
     // PEC Server Sync Status Indicator (thread-safe reading, WIN-07)
@@ -1201,53 +1328,37 @@ static void RenderHeader()
         }
     }
 
-    ImGui::SameLine(0, 6.0f);
-    if (ImGui::Button("[R]##forcesyncheader")) {
+    // Language Selector with country flags (RU & EN only)
+    ImGui::SameLine(0, 12.0f);
+    if (RenderFlagButton("##btnLangRU", 0, g_lang == 0)) {
+        g_lang = 0;
+        ProfileLock lk;
+        lstrcpynW(g_profile.language, L"ru", 8);
+        SaveProfile();
+        UpdateTitle(g_hWnd);
+    }
+    ImGui::SameLine(0, 4.0f);
+    if (RenderFlagButton("##btnLangEN", 1, g_lang == 1)) {
+        g_lang = 1;
+        ProfileLock lk;
+        lstrcpynW(g_profile.language, L"en", 8);
+        SaveProfile();
+        UpdateTitle(g_hWnd);
+    }
+
+    // Right group: Vector Sync Button + Status Toggle Button
+    float btnWidth = 180.0f;
+    float syncBtnWidth = 28.0f;
+    float gap = 8.0f;
+    float rightOffset = ImGui::GetWindowWidth() - btnWidth - syncBtnWidth - gap - 16.0f;
+    if (rightOffset > ImGui::GetCursorPosX()) ImGui::SameLine(rightOffset);
+    else ImGui::SameLine(0, 10.0f);
+
+    if (RenderSyncButton("##forcesyncheader", T(S_TOOLTIP_SYNC_BTN))) {
         PecSyncTriggerNow();
     }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", T(S_TOOLTIP_SYNC_BTN));
-    }
 
-    // Language Selector (RU | EN | ZH)
-    ImGui::SameLine(0, 10.0f);
-    const char* langs[] = { "RU", "EN", "ZH" };
-    for (int l = 0; l < 3; l++) {
-        if (l > 0) ImGui::SameLine(0, 2.0f);
-        bool isCur = (g_lang == l);
-        if (isCur) {
-            ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::PrimaryAccent);
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, PecTheme::FrameBg);
-            ImGui::PushStyleColor(ImGuiCol_Text, PecTheme::TextSecondary);
-        }
-        char lbtn[16];
-        snprintf(lbtn, sizeof(lbtn), "%s##lang_%d", langs[l], l);
-        if (ImGui::Button(lbtn, ImVec2(28.0f, 0))) {
-            g_lang = l;
-            const wchar_t* langCodes[] = { L"ru", L"en", L"zh" };
-            ProfileLock lk;
-            lstrcpynW(g_profile.language, langCodes[l], 8);
-            SaveProfile();
-            UpdateTitle(g_hWnd);
-        }
-        ImGui::PopStyleColor(2);
-    }
-
-    ImGui::SameLine(0, 6.0f);
-    if (ImGui::Button("[*]##settingsBtn", ImVec2(28.0f, 0))) {
-        g_activeTab = 4;
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", T(S_TAB_SETTINGS));
-    }
-
-    // Status Toggle Button placed in the far right corner
-    float btnWidth = 180.0f;
-    float rightOffset = ImGui::GetWindowWidth() - btnWidth - 16.0f;
-    if (rightOffset > ImGui::GetCursorPosX()) ImGui::SameLine(rightOffset);
-    else ImGui::SameLine();
+    ImGui::SameLine(0, gap);
 
     char statBtnText[64];
     if (g_proxyEnabled) {
@@ -1857,13 +1968,8 @@ static void RenderEngineLogsTab()
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(T(S_LOG_OPEN_FILE))) {
-        OpenLogFile();
-    }
-
-    ImGui::SameLine();
     char copyAllBtnLabel[128];
-    // Button label: Скопировать весь лог##copylogall
+    // Button label: Скопировать лог##copylogall
     snprintf(copyAllBtnLabel, sizeof(copyAllBtnLabel), "%s##copylogall", T(S_LOG_COPY_ALL));
     if (ImGui::Button(copyAllBtnLabel)) {
         EnterCriticalSection(&g_logCs);

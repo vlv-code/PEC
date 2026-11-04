@@ -56,7 +56,7 @@ test("Windows GUI implements clipboard log copying, PB_WriteAppLog UI bridge, TL
   const pecSyncContent = fs.readFileSync(pecSyncPath, "utf-8");
 
   // 1. Clipboard copy button in 'Журнал работы'
-  assert.match(imguiContent, /Скопировать весь лог##copylogall/, "main_imgui.cpp must have copy log button");
+  assert.match(imguiContent, /Скопировать лог##copylogall/, "main_imgui.cpp must have copy log button");
   assert.match(imguiContent, /SetClipboardText/, "main_imgui.cpp must set clipboard text for logs");
 
   // 2. UI log bridge
