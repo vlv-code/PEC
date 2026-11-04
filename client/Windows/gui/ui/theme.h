@@ -27,31 +27,121 @@ static void CreateDarkBrushes(void)
     g_brMenuHot = CreateSolidBrush(g_colMenuHot);
 }
 
+static BOOL CALLBACK DarkThemeChild(HWND h, LPARAM lp);
+
 static void ApplyProfileTheme(const PBTheme* t, HWND hwnd)
 {
     if (!t || !t->hasTheme) return;
+
+    // Detect light mode: explicit mode string, preset name, or background luminance > 180
+    g_isLightMode = (_wcsicmp(t->mode, L"light") == 0 ||
+                     _wcsicmp(t->preset, L"enterprise-light") == 0 ||
+                     _wcsicmp(t->preset, L"minimal-light") == 0 ||
+                     _wcsicmp(t->preset, L"light") == 0 ||
+                     (GetRValue(t->background) > 180 &&
+                      GetGValue(t->background) > 180 &&
+                      GetBValue(t->background) > 180));
+
     g_colAccent = t->primary;
     g_colBg     = t->background;
     g_colPanel  = t->card;
-    g_colTabSel = t->background;
-    g_colTab    = t->card;
-    g_colMenu   = t->card;
 
-    BYTE r = (BYTE)min(255, (int)GetRValue(t->card) + 20);
-    BYTE g = (BYTE)min(255, (int)GetGValue(t->card) + 20);
-    BYTE b = (BYTE)min(255, (int)GetBValue(t->card) + 25);
-    g_colTabHot  = RGB(r, g, b);
-    g_colMenuHot = RGB(r, g, b);
-    g_colLine    = RGB((BYTE)min(255, (int)GetRValue(t->card) + 35),
-                       (BYTE)min(255, (int)GetGValue(t->card) + 35),
-                       (BYTE)min(255, (int)GetBValue(t->card) + 40));
+    if (g_isLightMode)
+    {
+        g_colText    = RGB(0x0F, 0x17, 0x2A);   // slate-900 (WCAG AAA high contrast dark slate text)
+        g_colDim     = RGB(0x64, 0x74, 0x8B);   // slate-500
+        g_colLine    = RGB(0xCB, 0xD5, 0xE1);   // slate-300
+        g_colTab     = RGB(0xE2, 0xE8, 0xF0);   // slate-200
+        g_colTabSel  = t->card;                 // active tab bg (#ffffff)
+        g_colTabHot  = RGB(0xF1, 0xF5, 0xF9);   // slate-100
+        g_colMenu    = t->card;                 // menu bar bg (#ffffff)
+        g_colMenuHot = RGB(0xE2, 0xE8, 0xF0);   // slate-200
+    }
+    else
+    {
+        g_colText    = RGB(0xD4, 0xD4, 0xD4);
+        g_colDim     = RGB(0x8A, 0x8A, 0x8A);
+        g_colTabSel  = t->background;
+        g_colTab     = t->card;
+        g_colMenu    = t->card;
+
+        BYTE r = (BYTE)min(255, (int)GetRValue(t->card) + 20);
+        BYTE g = (BYTE)min(255, (int)GetGValue(t->card) + 20);
+        BYTE b = (BYTE)min(255, (int)GetBValue(t->card) + 25);
+        g_colTabHot  = RGB(r, g, b);
+        g_colMenuHot = RGB(r, g, b);
+        g_colLine    = RGB((BYTE)min(255, (int)GetRValue(t->card) + 35),
+                           (BYTE)min(255, (int)GetGValue(t->card) + 35),
+                           (BYTE)min(255, (int)GetBValue(t->card) + 40));
+    }
 
     CreateDarkBrushes();
 
     if (hwnd && IsWindow(hwnd))
     {
+        // 1. Update OS window mode (DWM immersive dark mode + uxtheme)
+        HMODULE ux = LoadLibraryExW(L"uxtheme.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (ux)
+        {
+            fnSetPreferredAppMode setMode = (fnSetPreferredAppMode)(void*)GetProcAddress(ux, MAKEINTRESOURCEA(135));
+            fnFlushMenuThemes flush = (fnFlushMenuThemes)(void*)GetProcAddress(ux, MAKEINTRESOURCEA(136));
+            if (setMode) setMode(g_isLightMode ? APPMODE_FORCELIGHT : APPMODE_FORCEDARK);
+            if (flush) flush();
+            FreeLibrary(ux);
+        }
+        BOOL dark = !g_isLightMode;
+        DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
+
+        // 2. Update child controls
+        EnumChildWindows(hwnd, DarkThemeChild, (LPARAM)g_isLightMode);
+
+        // 3. Update ListViews
+        if (g_hRulesList && IsWindow(g_hRulesList))
+        {
+            ListView_SetBkColor(g_hRulesList, g_colPanel);
+            ListView_SetTextBkColor(g_hRulesList, g_colPanel);
+            ListView_SetTextColor(g_hRulesList, g_colText);
+            SetWindowTheme(g_hRulesList, g_isLightMode ? L"Explorer" : L"DarkMode_Explorer", NULL);
+            HWND hdr = ListView_GetHeader(g_hRulesList);
+            if (hdr) InvalidateRect(hdr, NULL, TRUE);
+            InvalidateRect(g_hRulesList, NULL, TRUE);
+        }
+        if (g_hSrvList && IsWindow(g_hSrvList))
+        {
+            ListView_SetBkColor(g_hSrvList, g_colPanel);
+            ListView_SetTextBkColor(g_hSrvList, g_colPanel);
+            ListView_SetTextColor(g_hSrvList, g_colText);
+            SetWindowTheme(g_hSrvList, g_isLightMode ? L"Explorer" : L"DarkMode_Explorer", NULL);
+            HWND hdr = ListView_GetHeader(g_hSrvList);
+            if (hdr) InvalidateRect(hdr, NULL, TRUE);
+            InvalidateRect(g_hSrvList, NULL, TRUE);
+        }
+
+        // 4. Update Logs & Tabs
+        if (g_hConnLog && IsWindow(g_hConnLog))
+        {
+            SetWindowTheme(g_hConnLog, g_isLightMode ? L"Explorer" : L"DarkMode_Explorer", NULL);
+            InvalidateRect(g_hConnLog, NULL, TRUE);
+        }
+        if (g_hActLog && IsWindow(g_hActLog))
+        {
+            SetWindowTheme(g_hActLog, g_isLightMode ? L"Explorer" : L"DarkMode_Explorer", NULL);
+            InvalidateRect(g_hActLog, NULL, TRUE);
+        }
+        if (g_hTab && IsWindow(g_hTab))
+        {
+            SetWindowTheme(g_hTab, g_isLightMode ? L"Explorer" : L"DarkMode_Explorer", NULL);
+            InvalidateRect(g_hTab, NULL, TRUE);
+        }
+        if (g_hBanner && IsWindow(g_hBanner))
+        {
+            InvalidateRect(g_hBanner, NULL, TRUE);
+        }
+
+        // 5. Invalidate entire window and redraw menu
         InvalidateRect(hwnd, NULL, TRUE);
         UpdateWindow(hwnd);
+        DrawMenuBar(hwnd);
     }
 }
 
@@ -88,43 +178,43 @@ static LRESULT CALLBACK GroupSubProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PT
 // themes the top-level window; edits/combos/buttons stay light until themed individually.
 static BOOL CALLBACK DarkThemeChild(HWND h, LPARAM lp)
 {
-    (void)lp;
+    BOOL isLight = (BOOL)lp;
     wchar_t cls[48]; GetClassNameW(h, cls, 48);
     if (!_wcsicmp(cls, L"Edit") || !_wcsicmp(cls, L"ComboBox"))
-        SetWindowTheme(h, L"DarkMode_CFD", NULL);          // dark edit/combo field
+        SetWindowTheme(h, isLight ? L"Explorer" : L"DarkMode_CFD", NULL);
     else if (!_wcsicmp(cls, L"Button"))
     {
         if ((GetWindowLongW(h, GWL_STYLE) & BS_TYPEMASK) == BS_GROUPBOX)
             SetWindowSubclass(h, GroupSubProc, 7, 0);      // owner-paint the caption/frame
         else
-            SetWindowTheme(h, L"DarkMode_Explorer", NULL);
+            SetWindowTheme(h, isLight ? L"Explorer" : L"DarkMode_Explorer", NULL);
     }
     else if (!_wcsicmp(cls, L"ListBox"))
-        SetWindowTheme(h, L"DarkMode_Explorer", NULL);
+        SetWindowTheme(h, isLight ? L"Explorer" : L"DarkMode_Explorer", NULL);
     else if (!_wcsicmp(cls, L"SysListView32") || !_wcsicmp(cls, WC_TABCONTROLW))
-        SetWindowTheme(h, L"DarkMode_Explorer", NULL);
+        SetWindowTheme(h, isLight ? L"Explorer" : L"DarkMode_Explorer", NULL);
     return TRUE;
 }
 
 static void InitDarkMode(HWND hwnd)
 {
-    // Enable the OS immersive dark mode so popup menus, scrollbars and combo dropdowns
-    // render dark (undocumented uxtheme ordinals - stable on Win10 1903+ / Win11).
+    // Enable the OS immersive dark/light mode so popup menus, scrollbars and combo dropdowns
+    // render dark/light (undocumented uxtheme ordinals - stable on Win10 1903+ / Win11).
     HMODULE ux = LoadLibraryExW(L"uxtheme.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (ux)
     {
         fnSetPreferredAppMode setMode = (fnSetPreferredAppMode)(void*)GetProcAddress(ux, MAKEINTRESOURCEA(135));
         fnAllowDarkModeForWindow allow = (fnAllowDarkModeForWindow)(void*)GetProcAddress(ux, MAKEINTRESOURCEA(133));
         fnFlushMenuThemes flush = (fnFlushMenuThemes)(void*)GetProcAddress(ux, MAKEINTRESOURCEA(136));
-        if (setMode) setMode(APPMODE_FORCEDARK);
-        if (allow)   allow(hwnd, TRUE);
+        if (setMode) setMode(g_isLightMode ? APPMODE_FORCELIGHT : APPMODE_FORCEDARK);
+        if (allow)   allow(hwnd, !g_isLightMode);
         if (flush)   flush();
         FreeLibrary(ux);   // ordinals were called; release our loader ref (called per dialog)
     }
-    BOOL dark = TRUE;
+    BOOL dark = !g_isLightMode;
     DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
-    // Theme every child control so edits/combos/buttons aren't left glaring white.
-    EnumChildWindows(hwnd, DarkThemeChild, 0);
+    // Theme every child control so edits/combos/buttons aren't left glaring white or dark.
+    EnumChildWindows(hwnd, DarkThemeChild, (LPARAM)g_isLightMode);
 }
 
 // Paint over the light 1px line the OS draws under the menu bar.

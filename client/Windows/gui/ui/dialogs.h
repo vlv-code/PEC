@@ -87,7 +87,7 @@ static void FillColumns(HWND lv, int count)
 static void DarkListView(HWND lv, DWORD extraExStyle)
 {
     ListView_SetExtendedListViewStyle(lv, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | extraExStyle);
-    SetWindowTheme(lv, L"DarkMode_Explorer", NULL);
+    SetWindowTheme(lv, g_isLightMode ? L"Explorer" : L"DarkMode_Explorer", NULL);
     ListView_SetBkColor(lv, C_PANEL);
     ListView_SetTextBkColor(lv, C_PANEL);
     ListView_SetTextColor(lv, C_TEXT);

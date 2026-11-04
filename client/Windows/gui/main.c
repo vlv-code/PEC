@@ -44,6 +44,7 @@
 #pragma comment(lib, "wintrust.lib")
 
 // dynamic theme
+static BOOL      g_isLightMode = FALSE;
 static COLORREF g_colBg      = RGB(0x0B, 0x11, 0x20);   // window / edit background (default Cyber Blue)
 static COLORREF g_colPanel   = RGB(0x13, 0x1D, 0x36);   // panel / card background
 static COLORREF g_colText    = RGB(0xD4, 0xD4, 0xD4);
@@ -55,7 +56,7 @@ static COLORREF g_colAccent  = RGB(0x02, 0x84, 0xC7);   // primary accent
 static COLORREF g_colMenu    = RGB(0x13, 0x1D, 0x36);
 static COLORREF g_colMenuHot = RGB(0x1E, 0x2C, 0x4C);
 static COLORREF g_colLine    = RGB(0x2E, 0x3B, 0x55);
-#define C_WARN    RGB(0xD7, 0xA5, 0x22)   // amber hint for the UDP note
+#define C_WARN    (g_isLightMode ? RGB(0xB4, 0x53, 0x09) : RGB(0xD7, 0xA5, 0x22))   // amber hint for the UDP note
 
 #define C_BG      g_colBg
 #define C_PANEL   g_colPanel
@@ -638,8 +639,8 @@ static LRESULT CALLBACK BannerSubclass(HWND h, UINT m, WPARAM w, LPARAM l, UINT_
         SetBkMode(memDC, TRANSPARENT);
         HFONT of = (HFONT)SelectObject(memDC, g_hUi);
 
-        COLORREF dotColor = g_proxyEnabled ? ((g_profile.cfgCount > 0) ? RGB(0x10, 0xB9, 0x81) : RGB(0x94, 0xA3, 0xB8))
-                                           : RGB(0xF5, 0x9E, 0x0B);
+        COLORREF dotColor = g_proxyEnabled ? ((g_profile.cfgCount > 0) ? (g_isLightMode ? RGB(0x16, 0xA3, 0x4A) : RGB(0x10, 0xB9, 0x81)) : RGB(0x94, 0xA3, 0xB8))
+                                           : (g_isLightMode ? RGB(0xD9, 0x77, 0x06) : RGB(0xF5, 0x9E, 0x0B));
         HBRUSH brDot = CreateSolidBrush(dotColor);
         HBRUSH oldBr = (HBRUSH)SelectObject(memDC, brDot);
         HPEN oldPen = (HPEN)SelectObject(memDC, GetStockObject(NULL_PEN));
@@ -652,8 +653,19 @@ static LRESULT CALLBACK BannerSubclass(HWND h, UINT m, WPARAM w, LPARAM l, UINT_
 
         const wchar_t* st = g_proxyEnabled ? ((g_profile.cfgCount > 0) ? T(S_STATUS_ACTIVE) : T(S_STATUS_DIRECT))
                                            : T(S_STATUS_PAUSED);
-        SetTextColor(memDC, g_proxyEnabled ? ((g_profile.cfgCount > 0) ? RGB(0xF1, 0xF5, 0xF9) : RGB(0x94, 0xA3, 0xB8))
-                                        : RGB(0xF5, 0x9E, 0x0B));
+        COLORREF stColor;
+        if (g_proxyEnabled)
+        {
+            if (g_profile.cfgCount > 0)
+                stColor = g_isLightMode ? RGB(0x15, 0x80, 0x3D) : RGB(0xF1, 0xF5, 0xF9);
+            else
+                stColor = g_isLightMode ? RGB(0x47, 0x55, 0x69) : RGB(0x94, 0xA3, 0xB8);
+        }
+        else
+        {
+            stColor = g_isLightMode ? RGB(0xB4, 0x53, 0x09) : RGB(0xF5, 0x9E, 0x0B);
+        }
+        SetTextColor(memDC, stColor);
         RECT rText = { Sc(26), 0, Sc(240), rc.bottom };
         DrawTextW(memDC, st, -1, &rText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
@@ -665,7 +677,7 @@ static LRESULT CALLBACK BannerSubclass(HWND h, UINT m, WPARAM w, LPARAM l, UINT_
                          g_profile.cfg[0].host, g_profile.cfg[0].port,
                          (g_profile.cfgCount > 1) ? L" ▾" : L"");
             RECT rPill = { rc.right - Sc(380), Sc(3), rc.right - Sc(130), rc.bottom - Sc(3) };
-            HBRUSH brPill = CreateSolidBrush(C_MENUHOT);
+            HBRUSH brPill = CreateSolidBrush(g_isLightMode ? RGB(0xF1, 0xF5, 0xF9) : C_MENUHOT);
             FillRect(memDC, &rPill, brPill);
             DeleteObject(brPill);
             FrameRect(memDC, &rPill, g_brAccent);
@@ -676,7 +688,7 @@ static LRESULT CALLBACK BannerSubclass(HWND h, UINT m, WPARAM w, LPARAM l, UINT_
         wchar_t rp[64];
         _snwprintf_s(rp, 64, _TRUNCATE, T(S_STATUS_RULES), g_profile.ruleCount);
         RECT rRules = { rc.right - Sc(120), Sc(3), rc.right - Sc(10), rc.bottom - Sc(3) };
-        HBRUSH brRules = CreateSolidBrush(C_MENUHOT);
+        HBRUSH brRules = CreateSolidBrush(g_isLightMode ? RGB(0xF1, 0xF5, 0xF9) : C_MENUHOT);
         FillRect(memDC, &rRules, brRules);
         DeleteObject(brRules);
         HBRUSH brL = CreateSolidBrush(C_LINE);
@@ -1075,21 +1087,48 @@ static LRESULT CALLBACK DarkButtonSubProc(HWND h, UINT m, WPARAM w, LPARAM l, UI
         COLORREF bg, border, textCol;
         if (pushed)
         {
-            bg = RGB(0x02, 0x84, 0xC7); // sky-600
-            border = RGB(0x38, 0xBD, 0xF8); // sky-400
-            textCol = RGB(0xFF, 0xFF, 0xFF);
+            if (g_isLightMode)
+            {
+                bg = isPrimary ? RGB(0x6B, 0x21, 0xA8) : RGB(0xCB, 0xD5, 0xE1);
+                border = isPrimary ? RGB(0x58, 0x1C, 0x87) : RGB(0x94, 0xA3, 0xB8);
+                textCol = isPrimary ? RGB(0xFF, 0xFF, 0xFF) : RGB(0x0F, 0x17, 0x2A);
+            }
+            else
+            {
+                bg = RGB(0x02, 0x84, 0xC7); // sky-600
+                border = RGB(0x38, 0xBD, 0xF8); // sky-400
+                textCol = RGB(0xFF, 0xFF, 0xFF);
+            }
         }
         else if (isPrimary)
         {
-            bg = hot ? RGB(0x03, 0x69, 0xA1) : RGB(0x0F, 0x3A, 0x5D);
-            border = hot ? RGB(0x38, 0xBD, 0xF8) : RGB(0x02, 0x84, 0xC7);
-            textCol = RGB(0xFF, 0xFF, 0xFF);
+            if (g_isLightMode)
+            {
+                bg = hot ? RGB(0x7E, 0x22, 0xCE) : g_colAccent;
+                border = hot ? RGB(0x6B, 0x21, 0xA8) : g_colAccent;
+                textCol = RGB(0xFF, 0xFF, 0xFF);
+            }
+            else
+            {
+                bg = hot ? RGB(0x03, 0x69, 0xA1) : RGB(0x0F, 0x3A, 0x5D);
+                border = hot ? RGB(0x38, 0xBD, 0xF8) : RGB(0x02, 0x84, 0xC7);
+                textCol = RGB(0xFF, 0xFF, 0xFF);
+            }
         }
         else
         {
-            bg = hot ? RGB(0x1E, 0x29, 0x3B) : RGB(0x13, 0x1D, 0x36);
-            border = hot ? RGB(0x3B, 0x82, 0xF6) : RGB(0x2E, 0x3B, 0x55);
-            textCol = hot ? RGB(0xF8, 0xFA, 0xFC) : RGB(0xCB, 0xD5, 0xE1);
+            if (g_isLightMode)
+            {
+                bg = hot ? RGB(0xE2, 0xE8, 0xF0) : RGB(0xF8, 0xFA, 0xFC);
+                border = hot ? g_colAccent : RGB(0xCB, 0xD5, 0xE1);
+                textCol = hot ? RGB(0x0F, 0x17, 0x2A) : RGB(0x33, 0x41, 0x55);
+            }
+            else
+            {
+                bg = hot ? RGB(0x1E, 0x29, 0x3B) : RGB(0x13, 0x1D, 0x36);
+                border = hot ? RGB(0x3B, 0x82, 0xF6) : RGB(0x2E, 0x3B, 0x55);
+                textCol = hot ? RGB(0xF8, 0xFA, 0xFC) : RGB(0xCB, 0xD5, 0xE1);
+            }
         }
 
         HBRUSH br = CreateSolidBrush(bg);
@@ -1433,7 +1472,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CTLCOLOREDIT:
     {
         HDC dc = (HDC)wp;
-        SetTextColor(dc, RGB(0xF8, 0xFA, 0xFC));
+        SetTextColor(dc, g_isLightMode ? RGB(0x0F, 0x17, 0x2A) : RGB(0xF8, 0xFA, 0xFC));
         SetBkColor(dc, g_colPanel);
         return (LRESULT)g_brPanel;
     }
@@ -1487,7 +1526,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {
             BOOL sel = (d->itemState & ODS_SELECTED) != 0;
             BOOL hot = ((int)d->itemID == g_tabHot);
-            FillRect(d->hDC, &d->rcItem, sel ? g_brTabSel : (hot ? g_brTabHot : g_brBg));
+            FillRect(d->hDC, &d->rcItem, sel ? g_brTabSel : (hot ? g_brTabHot : g_brTab));
             if (sel)
             {
                 RECT bar = d->rcItem; bar.top = bar.bottom - 3;
