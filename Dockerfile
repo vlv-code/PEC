@@ -8,9 +8,9 @@ FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies for native modules, MinGW cross-compiler, and msitools
+# Install build dependencies for native modules, MinGW cross-compiler, and msitools/wixl
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ git mingw-w64 msitools \
+    python3 make g++ git mingw-w64 msitools wixl wixl-data \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests (package-lock.json is committed - npm ci works)
@@ -32,9 +32,9 @@ FROM node:20-bookworm-slim AS runner
 
 WORKDIR /app
 
-# Install runtime utilities, WiX MSI tools (wixl), and MinGW cross-compiler for on-demand packaging
+# Install runtime utilities, WiX MSI tools (wixl + wixl-data), and MinGW cross-compiler for on-demand packaging
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tzdata dumb-init curl bash msitools mingw-w64 \
+    tzdata dumb-init curl bash msitools wixl wixl-data mingw-w64 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production

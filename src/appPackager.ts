@@ -882,16 +882,23 @@ export function buildMsiPackage(
     const wxsPath = path.join(stagedDir, "pec-app.wxs");
     fs.writeFileSync(wxsPath, wxsContent, "utf-8");
 
-    // 1. Try wixl (standard on Linux Alpine with msitools, or cross-platform)
+    // 1. Try wixl (standard on Linux Debian/Alpine with wixl/msitools, or cross-platform)
+    let wixlBin = findExecutableInPath("wixl");
+    if (!wixlBin && process.platform !== "win32") {
+      if (fs.existsSync("/usr/bin/wixl")) wixlBin = "/usr/bin/wixl";
+      else if (fs.existsSync("/usr/local/bin/wixl")) wixlBin = "/usr/local/bin/wixl";
+    }
     let hasWixl = false;
     try {
-      child_process.execFileSync("wixl", ["--version"], { windowsHide: true, stdio: "ignore" });
+      child_process.execFileSync(wixlBin || "wixl", ["--version"], { windowsHide: true, stdio: "ignore" });
       hasWixl = true;
-    } catch {}
+    } catch {
+      if (wixlBin && fs.existsSync(wixlBin)) hasWixl = true;
+    }
 
     if (hasWixl) {
       try {
-        child_process.execFileSync("wixl", ["-v", "-a", "x64", "-o", outputMsiPath, wxsPath], {
+        child_process.execFileSync(wixlBin || "wixl", ["-v", "-a", "x64", "-o", outputMsiPath, wxsPath], {
           windowsHide: true,
           stdio: "pipe",
         });
@@ -1979,10 +1986,16 @@ export function getToolchainDiagnostics(): ToolchainDiagnostics {
     }
   }
 
-  let hasWixl = Boolean(findExecutableInPath("wixl") || findExecutableInPath("msitools")) || hasWix;
+  let wixlBin = findExecutableInPath("wixl");
+  if (!wixlBin && process.platform !== "win32") {
+    if (fs.existsSync("/usr/bin/wixl")) wixlBin = "/usr/bin/wixl";
+    else if (fs.existsSync("/usr/local/bin/wixl")) wixlBin = "/usr/local/bin/wixl";
+  }
+
+  let hasWixl = Boolean(wixlBin || findExecutableInPath("msitools")) || hasWix;
   if (!hasWixl) {
     try {
-      child_process.execFileSync("wixl", ["--version"], { windowsHide: true, timeout: 1500, stdio: "ignore" });
+      child_process.execFileSync(wixlBin || "wixl", ["--version"], { windowsHide: true, timeout: 1500, stdio: "ignore" });
       hasWixl = true;
     } catch {}
   }
@@ -1996,11 +2009,18 @@ export function getToolchainDiagnostics(): ToolchainDiagnostics {
   if (hasWixl) {
     try {
       const out = child_process
-        .execSync("wixl --version", { encoding: "utf-8", windowsHide: true, timeout: 1500, stdio: ["ignore", "pipe", "ignore"] })
+        .execSync(`"${wixlBin || "wixl"}" --version`, { encoding: "utf-8", windowsHide: true, timeout: 1500, stdio: ["ignore", "pipe", "ignore"] })
         .trim();
       const m = out.match(/([\d.]+)/);
       if (m) wixlVersion = m[1];
     } catch {}
+    if (!wixlVersion) {
+      if (hasWix) {
+        wixlVersion = "WiX Toolset";
+      } else if (process.platform !== "win32" && (fs.existsSync("/usr/bin/wixl") || fs.existsSync("/usr/local/bin/wixl"))) {
+        wixlVersion = "installed";
+      }
+    }
   }
 
   const hasGcc = Boolean(mingw?.gcc);

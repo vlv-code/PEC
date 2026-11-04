@@ -4749,8 +4749,11 @@
             ? `<span class="badge badge-tool-windres" id="appToolchainWindresBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Windres: ${esc(windresInfo.text || 'Доступен')}">✓ Windres${windresInfo.text ? ' (' + esc(windresInfo.text) + ')' : ''}</span>`
             : `<span class="badge badge-tool-windres" id="appToolchainWindresBadge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Windres: Отсутствует">❌ Windres</span>`;
 
+          const wixLabel = wixlInfo.text && wixlInfo.text.toLowerCase().includes('wix')
+            ? esc(wixlInfo.text)
+            : ('Wixl' + (wixlInfo.text ? ' (' + esc(wixlInfo.text) + ')' : ''));
           const wixlBadge = wixlInfo.available
-            ? `<span class="badge badge-tool-wixl" id="appToolchainWixlBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Wixl: ${esc(wixlInfo.text || 'Доступен')}">✓ Wixl${wixlInfo.text ? ' (' + esc(wixlInfo.text) + ')' : ''}</span>`
+            ? `<span class="badge badge-tool-wixl" id="appToolchainWixlBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Wixl: ${esc(wixlInfo.text || 'Доступен')}">✓ ${wixLabel}</span>`
             : `<span class="badge badge-tool-wixl" id="appToolchainWixlBadge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 11px; padding: 2px 8px; border-radius: 4px;" title="Wixl: Отсутствует">⚠ Wixl</span>`;
 
           const tooltipStr = `GCC: ${gccInfo.available ? (gccInfo.text || 'OK') : 'отсутствует'}, Windres: ${windresInfo.available ? (windresInfo.text || 'OK') : 'отсутствует'}, Wixl: ${wixlInfo.available ? (wixlInfo.text || 'OK') : 'отсутствует'}`;
