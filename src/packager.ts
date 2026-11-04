@@ -196,9 +196,9 @@ export function escapeCmdArg(value: string): string {
 }
 
 export function buildUpdatesXml(extensionId: string, version: string, codebaseUrl: string): string {
-  const safeExtensionId = escapeXmlAttr(extensionId);
-  const safeVersion = escapeXmlAttr(version);
-  const safeCodebaseUrl = escapeXmlAttr(codebaseUrl);
+  const safeExtensionId = escapeXmlAttr((extensionId || "").trim());
+  const safeVersion = escapeXmlAttr((version || "").trim());
+  const safeCodebaseUrl = escapeXmlAttr((codebaseUrl || "").trim());
   return `<?xml version='1.0' encoding='UTF-8'?>
 <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
   <app appid='${safeExtensionId}'>
@@ -924,7 +924,11 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     extLog.push("[" + ts + "] " + msg);
   };
 
-  log("Starting PEC Extension package build v" + (buildConfigToPack.version || currentBuildConfig.version) + " (" + (buildConfigToPack.uiMode || "popup") + ")...");
+  const rawVersion = buildConfigToPack.version || currentBuildConfig.version || "1.0.0";
+  const cleanVersion = String(rawVersion).trim();
+  buildConfigToPack.version = cleanVersion;
+
+  log("Starting PEC Extension package build v" + cleanVersion + " (" + (buildConfigToPack.uiMode || "popup") + ")...");
   log("Effective Base URL: " + effectiveBaseUrl);
   log("Generating MV3 manifest.json and background scripts...");
 
@@ -935,9 +939,15 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   const manifestPath = fs.existsSync(path.join(UNPACKED_DIR, "manifest.json"))
     ? path.join(UNPACKED_DIR, "manifest.json")
     : path.join(EXTENSION_DIR, "manifest.json");
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-  const version = manifest.version || buildConfigToPack.version || currentBuildConfig.version;
-  const name = manifest.name || buildConfigToPack.name || "Corp Proxy Auth & Sync";
+  let manifestName = buildConfigToPack.name || "Corp Proxy Auth & Sync";
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+      if (manifest.name) manifestName = manifest.name;
+    } catch (_) {}
+  }
+  const version = cleanVersion;
+  const name = manifestName;
 
   function isExcludedFromPackage(fileName: string): boolean {
     const lower = fileName.toLowerCase();
@@ -978,12 +988,33 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
     fs.copyFileSync(path.join(EXTENSION_DIR, "manifest.json"), path.join(UNPACKED_DIR, "manifest.json"));
   }
 
+  // Render popup.html directly into UNPACKED_DIR with baked-in version and latest template
+  const isPopupHtmlOverridden = (buildConfigToPack.overriddenFiles || []).includes("popup.html");
+  if (!isPopupHtmlOverridden || !fs.existsSync(path.join(EXTENSION_DIR, "popup.html"))) {
+    const colors = getThemeStyles(buildConfigToPack);
+    const renderedHtml = renderPopupHtml(buildConfigToPack, colors);
+    fs.writeFileSync(path.join(UNPACKED_DIR, "popup.html"), renderedHtml, "utf-8");
+  } else {
+    fs.copyFileSync(path.join(EXTENSION_DIR, "popup.html"), path.join(UNPACKED_DIR, "popup.html"));
+  }
+
+  // Render popup.js directly into UNPACKED_DIR based on build config to pack
+  const isPopupJsOverridden = (buildConfigToPack.overriddenFiles || []).includes("popup.js");
+  if (!isPopupJsOverridden || !fs.existsSync(path.join(EXTENSION_DIR, "popup.js"))) {
+    const renderedJs = renderPopupJs(buildConfigToPack);
+    fs.writeFileSync(path.join(UNPACKED_DIR, "popup.js"), renderedJs, "utf-8");
+  } else {
+    fs.copyFileSync(path.join(EXTENSION_DIR, "popup.js"), path.join(UNPACKED_DIR, "popup.js"));
+  }
+
   // Copy any custom/extra non-excluded files from EXTENSION_DIR into UNPACKED_DIR
   if (fs.existsSync(EXTENSION_DIR)) {
     for (const item of fs.readdirSync(EXTENSION_DIR)) {
       if (isExcludedFromPackage(item)) continue;
       if (item === "manifest.json" && !isManifestOverridden) continue;
       if (item === "background.js" && !isBgOverridden) continue;
+      if (item === "popup.html" && !isPopupHtmlOverridden) continue;
+      if (item === "popup.js" && !isPopupJsOverridden) continue;
       const full = path.join(EXTENSION_DIR, item);
       const dest = path.join(UNPACKED_DIR, item);
       const stat = fs.statSync(full);
@@ -1039,16 +1070,16 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   const pecCrxPath = path.join(UPDATES_DIR, "pec-extension.crx");
   writeFileAtomic(pecCrxPath, crxBuffer);
 
-  const codebaseUrl = `${effectiveBaseUrl}/updates/extension.crx`;
-  const xmlContent = buildUpdatesXml(extensionId, version, codebaseUrl);
-  const xmlPath = path.join(UPDATES_DIR, "updates.xml");
-  writeFileAtomic(xmlPath, xmlContent, { encoding: "utf-8" });
-
   // Validate version format to prevent path traversal
   const safeVersion = typeof version === "string" ? version.trim() : "";
   if (!safeVersion || !SEMVER_REGEX.test(safeVersion)) {
     throw new Error(`Invalid version format '${version}': must follow semver (e.g. 1.0.0)`);
   }
+
+  const codebaseUrl = `${effectiveBaseUrl}/updates/extension.crx`;
+  const xmlContent = buildUpdatesXml(extensionId, safeVersion, codebaseUrl);
+  const xmlPath = path.join(UPDATES_DIR, "updates.xml");
+  writeFileAtomic(xmlPath, xmlContent, { encoding: "utf-8" });
 
   // Archive versioned release and record in releases store
   try {

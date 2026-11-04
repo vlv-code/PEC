@@ -442,7 +442,7 @@ static void ensure_dirs(void)
     PB_GetLogsDir(l, MAX_PATH);
 }
 
-static COLORREF parse_hex_color(const char* hex, COLORREF defaultCol)
+COLORREF PB_ParseHexColor(const char* hex, COLORREF defaultCol)
 {
     if (!hex || hex[0] != '#' || strlen(hex) < 7) return defaultCol;
     unsigned int r = 0, g = 0, b = 0;
@@ -451,6 +451,11 @@ static COLORREF parse_hex_color(const char* hex, COLORREF defaultCol)
         return RGB((BYTE)r, (BYTE)g, (BYTE)b);
     }
     return defaultCol;
+}
+
+static COLORREF parse_hex_color(const char* hex, COLORREF defaultCol)
+{
+    return PB_ParseHexColor(hex, defaultCol);
 }
 
 // file helpers

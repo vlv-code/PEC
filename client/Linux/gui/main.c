@@ -8,6 +8,14 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <poll.h>
+#include <sys/file.h>
+#include <gdk/gdkkeysyms.h>
+
+extern const char *T(const char *s);
+extern void statusbar_set_text(GtkWidget *sb, guint ctx, const char *text);
+extern bool gui_confirm(GtkWindow *parent, const char *message);
+extern void init_theme_css(void);
+extern int g_lang;
 
 GtkWidget *window;
 GtkTextBuffer *conn_buffer;
@@ -19,6 +27,78 @@ GList *g_rules_list = NULL;
 bool g_chk_logging = true;
 bool g_chk_dns = true;
 static GtkWidget *log_item, *dns_item;
+static GtkWidget *update_menu_item = NULL;
+static GtkWidget *autostart_item = NULL;
+static bool g_autostart_engine = false;
+
+static int g_instance_lock_fd = -1;
+
+static bool acquire_instance_lock(void) {
+    const char *path = "/var/run/pec-client.lock";
+    g_instance_lock_fd = open(path, O_CREAT | O_RDWR, 0644);
+    if (g_instance_lock_fd < 0) {
+        path = "/tmp/pec-client.lock";
+        g_instance_lock_fd = open(path, O_CREAT | O_RDWR, 0644);
+    }
+    if (g_instance_lock_fd < 0) {
+        return true; // proceed if unable to create lock file
+    }
+    if (flock(g_instance_lock_fd, LOCK_EX | LOCK_NB) < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
+            close(g_instance_lock_fd);
+            g_instance_lock_fd = -1;
+            return false;
+        }
+    }
+    return true;
+}
+
+static void release_instance_lock(void) {
+    if (g_instance_lock_fd >= 0) {
+        flock(g_instance_lock_fd, LOCK_UN);
+        close(g_instance_lock_fd);
+        g_instance_lock_fd = -1;
+    }
+}
+
+static void load_autostart_pref(void) {
+    const char *cfg = "/etc/proxybridge/autostart";
+    if (access(cfg, F_OK) == 0) {
+        g_autostart_engine = true;
+        return;
+    }
+    const char *home = g_get_home_dir();
+    if (home) {
+        char *path = g_strdup_printf("%s/.config/proxybridge/autostart", home);
+        if (access(path, F_OK) == 0) {
+            g_autostart_engine = true;
+        }
+        g_free(path);
+    }
+}
+
+static void save_autostart_pref(bool enabled) {
+    g_autostart_engine = enabled;
+    const char *home = g_get_home_dir();
+    char *dir = home ? g_strdup_printf("%s/.config/proxybridge", home) : NULL;
+    if (dir) {
+        g_mkdir_with_parents(dir, 0755);
+        char *path = g_strdup_printf("%s/autostart", dir);
+        if (enabled) {
+            FILE *f = fopen(path, "w");
+            if (f) { fputs("1\n", f); fclose(f); }
+        } else {
+            unlink(path);
+        }
+        g_free(path);
+        g_free(dir);
+    }
+}
+
+static void on_autostart_toggled(GtkCheckMenuItem *item, gpointer data) {
+    bool active = gtk_check_menu_item_get_active(item);
+    save_autostart_pref(active);
+}
 
 static void on_log_traffic_toggled(GtkCheckMenuItem *item, gpointer data) {
     bool active = gtk_check_menu_item_get_active(item);
@@ -114,14 +194,73 @@ static int https_url_ok(const char *url) {
     return 1;
 }
 
-static void on_check_update(GtkWidget *widget, gpointer data) {
+typedef struct {
+    char *version;
+    char *download;
+    char *notes;
+    char *error_msg;
+    int status; // 0 = update available, 1 = up to date, -1 = error
+} UpdateCheckResult;
+
+static gboolean update_check_finished(gpointer data) {
+    UpdateCheckResult *res = (UpdateCheckResult *)data;
+    if (update_menu_item) {
+        gtk_widget_set_sensitive(update_menu_item, TRUE);
+    }
+    statusbar_set_text(status_bar, status_context_id, T("Update check completed."));
+
+    if (res->status == -1) {
+        show_message(GTK_WINDOW(window), GTK_MESSAGE_ERROR, "%s: %s",
+                     T("Update check failed"), res->error_msg ? res->error_msg : "unknown");
+    } else if (res->status == 1) {
+        show_message(GTK_WINDOW(window), GTK_MESSAGE_INFO,
+                     T("You are using the latest version (%s)."), PROXYBRIDGE_VERSION);
+    } else if (res->status == 0) {
+        GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE,
+            "%s", T("A new version is available. Open download page?"));
+        gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
+            "Version %s is available (current: %s).\nOpen the download page in your browser?",
+            res->version, PROXYBRIDGE_VERSION);
+        gtk_dialog_add_button(GTK_DIALOG(dialog), T("Open in Browser"), GTK_RESPONSE_ACCEPT);
+        gtk_dialog_add_button(GTK_DIALOG(dialog), T("Close"), GTK_RESPONSE_CANCEL);
+        int resp = gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+        if (resp == GTK_RESPONSE_ACCEPT) {
+            const char *url = NULL;
+            if (https_url_ok(res->notes)) url = res->notes;
+            else if (https_url_ok(res->download)) url = res->download;
+            if (!url) {
+                show_message(GTK_WINDOW(window), GTK_MESSAGE_ERROR, T("No safe https url in update feed."));
+            } else {
+                GError *uri_err = NULL;
+                if (!gtk_show_uri_on_window(GTK_WINDOW(window), url, GDK_CURRENT_TIME, &uri_err)) {
+                    show_message(GTK_WINDOW(window), GTK_MESSAGE_ERROR, "%s: %s",
+                                 T("Could not open browser"), uri_err ? uri_err->message : "unknown");
+                    if (uri_err) g_error_free(uri_err);
+                }
+            }
+        }
+    }
+
+    g_free(res->version);
+    g_free(res->download);
+    g_free(res->notes);
+    g_free(res->error_msg);
+    g_free(res);
+    return G_SOURCE_REMOVE;
+}
+
+static gpointer update_check_worker(gpointer data) {
+    UpdateCheckResult *res = g_new0(UpdateCheckResult, 1);
     const char *curl_path = "/usr/bin/curl";
     if (access("/usr/bin/curl", X_OK) != 0 && access("/bin/curl", X_OK) == 0) {
         curl_path = "/bin/curl";
     }
     char *argv[] = {
         (char *)curl_path, (char *)"-sS",
-        (char *)"-H", (char *)"User-Agent: ProxyBridge-UpdateChecker",
+        (char *)"--max-time", (char *)"15",
+        (char *)"-H", (char *)"User-Agent: PEC-UpdateChecker",
         (char *)UPD_FEED_URL,
         NULL
     };
@@ -132,93 +271,83 @@ static void on_check_update(GtkWidget *widget, gpointer data) {
 
     if (!g_spawn_sync(NULL, argv, NULL, 0, NULL, NULL,
                       &json, &curl_err, &exit_code, &spawn_err)) {
-        show_message(GTK_WINDOW(window), GTK_MESSAGE_ERROR, "Update check failed: %s",
-                     spawn_err ? spawn_err->message : "unknown");
+        res->status = -1;
+        res->error_msg = g_strdup(spawn_err ? spawn_err->message : "spawn failed");
         if (spawn_err) g_error_free(spawn_err);
         g_free(curl_err);
-        return;
+        g_idle_add(update_check_finished, res);
+        return NULL;
     }
     if (exit_code != 0 || !json || json[0] == '\0') {
-        show_message(GTK_WINDOW(window), GTK_MESSAGE_ERROR, "Update check failed (curl exit %d).", exit_code);
+        res->status = -1;
+        res->error_msg = g_strdup_printf("curl exit %d", exit_code);
         g_free(json);
         g_free(curl_err);
-        return;
+        g_idle_add(update_check_finished, res);
+        return NULL;
     }
 
     char *linux_obj = extract_platform_block(json, "linux");
     g_free(json);
     g_free(curl_err);
     if (!linux_obj) {
-        show_message(GTK_WINDOW(window), GTK_MESSAGE_WARNING, "Could not parse linux update info.");
-        return;
+        res->status = -1;
+        res->error_msg = g_strdup("Could not parse linux update info.");
+        g_idle_add(update_check_finished, res);
+        return NULL;
     }
 
-    char *version = extract_sub_json_str(linux_obj, "version");
-    char *download = extract_sub_json_str(linux_obj, "download");
-    char *notes = extract_sub_json_str(linux_obj, "release_notes");
+    res->version = extract_sub_json_str(linux_obj, "version");
+    res->download = extract_sub_json_str(linux_obj, "download");
+    res->notes = extract_sub_json_str(linux_obj, "release_notes");
     g_free(linux_obj);
 
-    if (!version || !version[0]) {
-        show_message(GTK_WINDOW(window), GTK_MESSAGE_WARNING, "Could not parse version info.");
-        g_free(version);
-        g_free(download);
-        g_free(notes);
-        return;
+    if (!res->version || !res->version[0]) {
+        res->status = -1;
+        res->error_msg = g_strdup("Could not parse version info.");
+        g_idle_add(update_check_finished, res);
+        return NULL;
     }
 
     int cur[3], lat[3];
     parse_ver(PROXYBRIDGE_VERSION, cur);
-    parse_ver(version, lat);
+    parse_ver(res->version, lat);
     if (ver_cmp(lat, cur) <= 0) {
-        show_message(GTK_WINDOW(window), GTK_MESSAGE_INFO, "You are using the latest version (%s).", PROXYBRIDGE_VERSION);
-        g_free(version);
-        g_free(download);
-        g_free(notes);
-        return;
+        res->status = 1;
+    } else {
+        res->status = 0;
     }
 
-    GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT,
-        GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE,
-        "Version %s is available (current %s).\nOpen the download page in your browser?",
-        version, PROXYBRIDGE_VERSION);
-    gtk_dialog_add_button(GTK_DIALOG(dialog), "Open in Browser", GTK_RESPONSE_ACCEPT);
-    gtk_dialog_add_button(GTK_DIALOG(dialog), "Close", GTK_RESPONSE_CANCEL);
-    int resp = gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
-    if (resp == GTK_RESPONSE_ACCEPT) {
-        const char *url = NULL;
-        if (https_url_ok(notes)) url = notes;
-        else if (https_url_ok(download)) url = download;
-        if (!url) {
-            show_message(GTK_WINDOW(window), GTK_MESSAGE_ERROR, "No safe https url in update feed.");
-        } else {
-            GError *uri_err = NULL;
-            if (!gtk_show_uri_on_window(GTK_WINDOW(window), url, GDK_CURRENT_TIME, &uri_err)) {
-                show_message(GTK_WINDOW(window), GTK_MESSAGE_ERROR, "Could not open browser: %s",
-                             uri_err ? uri_err->message : "unknown");
-                if (uri_err) g_error_free(uri_err);
-            }
-        }
+    g_idle_add(update_check_finished, res);
+    return NULL;
+}
+
+static void on_check_update(GtkWidget *widget, gpointer data) {
+    if (update_menu_item) {
+        gtk_widget_set_sensitive(update_menu_item, FALSE);
     }
-    g_free(version);
-    g_free(download);
-    g_free(notes);
+    statusbar_set_text(status_bar, status_context_id, T("Checking for updates..."));
+    g_thread_new("update_checker", update_check_worker, NULL);
 }
 
 static void on_about(GtkWidget *widget, gpointer data) {
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("About ProxyBridge", GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, "OK", GTK_RESPONSE_OK, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 400, 300);
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(T("About PEC"), GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, T("OK"), GTK_RESPONSE_OK, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 420, 320);
     GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content_area), 20);
     char *markup = g_strdup_printf(
-        "<span size='xx-large' weight='bold'>ProxyBridge</span>\n"
-        "<span color='gray'>Version %s</span>\n\n"
-        "Universal proxy client for Linux applications\n"
-        "eBPF backend (needs root, kernel 5.11+ with BTF and cgroup v2)\n\n"
-        "Author: Sourav Kalal / InterceptSuite\n\n"
+        "<span size='xx-large' weight='bold'>PEC</span>\n"
+        "<span color='#9ca3af'>Version %s</span>\n\n"
+        "%s\n"
+        "%s\n\n"
+        "%s: PEC Team / InterceptSuite\n\n"
         "Website: <a href=\"https://interceptsuite.com\">interceptsuite.com</a>\n"
         "GitHub: <a href=\"https://github.com/InterceptSuite/ProxyBridge\">InterceptSuite/ProxyBridge</a>\n\n"
-        "License: AGPL-3.0", PROXYBRIDGE_VERSION);
+        "License: AGPL-3.0",
+        PROXYBRIDGE_VERSION,
+        T("Universal proxy client for Linux applications"),
+        T("eBPF backend (needs root, kernel 5.11+ with BTF and cgroup v2)"),
+        T("Author"));
     GtkWidget *label = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(label), markup);
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
@@ -325,17 +454,20 @@ static bool daemon_lost_reported = false;
 
 static void update_status_info() {
     static const char *names[] = {"Stopped", "Starting...", "Running", "Stopping..."};
-    const char *state_str = names[engine_state];
+    const char *state_str = T(names[engine_state]);
     if (engine_state == ENGINE_RUNNING && daemon_lost_reported) {
-        state_str = "Running (Relay unreachable)";
+        state_str = T("Running (Relay unreachable)");
     }
-    char *text = g_strdup_printf("Engine: %s  |  Profile: %s  |  Proxies: %u  |  Rules: %u  |  %u conn/s",
-                                 state_str, g_active_profile, g_list_length(g_proxies_list),
-                                 g_list_length(g_rules_list), conn_rate);
+    char *text = g_strdup_printf("%s: %s  |  %s: %s  |  %s: %u  |  %s: %u  |  %u %s",
+                                 T("Engine"), state_str,
+                                 T("Profile"), g_active_profile ? g_active_profile : "",
+                                 T("Proxies"), g_list_length(g_proxies_list),
+                                 T("Rules"), g_list_length(g_rules_list),
+                                 conn_rate, T("conn/s"));
     gtk_label_set_text(GTK_LABEL(status_info), text);
     g_free(text);
-    gtk_widget_set_sensitive(start_item, engine_state == ENGINE_STOPPED);
-    gtk_widget_set_sensitive(stop_item, engine_state == ENGINE_RUNNING);
+    if (start_item) gtk_widget_set_sensitive(start_item, engine_state == ENGINE_STOPPED);
+    if (stop_item) gtk_widget_set_sensitive(stop_item, engine_state == ENGINE_RUNNING);
 }
 
 static void check_daemon_health(void) {
@@ -350,16 +482,16 @@ static void check_daemon_health(void) {
         daemon_fail_count++;
         if (daemon_fail_count >= 2 && !daemon_lost_reported) {
             daemon_lost_reported = true;
-            gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id,
-                               "Error: connection to local daemon / relay lost!");
+            statusbar_set_text(status_bar, status_context_id,
+                               T("Error: connection to local daemon / relay lost!"));
             gui_log("Health check: connection to local daemon / relay lost\n");
             update_status_info();
         }
     } else {
         if (daemon_lost_reported) {
             daemon_lost_reported = false;
-            gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id,
-                               "ProxyBridge Service Connected (eBPF).");
+            statusbar_set_text(status_bar, status_context_id,
+                               T("PEC Service Connected (eBPF)."));
             gui_log("Health check: connection to local daemon / relay restored\n");
             update_status_info();
         }
@@ -387,7 +519,7 @@ static gboolean status_tick(gpointer data) {
 
 // runs in the main loop (g_unix_signal_add), so no library calls from a real signal context
 static gboolean on_unix_signal(gpointer data) {
-    fprintf(stderr, "\nSignal received. Stopping ProxyBridge...\n");
+    fprintf(stderr, "\nSignal received. Stopping PEC...\n");
     gtk_main_quit();
     return G_SOURCE_REMOVE;
 }
@@ -396,7 +528,24 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
     if (status_source) g_source_remove(status_source);
     status_source = 0;
     gui_logs_stop_timers();
+    release_instance_lock();
     gtk_main_quit();
+}
+
+static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data) {
+    if (engine_state == ENGINE_RUNNING) {
+        if (!gui_confirm(GTK_WINDOW(window),
+            T("PEC engine is currently running.\nAre you sure you want to exit and stop proxying?"))) {
+            return TRUE; // Cancel close
+        }
+    }
+    return FALSE; // Proceed with close
+}
+
+static void on_menu_quit(GtkWidget *widget, gpointer data) {
+    if (window) {
+        gtk_window_close(GTK_WINDOW(window));
+    }
 }
 
 static gboolean engine_job_done(gpointer data) {
@@ -404,17 +553,18 @@ static gboolean engine_job_done(gpointer data) {
     engine_thread = NULL;
     if (!engine_job.start) {
         set_engine_state(ENGINE_STOPPED);
-        gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id, "ProxyBridge Service Stopped.");
+        statusbar_set_text(status_bar, status_context_id, T("PEC Service Stopped."));
     } else if (engine_job.ok) {
         set_engine_state(ENGINE_RUNNING);
-        gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id, "ProxyBridge Service Started (eBPF).");
+        statusbar_set_text(status_bar, status_context_id, T("PEC Service Started (eBPF)."));
     } else {
         set_engine_state(ENGINE_STOPPED);
-        gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id, "Failed to start ProxyBridge engine. See the Activity Logs tab.");
+        statusbar_set_text(status_bar, status_context_id, T("Failed to start PEC engine. See the Activity Logs tab."));
         show_message(GTK_WINDOW(window), GTK_MESSAGE_ERROR,
-            "Failed to start the ProxyBridge engine.\n\n"
-            "Open the \"Activity Logs\" tab to see the reason.\n"
-            "The eBPF backend needs root, a kernel >= 5.11 with BTF and cgroup v2.");
+            "%s\n\n%s\n%s",
+            T("Failed to start the PEC engine."),
+            T("Open the \"Activity Logs\" tab to see the reason."),
+            T("The eBPF backend needs root, a kernel >= 5.11 with BTF and cgroup v2."));
     }
     return G_SOURCE_REMOVE;
 }
@@ -452,17 +602,20 @@ static void shutdown_engine() {
     engine_state = ENGINE_STOPPED;
 }
 
-static GtkWidget *add_menu_item(GtkWidget *menu, const char *label, GCallback cb) {
-    GtkWidget *item = gtk_menu_item_new_with_label(label);
-    g_signal_connect(item, "activate", cb, NULL);
+static GtkWidget *add_menu_item_accel(GtkWidget *menu, const char *label, GCallback cb, GtkAccelGroup *accel_group, guint key, GdkModifierType mods) {
+    GtkWidget *item = gtk_menu_item_new_with_mnemonic(label);
+    if (cb) g_signal_connect(item, "activate", cb, NULL);
+    if (accel_group && key) {
+        gtk_widget_add_accelerator(item, "activate", accel_group, key, mods, GTK_ACCEL_VISIBLE);
+    }
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
     return item;
 }
 
-static GtkWidget *add_check_item(GtkWidget *menu, const char *label, bool active, GCallback cb) {
-    GtkWidget *item = gtk_check_menu_item_new_with_label(label);
+static GtkWidget *add_check_item_mnemonic(GtkWidget *menu, const char *label, bool active, GCallback cb) {
+    GtkWidget *item = gtk_check_menu_item_new_with_mnemonic(label);
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), active);
-    g_signal_connect(item, "toggled", cb, NULL);
+    if (cb) g_signal_connect(item, "toggled", cb, NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
     return item;
 }
@@ -471,27 +624,45 @@ static void add_separator(GtkWidget *menu) {
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 }
 
-static GtkWidget *add_submenu(GtkWidget *menubar, const char *label) {
-    GtkWidget *item = gtk_menu_item_new_with_label(label);
+static GtkWidget *add_submenu_mnemonic(GtkWidget *menubar, const char *label) {
+    GtkWidget *item = gtk_menu_item_new_with_mnemonic(label);
     GtkWidget *menu = gtk_menu_new();
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(menubar), item);
     return menu;
 }
 
-static GtkTextBuffer *add_text_tab(GtkWidget *notebook, const char *title, const char *placeholder, GCallback on_search, GCallback on_clear, GCallback on_pause) {
+static void on_dark_theme_toggled(GtkCheckMenuItem *item, gpointer data) {
+    gboolean prefer_dark = gtk_check_menu_item_get_active(item);
+    GtkSettings *settings = gtk_settings_get_default();
+    if (settings) {
+        g_object_set(settings, "gtk-application-prefer-dark-theme", prefer_dark, NULL);
+    }
+}
+
+static void on_lang_en_activated(GtkMenuItem *item, gpointer data) {
+    g_lang = 0;
+    statusbar_set_text(status_bar, status_context_id, T("Language set to English (restart for full effect)."));
+}
+
+static void on_lang_ru_activated(GtkMenuItem *item, gpointer data) {
+    g_lang = 1;
+    statusbar_set_text(status_bar, status_context_id, T("Язык переключен на русский (перезапустите для полного эффекта)."));
+}
+
+static GtkTextBuffer *add_text_tab(GtkWidget *notebook, const char *title, const char *placeholder, const char *clear_btn_label, GCallback on_search, GCallback on_clear, GCallback on_pause) {
     GtkWidget *tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_set_border_width(GTK_CONTAINER(tab), 5);
     GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     GtkWidget *search = gtk_search_entry_new();
     gtk_entry_set_placeholder_text(GTK_ENTRY(search), placeholder);
     g_signal_connect(search, "search-changed", on_search, NULL);
-    GtkWidget *clear_btn = gtk_button_new_with_label("Clear Logs");
+    GtkWidget *clear_btn = gtk_button_new_with_label(clear_btn_label);
     g_signal_connect(clear_btn, "clicked", on_clear, NULL);
     gtk_box_pack_start(GTK_BOX(toolbar), search, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(toolbar), clear_btn, FALSE, FALSE, 0);
     if (on_pause) {
-        GtkWidget *pause_btn = gtk_toggle_button_new_with_label("Pause");
+        GtkWidget *pause_btn = gtk_toggle_button_new_with_label(T("Pause"));
         g_signal_connect(pause_btn, "toggled", on_pause, NULL);
         gtk_box_pack_start(GTK_BOX(toolbar), pause_btn, FALSE, FALSE, 0);
     }
@@ -512,47 +683,103 @@ static GtkTextBuffer *add_text_tab(GtkWidget *notebook, const char *title, const
 int main(int argc, char *argv[]) {
     if (getuid() != 0) {
         gtk_init(&argc, &argv);
-        show_message(NULL, GTK_MESSAGE_ERROR, "ProxyBridge must be run as root (sudo).");
+        const char *wayland = g_getenv("WAYLAND_DISPLAY");
+        const char *session_type = g_getenv("XDG_SESSION_TYPE");
+        bool is_wayland = (wayland != NULL && wayland[0] != '\0') ||
+                          (session_type != NULL && g_strcmp0(session_type, "wayland") == 0);
+        if (is_wayland) {
+            show_message(NULL, GTK_MESSAGE_ERROR,
+                "PEC requires root privileges (eBPF).\n\n"
+                "Under Wayland, running sudo directly may fail to open the display.\n"
+                "Please run with pkexec:\n"
+                "  pkexec /usr/local/bin/ProxyBridgeGUI\n\n"
+                "Or authorize root on Xwayland:\n"
+                "  xhost +SI:localuser:root && sudo /usr/local/bin/ProxyBridgeGUI");
+        } else {
+            show_message(NULL, GTK_MESSAGE_ERROR,
+                "PEC requires root privileges (eBPF).\n\n"
+                "Please run with sudo or pkexec:\n"
+                "  pkexec /usr/local/bin/ProxyBridgeGUI\n"
+                "or\n"
+                "  sudo /usr/local/bin/ProxyBridgeGUI");
+        }
         return 1;
     }
+
+    if (!acquire_instance_lock()) {
+        gtk_init(&argc, &argv);
+        show_message(NULL, GTK_MESSAGE_WARNING, "Another instance of PEC is already running.");
+        return 1;
+    }
+
     setenv("GSETTINGS_BACKEND", "memory", 1);
     load_config();
+    load_autostart_pref();
     gtk_init(&argc, &argv);
+    init_theme_css();
 
     GtkSettings *settings = gtk_settings_get_default();
-    if (settings) g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, NULL);
+    gboolean prefer_dark = FALSE;
+    if (settings) {
+        g_object_get(settings, "gtk-application-prefer-dark-theme", &prefer_dark, NULL);
+    }
 
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    char *win_title = g_strdup_printf("ProxyBridge - %s", g_active_profile);
+    char *win_title = g_strdup_printf("PEC - %s", g_active_profile ? g_active_profile : "");
     gtk_window_set_title(GTK_WINDOW(window), win_title);
     g_free(win_title);
     gtk_window_set_default_size(GTK_WINDOW(window), 900, 600);
+    gtk_window_set_icon_name(GTK_WINDOW(window), "network-vpn");
+    g_signal_connect(window, "delete-event", G_CALLBACK(on_window_delete), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), NULL);
+
+    GtkAccelGroup *accel_group = gtk_accel_group_new();
+    gtk_window_add_accel_group(GTK_WINDOW(window), accel_group);
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(window), vbox);
 
     GtkWidget *menubar = gtk_menu_bar_new();
-    GtkWidget *proxy_menu = add_submenu(menubar, "Proxy");
-    add_menu_item(proxy_menu, "Proxy Settings...", G_CALLBACK(on_proxy_configure));
-    add_menu_item(proxy_menu, "Proxy Rules...", G_CALLBACK(on_proxy_rules_clicked));
-    add_menu_item(proxy_menu, "Profiles...", G_CALLBACK(on_profiles_clicked));
-    add_separator(proxy_menu);
-    log_item = add_check_item(proxy_menu, "Enable Traffic Logging", g_chk_logging, G_CALLBACK(on_log_traffic_toggled));
-    dns_item = add_check_item(proxy_menu, "DNS via Proxy", g_chk_dns, G_CALLBACK(on_dns_proxy_toggled));
-    add_separator(proxy_menu);
-    start_item = add_menu_item(proxy_menu, "Start Engine", G_CALLBACK(on_start_engine));
-    stop_item = add_menu_item(proxy_menu, "Stop Engine", G_CALLBACK(on_stop_engine));
-    add_menu_item(proxy_menu, "Exit", G_CALLBACK(on_window_destroy));
-    GtkWidget *about_menu = add_submenu(menubar, "About");
-    add_menu_item(about_menu, "About", G_CALLBACK(on_about));
-    add_menu_item(about_menu, "Check for Updates", G_CALLBACK(on_check_update));
+
+    // 1. _File menu
+    GtkWidget *file_menu = add_submenu_mnemonic(menubar, T("_File"));
+    add_menu_item_accel(file_menu, T("_Proxy Settings..."), G_CALLBACK(on_proxy_configure), accel_group, GDK_KEY_p, GDK_CONTROL_MASK);
+    add_menu_item_accel(file_menu, T("Proxy _Rules..."), G_CALLBACK(on_proxy_rules_clicked), accel_group, GDK_KEY_r, GDK_CONTROL_MASK);
+    add_menu_item_accel(file_menu, T("P_rofiles..."), G_CALLBACK(on_profiles_clicked), NULL, 0, 0);
+    add_separator(file_menu);
+    add_menu_item_accel(file_menu, T("_Quit"), G_CALLBACK(on_menu_quit), accel_group, GDK_KEY_q, GDK_CONTROL_MASK);
+
+    // 2. _Engine menu
+    GtkWidget *engine_menu = add_submenu_mnemonic(menubar, T("_Engine"));
+    start_item = add_menu_item_accel(engine_menu, T("_Start Engine"), G_CALLBACK(on_start_engine), NULL, 0, 0);
+    stop_item = add_menu_item_accel(engine_menu, T("S_top Engine"), G_CALLBACK(on_stop_engine), NULL, 0, 0);
+    add_separator(engine_menu);
+    log_item = add_check_item_mnemonic(engine_menu, T("Enable Traffic _Logging"), g_chk_logging, G_CALLBACK(on_log_traffic_toggled));
+    dns_item = add_check_item_mnemonic(engine_menu, T("_DNS via Proxy"), g_chk_dns, G_CALLBACK(on_dns_proxy_toggled));
+    autostart_item = add_check_item_mnemonic(engine_menu, T("Run Engine on _Startup"), g_autostart_engine, G_CALLBACK(on_autostart_toggled));
+
+    // 3. _View menu
+    GtkWidget *view_menu = add_submenu_mnemonic(menubar, T("_View"));
+    add_check_item_mnemonic(view_menu, T("_Dark Theme"), prefer_dark, G_CALLBACK(on_dark_theme_toggled));
+    GtkWidget *lang_item = gtk_menu_item_new_with_mnemonic(T("_Language"));
+    GtkWidget *lang_menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(lang_item), lang_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), lang_item);
+    add_menu_item_accel(lang_menu, "English", G_CALLBACK(on_lang_en_activated), NULL, 0, 0);
+    add_menu_item_accel(lang_menu, "Русский", G_CALLBACK(on_lang_ru_activated), NULL, 0, 0);
+
+    // 4. _Help menu
+    GtkWidget *help_menu = add_submenu_mnemonic(menubar, T("_Help"));
+    update_menu_item = add_menu_item_accel(help_menu, T("Check for _Updates..."), G_CALLBACK(on_check_update), NULL, 0, 0);
+    add_separator(help_menu);
+    add_menu_item_accel(help_menu, T("_About PEC..."), G_CALLBACK(on_about), NULL, 0, 0);
+
     gtk_box_pack_start(GTK_BOX(vbox), menubar, FALSE, FALSE, 0);
 
     GtkWidget *notebook = gtk_notebook_new();
     gtk_box_pack_start(GTK_BOX(vbox), notebook, TRUE, TRUE, 0);
-    conn_buffer = add_text_tab(notebook, "Connections", "Search connections...", G_CALLBACK(on_search_conn_changed), G_CALLBACK(on_clear_conn_clicked), G_CALLBACK(on_pause_conn_toggled));
-    log_buffer = add_text_tab(notebook, "Activity Logs", "Search logs...", G_CALLBACK(on_search_log_changed), G_CALLBACK(on_clear_log_clicked), NULL);
+    conn_buffer = add_text_tab(notebook, T("Connections"), T("Search connections..."), T("Clear Connections"), G_CALLBACK(on_search_conn_changed), G_CALLBACK(on_clear_conn_clicked), G_CALLBACK(on_pause_conn_toggled));
+    log_buffer = add_text_tab(notebook, T("Activity Logs"), T("Search logs..."), T("Clear Logs"), G_CALLBACK(on_search_log_changed), G_CALLBACK(on_clear_log_clicked), NULL);
 
     GtkWidget *status_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     status_bar = gtk_statusbar_new();
@@ -577,11 +804,16 @@ int main(int argc, char *argv[]) {
     gtk_widget_show_all(window);
     update_status_info();
     status_source = g_timeout_add_seconds(1, status_tick, NULL);
-    engine_request(true);
+
+    if (g_autostart_engine) {
+        engine_request(true);
+    }
+
     gtk_main();
 
     shutdown_engine();
     gui_logs_free();
     config_free_all();
+    release_instance_lock();
     return 0;
 }

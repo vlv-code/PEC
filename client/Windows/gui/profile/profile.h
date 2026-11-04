@@ -114,6 +114,8 @@ void PB_SetActiveProfile(const wchar_t* name);
 BOOL PB_GetCheckUpdates(void);
 void PB_SetCheckUpdates(BOOL enable);
 
+COLORREF PB_ParseHexColor(const char* hex, COLORREF defaultCol);
+
 // *.pbprofile. Load fills defaults if the file is missing/invalid.
 void PB_ProfileDefaults(PBProfile* p, const wchar_t* name);
 void PB_ProfileLoad(const wchar_t* name, PBProfile* p);

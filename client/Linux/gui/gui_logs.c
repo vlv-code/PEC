@@ -156,7 +156,7 @@ static void push_line(View *v, const char *fmt, ...) {
     time_t now = time(NULL);
     struct tm tm_now;
     size_t off = 0;
-    if (localtime_r(&now, &tm_now)) off = strftime(line, sizeof(line), "[%H:%M:%S] ", &tm_now);
+    if (localtime_r(&now, &tm_now)) off = strftime(line, sizeof(line), "[%Y-%m-%d %H:%M:%S] ", &tm_now);
     va_list args;
     va_start(args, fmt);
     g_vsnprintf(line + off, sizeof(line) - off, fmt, args);

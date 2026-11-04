@@ -4,7 +4,10 @@ window.switchPopupTab = function(tabId) {
   const tabs = document.querySelectorAll(".tab-btn");
   tabs.forEach(t => {
     t.classList.remove("active");
-    if (typeof t.setAttribute === "function") t.setAttribute("aria-selected", "false");
+    if (typeof t.setAttribute === "function") {
+      t.setAttribute("aria-selected", "false");
+      t.setAttribute("tabindex", "-1");
+    }
   });
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
@@ -25,7 +28,10 @@ window.switchPopupTab = function(tabId) {
                     document.getElementById("tab-btn-" + tabId.replace(/^tab-content-/, "").replace(/^tab-/, ""));
   if (activeBtn) {
     activeBtn.classList.add("active");
-    if (typeof activeBtn.setAttribute === "function") activeBtn.setAttribute("aria-selected", "true");
+    if (typeof activeBtn.setAttribute === "function") {
+      activeBtn.setAttribute("aria-selected", "true");
+      activeBtn.setAttribute("tabindex", "0");
+    }
   }
   const target = document.getElementById(targetContentId) || document.getElementById(tabId);
   if (target) target.classList.add("active");
@@ -50,7 +56,10 @@ function updateBypassCountdown(expiresAt) {
         btnPauseToggle.classList.remove("btn-pause-active");
       }
     }
-    if (btnPauseLabel) btnPauseLabel.textContent = "Пауза 15м";
+    if (btnPauseLabel) {
+      btnPauseLabel.textContent = "";
+      if (btnPauseLabel.style) btnPauseLabel.style.display = "none";
+    }
     if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
       clearInterval(bypassCountdownTimer);
       bypassCountdownTimer = null;
@@ -74,9 +83,17 @@ function updateBypassCountdown(expiresAt) {
   const remainingSec = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
   const m = Math.floor(remainingSec / 60);
   const s = remainingSec % 60;
-  const timeStr = "Пауза (" + m + ":" + (s < 10 ? "0" : "") + s + ")";
-  if (btnPauseToggle) btnPauseToggle.title = timeStr;
-  if (btnPauseLabel) btnPauseLabel.textContent = timeStr;
+  const timeStr = (isRu ? "Пауза: " : "Pause: ") + m + ":" + (s < 10 ? "0" : "") + s;
+  if (btnPauseToggle) {
+    btnPauseToggle.title = timeStr;
+    if (btnPauseToggle.classList && typeof btnPauseToggle.classList.add === "function") {
+      btnPauseToggle.classList.add("btn-pause-active");
+    }
+  }
+  if (btnPauseLabel) {
+    btnPauseLabel.textContent = timeStr;
+    if (btnPauseLabel.style) btnPauseLabel.style.display = "inline-block";
+  }
 }
 
 function escapeHtml(str) {
@@ -88,6 +105,35 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
+function showToast(msg, type) {
+  const container = document.getElementById("toastContainer");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = "popup-toast";
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
+  toast.style.padding = "6px 10px";
+  toast.style.borderRadius = "6px";
+  toast.style.fontSize = "11px";
+  toast.style.fontWeight = "600";
+  toast.style.color = "#ffffff";
+  toast.style.background = type === "error" ? "var(--danger)" : "var(--card-inner)";
+  toast.style.border = "1px solid " + (type === "error" ? "var(--danger)" : "var(--border)");
+  toast.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+  toast.style.pointerEvents = "auto";
+  toast.style.transition = "opacity 0.2s ease";
+  toast.textContent = msg;
+  if (typeof container.appendChild === "function") {
+    container.appendChild(toast);
+  }
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    setTimeout(() => {
+      if (typeof toast.remove === "function") toast.remove();
+      else if (toast.parentNode && typeof toast.parentNode.removeChild === "function") toast.parentNode.removeChild(toast);
+    }, 200);
+  }, 2500);
+}
+
 // Global state applier - reactive to simulator and chrome.runtime
 window.applyPopupState = function(response) {
   if (!response) return;
@@ -95,9 +141,8 @@ window.applyPopupState = function(response) {
   currentProxyState = Object.assign({}, currentProxyState, response);
 
   const statusText = document.getElementById("statusText");
-  const heroStatusText = document.getElementById("heroStatusText");
-  const badge = document.getElementById("badge") || document.getElementById("statusPill");
-  const statusOrb = document.getElementById("statusOrb");
+  const badge = document.getElementById("badge");
+  const statusPill = document.getElementById("statusPill");
   const modeVal = document.getElementById("modeVal");
   const serverVal = document.getElementById("serverVal");
   const profileVal = document.getElementById("profileVal");
@@ -106,7 +151,6 @@ window.applyPopupState = function(response) {
   const tabRulesDefaultPolicy = document.getElementById("tabRulesDefaultPolicy");
   const btnToggle = document.getElementById("btnToggleBypass");
   const btnPowerLabel = document.getElementById("btnPowerLabel");
-  const btnPauseLabel = document.getElementById("btnPauseLabel");
   const btnPowerToggle = document.getElementById("btnPowerToggle");
   const btnPauseToggle = document.getElementById("btnPauseToggle");
 
@@ -116,80 +160,77 @@ window.applyPopupState = function(response) {
 
   let stateStr = "Отключен";
   let badgeCls = "status-badge offline";
-  let orbCls = "status-orb";
 
   if (isBypass) {
     stateStr = "Обход";
     badgeCls = "status-badge bypass";
-    orbCls = "status-orb bypass";
   } else if (!isEnabled || !isOnline) {
     stateStr = "Отключен";
     badgeCls = "status-badge offline";
-    orbCls = "status-orb";
   } else {
     stateStr = "Активен";
     badgeCls = "status-badge";
-    orbCls = "status-orb active";
   }
 
   if (statusText) statusText.textContent = stateStr;
-  if (heroStatusText) heroStatusText.textContent = stateStr;
   if (badge) badge.className = badgeCls;
-  if (statusOrb) statusOrb.className = orbCls;
+  if (statusPill) statusPill.className = badgeCls;
 
   if (btnPowerLabel) {
     btnPowerLabel.textContent = isEnabled ? "Отключить" : "Включить";
   }
   const isPowerActive = Boolean(isEnabled && isOnline);
   if (btnPowerToggle) {
-    btnPowerToggle.style.opacity = isEnabled ? "1" : "0.7";
     if (btnPowerToggle.classList && typeof btnPowerToggle.classList.toggle === "function") {
       btnPowerToggle.classList.toggle("btn-power-active", isPowerActive);
-      btnPowerToggle.classList.toggle("btn-power-disabled", !isEnabled || !isOnline);
+      btnPowerToggle.classList.toggle("btn-power-disabled", !isPowerActive);
+      btnPowerToggle.classList.toggle("is-active", isPowerActive);
+      btnPowerToggle.classList.toggle("is-disabled", !isPowerActive);
     }
-    btnPowerToggle.title = isEnabled ? "Отключить прокси" : "Включить прокси";
+    btnPowerToggle.title = isPowerActive
+      ? "Прокси активен и подключен (клик — отключить)"
+      : (isEnabled && !isOnline
+          ? "Сервер PEC недоступен"
+          : "Прокси отключен (клик — включить)");
   }
 
   if (btnPauseToggle) {
     if (btnPauseToggle.classList && typeof btnPauseToggle.classList.toggle === "function") {
       btnPauseToggle.classList.toggle("btn-pause-active", isBypass);
+      btnPauseToggle.classList.toggle("is-active", isBypass);
     }
   }
 
-  if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
-    clearInterval(bypassCountdownTimer);
-    bypassCountdownTimer = null;
-  }
-  if (btnPauseToggle || btnPauseLabel) {
-    if (isBypass) {
-      if (response.bypassExpiresAt) {
-        updateBypassCountdown(response.bypassExpiresAt);
-        if (typeof setInterval !== "undefined") {
-          bypassCountdownTimer = setInterval(() => {
-            if (response.bypassExpiresAt && response.bypassExpiresAt > Date.now()) {
-              updateBypassCountdown(response.bypassExpiresAt);
-            } else {
-              if (typeof clearInterval !== "undefined") clearInterval(bypassCountdownTimer);
-              bypassCountdownTimer = null;
-              updateBypassCountdown(0);
-            }
-          }, 1000);
+  const btnPauseLabel = document.getElementById("btnPauseLabel");
+  if (isBypass && response.bypassExpiresAt) {
+    updateBypassCountdown(response.bypassExpiresAt);
+    if (!bypassCountdownTimer && typeof setInterval !== "undefined") {
+      bypassCountdownTimer = setInterval(() => {
+        if (currentProxyState.bypassExpiresAt) {
+          updateBypassCountdown(currentProxyState.bypassExpiresAt);
         }
-      } else {
-        if (btnPauseToggle) btnPauseToggle.title = "Включить прокси";
-        if (btnPauseLabel) btnPauseLabel.textContent = "Включить прокси";
-      }
-    } else {
-      if (btnPauseToggle) btnPauseToggle.title = "Пауза 15м";
-      if (btnPauseLabel) btnPauseLabel.textContent = "Пауза 15м";
+      }, 1000);
     }
+  } else if (!isBypass) {
+    if (bypassCountdownTimer && typeof clearInterval !== "undefined") {
+      clearInterval(bypassCountdownTimer);
+      bypassCountdownTimer = null;
+    }
+    if (btnPauseLabel) {
+      btnPauseLabel.textContent = "";
+      if (btnPauseLabel.style) btnPauseLabel.style.display = "none";
+    }
+    if (btnPauseToggle) btnPauseToggle.title = "Пауза 15м";
   }
 
   if (modeVal) {
     if (isBypass) {
       modeVal.textContent = "Обход (Bypass)";
       modeVal.title = "Прокси временно отключен пользователем";
-    } else if (response.protocol === "pac") {
+    } else if (!isEnabled || !isOnline) {
+      modeVal.textContent = "Отключен";
+      modeVal.title = "Отключен";
+    } else if (response.protocol === "pac" || response.proxyMode === "pac" || (!response.protocol && isOnline)) {
       const isTunnel = response.profileDefaultPolicy === "proxy";
       modeVal.textContent = isTunnel ? "PAC (туннель)" : "PAC (селективный)";
       modeVal.title = isTunnel ? "Весь трафик через прокси, кроме исключений" : "Проксируются только домены из правил; остальной трафик — напрямую";
@@ -204,7 +245,7 @@ window.applyPopupState = function(response) {
 
   if (tabRulesDefaultPolicy && response.profileDefaultPolicy) {
     const isTunnel = response.profileDefaultPolicy === "proxy";
-    tabRulesDefaultPolicy.textContent = isTunnel ? "PROXY (туннель)" : "DIRECT (селективный)";
+    tabRulesDefaultPolicy.textContent = isTunnel ? (isRu ? "PROXY (туннель)" : "PROXY (tunnel)") : (isRu ? "DIRECT (селективный)" : "DIRECT (selective)");
     tabRulesDefaultPolicy.title = tabRulesDefaultPolicy.textContent;
   }
 
@@ -214,7 +255,7 @@ window.applyPopupState = function(response) {
     serverVal.title = sText;
   }
   if (profileVal) {
-    profileVal.textContent = response.profileName || "Selective PAC";
+    profileVal.textContent = response.profileName || (isRu ? "Селективный PAC" : "Selective PAC");
     profileVal.title = profileVal.textContent;
   }
   if (pingVal && response.ping) {
@@ -243,7 +284,7 @@ window.applyPopupState = function(response) {
       webrtcVal.textContent = isRu ? "Отключено" : "Disabled";
       webrtcVal.className = "val warn-val";
     } else {
-      webrtcVal.textContent = isRu ? "Защищено (без утечки UDP)" : "Protected (UDP block)";
+      webrtcVal.textContent = isRu ? "Защищено (без утечки UDP)" : "Protected (No UDP leak)";
       webrtcVal.className = "val success-val";
     }
     webrtcVal.title = webrtcVal.textContent;
@@ -270,7 +311,7 @@ window.applyPopupState = function(response) {
   const selectActiveProxy = document.getElementById("selectActiveProxy");
   const activeProxyProtocolBadge = document.getElementById("activeProxyProtocolBadge");
 
-  if (cardProxySelector) {
+  if (cardProxySelector && cardProxySelector.style) {
     if (response.allowUserProxySwitch === false) {
       cardProxySelector.style.display = "none";
     } else {
@@ -298,19 +339,24 @@ window.applyPopupState = function(response) {
     activeProxyProtocolBadge.textContent = proto.toUpperCase();
   }
 
-  if (selectActiveProxy && Array.isArray(response.availableProxies)) {
+  if (selectActiveProxy) {
+    const proxies = Array.isArray(response.availableProxies) ? response.availableProxies : [];
     const currentActiveId = response.activeProxyId || "";
-    const optionsHtml = response.availableProxies.map(function(p) {
-      const pHostPort = p.host && p.host.includes(":") && !p.host.startsWith("[") ? "[" + p.host + "]:" + p.port : (p.host ? p.host + ":" + p.port : "");
-      const pName = p.name || pHostPort || p.id;
-      const pProto = (p.protocol || "http").toUpperCase();
-      const sel = p.id === currentActiveId ? " selected" : "";
-      return '<option value="' + escapeHtml(p.id) + '"' + sel + '>' + escapeHtml(pName) + ' (' + escapeHtml(pProto) + ')</option>';
-    }).join("");
+    if (proxies.length === 0) {
+      selectActiveProxy.innerHTML = '<option value="">' + (isRu ? "Нет доступных серверов" : "No available proxies") + '</option>';
+    } else {
+      const optionsHtml = proxies.map(function(p) {
+        const pHostPort = p.host && p.host.includes(":") && !p.host.startsWith("[") ? "[" + p.host + "]:" + p.port : (p.host ? p.host + ":" + p.port : "");
+        const pName = p.name || pHostPort || p.id;
+        const pProto = (p.protocol || "http").toUpperCase();
+        const sel = p.id === currentActiveId ? " selected" : "";
+        return '<option value="' + escapeHtml(p.id) + '"' + sel + '>' + escapeHtml(pName) + ' (' + escapeHtml(pProto) + ')</option>';
+      }).join("");
 
-    const defaultOpt = '<option value="">' + (isRu ? "По умолчанию (Сервер)" : "Default (Server)") + '</option>';
-    selectActiveProxy.innerHTML = defaultOpt + optionsHtml;
-    selectActiveProxy.value = currentActiveId;
+      const defaultOpt = '<option value="">' + (isRu ? "По умолчанию (Сервер)" : "Default (Server)") + '</option>';
+      selectActiveProxy.innerHTML = defaultOpt + optionsHtml;
+      selectActiveProxy.value = currentActiveId;
+    }
   }
 
   if (response.profileRules !== undefined || response.profileName || response.profileDefaultPolicy) {
@@ -333,7 +379,7 @@ function renderCorporateRules(rules, profileName, defaultPolicy) {
   }
   if (defaultPolicyTag && defaultPolicy) {
     const isTunnel = defaultPolicy === "proxy";
-    defaultPolicyTag.textContent = isTunnel ? "PROXY (туннель)" : "DIRECT (селективный)";
+    defaultPolicyTag.textContent = isTunnel ? (isRu ? "PROXY (туннель)" : "PROXY (tunnel)") : (isRu ? "DIRECT (селективный)" : "DIRECT (selective)");
     defaultPolicyTag.title = defaultPolicyTag.textContent;
   }
 
@@ -351,7 +397,7 @@ function renderCorporateRules(rules, profileName, defaultPolicy) {
   } catch (_) {}
 
   if (!ruleList.length) {
-    container.innerHTML = '<div class="empty-rules" id="corpRulesEmpty">Правила маршрутизации не заданы (все запросы по умолчанию)</div>';
+    container.innerHTML = '<div class="empty-rules" id="corpRulesEmpty">' + (isRu ? "Правила маршрутизации не заданы (все запросы по умолчанию)" : "No routing rules defined (all requests follow default policy)") + '</div>';
     return;
   }
 
@@ -377,19 +423,19 @@ function renderCorporateRules(rules, profileName, defaultPolicy) {
     dot.style.height = "6px";
     dot.style.borderRadius = "50%";
     const act = (rule.action || "proxy").toLowerCase();
-    dot.style.backgroundColor = act === "proxy" ? "#38bdf8" : act === "direct" ? "#10b981" : "#ef4444";
+    dot.style.backgroundColor = act === "proxy" ? "var(--primary)" : act === "direct" ? "var(--success)" : "var(--danger)";
 
     const title = document.createElement("span");
     title.className = "rule-pattern";
     title.style.fontWeight = "600";
-    title.textContent = rule.name || (rule.pattern ? rule.pattern : "Правило");
+    title.textContent = rule.name || (rule.pattern ? rule.pattern : (isRu ? "Правило" : "Rule"));
 
     titleRow.appendChild(dot);
     titleRow.appendChild(title);
 
     const domainList = Array.isArray(rule.domains) && rule.domains.length > 0
       ? rule.domains.slice(0, 3).join(", ") + (rule.domains.length > 3 ? " + " + (rule.domains.length - 3) : "")
-      : (rule.pattern || "Все домены");
+      : (rule.pattern || (isRu ? "Все домены" : "All domains"));
 
     const sub = document.createElement("span");
     sub.style.fontSize = "10px";
@@ -421,9 +467,9 @@ function setCorpRulesExpanded(expanded, saveToStorage) {
   const chevron = document.getElementById("corpRulesToggleChevron");
   const header = document.getElementById("corpRulesHeader");
   const isExp = Boolean(expanded);
-  if (card) card.classList.toggle("expanded", isExp);
+  if (card && card.classList && typeof card.classList.toggle === "function") card.classList.toggle("expanded", isExp);
   if (body) body.style.display = isExp ? "block" : "none";
-  if (header) header.setAttribute("aria-expanded", isExp ? "true" : "false");
+  if (header && typeof header.setAttribute === "function") header.setAttribute("aria-expanded", isExp ? "true" : "false");
   if (chevron) chevron.textContent = isExp ? "▲" : "▼";
   if (saveToStorage) {
     try {
@@ -443,13 +489,17 @@ window.addEventListener("message", function(e) {
   }
 });
 
-function applyTheme(theme) {
-  const isLight = theme === "light";
-  if (typeof document !== "undefined" && document.body) {
-    document.body.setAttribute("data-theme", isLight ? "light" : "dark");
-  }
-  const btnThemeToggle = typeof document !== "undefined" && document.getElementById ? document.getElementById("btnThemeToggle") : null;
+function applyTheme(mode) {
+  if (!document.body) return;
+  const targetMode = mode === "light" ? "light" : "dark";
+  document.body.setAttribute("data-theme", targetMode);
+  if (document.documentElement) document.documentElement.setAttribute("data-theme", targetMode);
+  try {
+    localStorage.setItem("pec_theme_mode", targetMode);
+  } catch (_) {}
+  const btnThemeToggle = document.getElementById("btnThemeToggle");
   if (btnThemeToggle) {
+    const isLight = targetMode === "light";
     btnThemeToggle.innerHTML = isLight
       ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>'
       : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
@@ -459,11 +509,10 @@ function applyTheme(theme) {
 
 function initPopup() {
   const statusText = document.getElementById("statusText");
-  const heroStatusText = document.getElementById("heroStatusText");
-  const badge = document.getElementById("badge") || document.getElementById("statusPill");
-  const statusOrb = document.getElementById("statusOrb");
-  const modeVal = document.getElementById("modeVal");
+  const badge = document.getElementById("badge");
+  const statusPill = document.getElementById("statusPill");
   const serverVal = document.getElementById("serverVal");
+  const modeVal = document.getElementById("modeVal");
   const pingVal = document.getElementById("pingVal");
   const exitIpVal = document.getElementById("exitIpVal");
   const btnThemeToggle = document.getElementById("btnThemeToggle");
@@ -473,74 +522,89 @@ function initPopup() {
   const btnTestLatency = document.getElementById("btnTestLatency");
   const btnCheckIp = document.getElementById("btnCheckIp");
 
-  // Tab switching listeners
-  const tabs = document.querySelectorAll(".tab-btn");
-  tabs.forEach(tab => {
-    tab.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      window.switchPopupTab(tab.dataset.tab || tab.id);
+  // Keyboard navigation for WAI-ARIA tabs (EXT-11)
+  const tabBtns = Array.from(document.querySelectorAll(".tab-btn"));
+  tabBtns.forEach((btn, index) => {
+    btn.addEventListener("click", () => {
+      const tabId = btn.getAttribute("data-tab") || btn.id;
+      window.switchPopupTab(tabId);
+    });
+    btn.addEventListener("keydown", (e) => {
+      let targetIndex = -1;
+      if (e.key === "ArrowRight") {
+        targetIndex = (index + 1) % tabBtns.length;
+      } else if (e.key === "ArrowLeft") {
+        targetIndex = (index - 1 + tabBtns.length) % tabBtns.length;
+      } else if (e.key === "Home") {
+        targetIndex = 0;
+      } else if (e.key === "End") {
+        targetIndex = tabBtns.length - 1;
+      }
+      if (targetIndex !== -1) {
+        e.preventDefault();
+        const targetBtn = tabBtns[targetIndex];
+        const tabId = targetBtn.getAttribute("data-tab") || targetBtn.id;
+        window.switchPopupTab(tabId);
+        targetBtn.focus();
+      }
     });
   });
 
-  // Corporate rules accordion
+  // Accordion toggle click handler
   const corpRulesHeader = document.getElementById("corpRulesHeader");
   if (corpRulesHeader) {
-    const toggleCorpRules = () => {
-      const card = document.getElementById("cardCorporateRules");
-      const isCurrentlyExpanded = card ? card.classList.contains("expanded") : false;
+    corpRulesHeader.addEventListener("click", () => {
+      const body = document.getElementById("corpRulesBody");
+      const isCurrentlyExpanded = body && body.style.display !== "none";
       setCorpRulesExpanded(!isCurrentlyExpanded, true);
-    };
-    corpRulesHeader.addEventListener("click", toggleCorpRules);
+    });
     corpRulesHeader.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        toggleCorpRules();
+        const body = document.getElementById("corpRulesBody");
+        const isCurrentlyExpanded = body && body.style.display !== "none";
+        setCorpRulesExpanded(!isCurrentlyExpanded, true);
       }
     });
+  }
 
-    let savedState = null;
-    try {
-      savedState = localStorage.getItem("pec_corp_rules_expanded");
-    } catch (_) {}
-
-    if (savedState !== null) {
-      setCorpRulesExpanded(savedState === "true", false);
-    } else {
-      setCorpRulesExpanded(false, false);
+  // Restore saved accordion state
+  try {
+    const savedExp = localStorage.getItem("pec_corp_rules_expanded");
+    if (savedExp !== null) {
+      setCorpRulesExpanded(savedExp === "true", false);
     }
-  }
+  } catch (_) {}
 
-  // Day/Night theme toggler
-  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-    try {
-      chrome.storage.local.get(["pecThemeMode"], (res) => {
-        if (res && res.pecThemeMode) {
-          applyTheme(res.pecThemeMode);
-        }
-      });
-    } catch (e) {}
-  }
-
+  // Theme toggle
   if (btnThemeToggle) {
     btnThemeToggle.addEventListener("click", () => {
-      const cur = (document.body && document.body.getAttribute("data-theme") === "light") ? "light" : "dark";
-      const next = cur === "light" ? "dark" : "light";
-      applyTheme(next);
-      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-        chrome.storage.local.set({ pecThemeMode: next });
+      const curTheme = document.body ? document.body.getAttribute("data-theme") : "dark";
+      const nextTheme = curTheme === "light" ? "dark" : "light";
+      applyTheme(nextTheme);
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ pecThemeMode: nextTheme });
       }
     });
   }
 
+  // Restore saved theme immediately
+  try {
+    const savedTheme = localStorage.getItem("pec_theme_mode");
+    if (savedTheme) {
+      applyTheme(savedTheme);
+    }
+  } catch (_) {}
+
   async function loadState() {
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
       try {
         const stored = await chrome.storage.local.get([
           "pecProxyState",
-          "pecThemeMode",
-          "pecLastConfig",
           "pecProfileRules",
           "pecProfileDefaultPolicy",
+          "pecThemeMode",
+          "pecLastConfig"
         ]);
         if (stored) {
           if (stored.pecProxyState && typeof stored.pecProxyState === "object") {
@@ -565,15 +629,15 @@ function initPopup() {
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ action: "GET_STATUS", type: "GET_STATUS" }, (response) => {
         if (chrome.runtime.lastError || !response) {
-          if (!serverVal || serverVal.textContent === "—") {
-            if (statusText) statusText.textContent = "Ошибка связи";
-            if (heroStatusText) heroStatusText.textContent = "Ошибка связи";
-            if (badge) badge.className = "status-badge offline";
-            if (statusOrb) statusOrb.className = "status-orb";
-            if (serverVal) serverVal.textContent = "Сервер PEC недоступен";
-            if (modeVal) modeVal.textContent = "—";
-            if (pingVal) pingVal.textContent = "—";
+          if (statusText) statusText.textContent = "Ошибка связи";
+          if (badge) badge.className = "status-badge offline";
+          if (statusPill) statusPill.className = "status-badge offline";
+          if (serverVal) {
+            serverVal.textContent = "Сервер PEC недоступен";
+            serverVal.title = "Сервер PEC недоступен";
           }
+          if (modeVal) modeVal.textContent = "—";
+          if (pingVal) pingVal.textContent = "—";
           return;
         }
         window.applyPopupState(response);
@@ -625,9 +689,11 @@ function initPopup() {
 
   if (btnPowerToggle) {
     btnPowerToggle.addEventListener("click", () => {
+      btnPowerToggle.disabled = true;
       const nextEnabled = currentProxyState.enabled !== undefined ? !currentProxyState.enabled : false;
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "SET_ENABLED", type: "SET_ENABLED", enabled: nextEnabled }, (res) => {
+          btnPowerToggle.disabled = false;
           if (res) {
             currentProxyState.enabled = res.enabled !== undefined ? res.enabled : nextEnabled;
             window.applyPopupState(currentProxyState);
@@ -635,6 +701,7 @@ function initPopup() {
           loadState();
         });
       } else {
+        btnPowerToggle.disabled = false;
         currentProxyState.enabled = nextEnabled;
         window.applyPopupState(currentProxyState);
       }
@@ -645,12 +712,22 @@ function initPopup() {
 
   if (btnPauseToggle) {
     btnPauseToggle.addEventListener("click", () => {
+      btnPauseToggle.disabled = true;
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "BYPASS_TOGGLE", type: "BYPASS_TOGGLE" }, (res) => {
-          if (res) window.applyPopupState(res);
+          btnPauseToggle.disabled = false;
+          if (res && res.ok === false) {
+            const errMsg = res.error === "Manual bypass disabled by policy"
+              ? "Прямой обход ограничен политикой безопасности предприятия."
+              : (res.error || "Прямой обход ограничен политикой безопасности предприятия.");
+            showToast(errMsg, "error");
+          } else if (res) {
+            window.applyPopupState(res);
+          }
           loadState();
         });
       } else {
+        btnPauseToggle.disabled = false;
         const nextBypass = !currentProxyState.bypassActive;
         currentProxyState.bypassActive = nextBypass;
         currentProxyState.bypassExpiresAt = nextBypass ? Date.now() + bypassTimeoutMinutes * 60 * 1000 : null;
@@ -692,107 +769,113 @@ function initPopup() {
   function renderUserRules(rules) {
     const listEl = document.getElementById("userRulesList");
     if (!listEl) return;
-    const validRules = (rules || []).filter(r => r && typeof r.pattern === "string");
-    if (!validRules.length) {
+    const safeRules = (rules || []).filter(r => r && typeof r.pattern === "string");
+    if (safeRules.length === 0) {
       listEl.innerHTML = '<div class="empty-rules">Нет пользовательских правил</div>';
       return;
     }
     listEl.innerHTML = "";
-    validRules.forEach((rule, idx) => {
+    safeRules.forEach((rule, idx) => {
       const item = document.createElement("div");
       item.className = "user-rule-item";
 
-      const left = document.createElement("div");
-      left.style.display = "flex";
-      left.style.alignItems = "center";
-      left.style.gap = "6px";
-      left.style.minWidth = "0";
-      left.style.flex = "1";
-
-      const chk = document.createElement("input");
-      chk.type = "checkbox";
-      chk.className = "rule-toggle";
-      chk.checked = Boolean(rule.enabled);
-      chk.title = rule.enabled ? "Отключить правило" : "Включить правило";
-      chk.addEventListener("change", () => {
-        rule.enabled = chk.checked;
-        saveUserRules(userRules);
-      });
-
-      const pat = document.createElement("span");
-      pat.className = "rule-pattern";
-      pat.textContent = rule.pattern;
-      pat.title = rule.pattern;
-      if (!rule.enabled) {
-        pat.style.textDecoration = "line-through";
-        pat.style.opacity = "0.6";
-      }
-
-      left.appendChild(chk);
-      left.appendChild(pat);
+      const pattern = document.createElement("span");
+      pattern.className = "rule-pattern";
+      pattern.textContent = rule.pattern || (isRu ? "Без шаблона" : "No pattern");
+      pattern.title = pattern.textContent;
 
       const meta = document.createElement("div");
       meta.className = "rule-meta";
 
       const badge = document.createElement("span");
       const act = (rule.action || "PROXY").toUpperCase();
-      badge.className = "rule-badge " + act.toLowerCase();
+      badge.className = "rule-badge " + (act === "PROXY" ? "proxy" : "direct");
       badge.textContent = act;
 
       const delBtn = document.createElement("button");
       delBtn.className = "rule-del-btn";
-      delBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
       delBtn.title = "Удалить правило";
+      delBtn.setAttribute("aria-label", "Удалить правило");
+      delBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
       delBtn.addEventListener("click", () => {
-        const removeIdx = userRules.indexOf(rule);
-        if (removeIdx !== -1) {
-          userRules.splice(removeIdx, 1);
-        } else {
-          userRules.splice(idx, 1);
-        }
-        saveUserRules(userRules);
+        deleteRule(idx);
       });
 
       meta.appendChild(badge);
       meta.appendChild(delBtn);
-
-      item.appendChild(left);
+      item.appendChild(pattern);
       item.appendChild(meta);
       listEl.appendChild(item);
     });
   }
 
-  const MAX_USER_RULES = 100;
-
-  function saveUserRules(rules) {
-    userRules = (rules || []).slice(0, MAX_USER_RULES);
-    renderUserRules(userRules);
-    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ action: "SAVE_USER_RULES", type: "SAVE_USER_RULES", rules: userRules });
-    } else if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-      chrome.storage.local.set({ pecUserRules: userRules });
+  function loadUserRules() {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(["pecUserRules"], (res) => {
+        if (!chrome.runtime.lastError && res && Array.isArray(res.pecUserRules)) {
+          userRules = (res.pecUserRules || []).filter(r => r && typeof r.pattern === "string");
+          renderUserRules(userRules);
+        } else {
+          userRules = [];
+          renderUserRules([]);
+        }
+      });
+    } else {
+      userRules = [];
+      renderUserRules([]);
     }
   }
 
-  function loadUserRules() {
-    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ action: "GET_USER_RULES", type: "GET_USER_RULES" }, (res) => {
-        if (!chrome.runtime.lastError && res && Array.isArray(res.userRules)) {
-          userRules = res.userRules.slice(0, MAX_USER_RULES);
-          renderUserRules(userRules);
-        }
-      });
-    } else if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-      chrome.storage.local.get(["pecUserRules"], (res) => {
-        if (res && Array.isArray(res.pecUserRules)) {
-          userRules = res.pecUserRules.slice(0, MAX_USER_RULES);
-          renderUserRules(userRules);
-        }
-      });
+  function saveUserRules(rules) {
+    userRules = (rules || []).filter(r => r && typeof r.pattern === "string");
+    renderUserRules(userRules);
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ pecUserRules: userRules });
     }
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ action: "SAVE_USER_RULES", userRules: userRules });
+    }
+  }
+
+  function deleteRule(idx) {
+    if (idx >= 0 && idx < userRules.length) {
+      userRules.splice(idx, 1);
+      saveUserRules(userRules);
+    }
+  }
+
+  const MAX_USER_RULES = 100;
+
+  function validateRulePattern(p) {
+    if (!p || typeof p !== "string") return false;
+    const str = p.trim();
+    if (!str) return false;
+    let clean = str;
+    if (clean.startsWith("*.")) clean = clean.substring(2);
+    else if (clean.startsWith(".")) clean = clean.substring(1);
+    let hostPart = clean;
+    if (clean.includes("/")) {
+      const parts = clean.split("/");
+      if (parts.length !== 2) return false;
+      hostPart = parts[0];
+      const mask = parseInt(parts[1], 10);
+      if (isNaN(mask) || mask < 0 || mask > 128) return false;
+    }
+    const isIpv4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(hostPart);
+    if (isIpv4) return true;
+    const isIpv6 = /^[a-fA-F0-9:]{2,39}$/.test(hostPart) && hostPart.includes(":");
+    if (isIpv6) return true;
+    const labels = hostPart.split(".");
+    if (labels.length === 0 || labels.some(l => !l || l.length > 63 || !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(l))) {
+      return false;
+    }
+    return true;
   }
 
   function addRule(pattern, action) {
+    const ruleInputError = document.getElementById("ruleInputError");
+    if (ruleInputError && ruleInputError.style) ruleInputError.style.display = "none";
+
     let p = (pattern || "").trim().toLowerCase();
     if (!p) return;
     // Strip protocol if user pasted full URL (e.g. https://site.com/abc -> site.com)
@@ -816,6 +899,15 @@ function initPopup() {
       }
     }
     if (!p) return;
+
+    if (!validateRulePattern(p)) {
+      if (ruleInputError) {
+        ruleInputError.textContent = "Некорректный домен или IP/CIDR";
+        if (ruleInputError.style) ruleInputError.style.display = "block";
+      }
+      return;
+    }
+
     const act = (action || "PROXY").toUpperCase();
     const existing = userRules.find(r => r && r.pattern && r.pattern.toLowerCase() === p);
     if (existing) {
@@ -823,10 +915,14 @@ function initPopup() {
       existing.enabled = true;
     } else {
       if (userRules.length >= MAX_USER_RULES) {
+        if (ruleInputError) {
+          ruleInputError.textContent = "Достигнут лимит (максимум 100 правил)";
+          if (ruleInputError.style) ruleInputError.style.display = "block";
+        }
         const btn = document.getElementById("btnAddRule");
         if (btn) {
           const orig = btn.textContent;
-          btn.textContent = "Лимит (100)!";
+          btn.textContent = "Достигнут лимит (100)!";
           btn.style.backgroundColor = "var(--danger)";
           btn.style.color = "#ffffff";
           setTimeout(() => {
@@ -846,6 +942,13 @@ function initPopup() {
   const selectAction = document.getElementById("selectAction");
   const btnAddRule = document.getElementById("btnAddRule");
   const btnAddCurrentSite = document.getElementById("btnAddCurrentSite");
+  const ruleInputError = document.getElementById("ruleInputError");
+
+  if (inputPattern && ruleInputError) {
+    inputPattern.addEventListener("input", () => {
+      if (ruleInputError.style) ruleInputError.style.display = "none";
+    });
+  }
 
   if (btnAddRule) {
     btnAddRule.addEventListener("click", () => {
@@ -900,11 +1003,11 @@ function initPopup() {
         .join("\n");
 
       const showFeedback = () => {
-        const orig = btnCopyUserExceptions.textContent;
-        btnCopyUserExceptions.textContent = "✓";
+        const origHtml = btnCopyUserExceptions.innerHTML;
+        btnCopyUserExceptions.innerHTML = '<span style="color:var(--success); font-weight:700;">✓</span>';
         btnCopyUserExceptions.title = "Скопировано!";
         setTimeout(() => {
-          btnCopyUserExceptions.textContent = orig;
+          btnCopyUserExceptions.innerHTML = origHtml;
           btnCopyUserExceptions.title = "Скопировать список в буфер";
         }, 1500);
       };
@@ -919,11 +1022,12 @@ function initPopup() {
     });
   }
 
-
   const selectActiveProxy = document.getElementById("selectActiveProxy");
   if (selectActiveProxy) {
+    let prevProxyValue = selectActiveProxy.value;
     selectActiveProxy.addEventListener("change", () => {
       const proxyId = selectActiveProxy.value;
+      selectActiveProxy.disabled = true;
       const badge = document.getElementById("activeProxyProtocolBadge");
       if (badge && Array.isArray(currentProxyState.availableProxies)) {
         const selNode = currentProxyState.availableProxies.find(function(p) { return p.id === proxyId; });
@@ -933,8 +1037,18 @@ function initPopup() {
       }
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "SET_ACTIVE_PROXY", proxyId: proxyId }, (res) => {
-          if (res) window.applyPopupState(res);
+          selectActiveProxy.disabled = false;
+          if (res && res.ok === false) {
+            selectActiveProxy.value = prevProxyValue;
+            showToast(res.error || (isRu ? "Ошибка переключения прокси" : "Proxy switch error"), "error");
+          } else {
+            prevProxyValue = selectActiveProxy.value;
+            if (res) window.applyPopupState(res);
+          }
         });
+      } else {
+        selectActiveProxy.disabled = false;
+        prevProxyValue = proxyId;
       }
     });
   }
@@ -1099,6 +1213,18 @@ function initPopup() {
     }
   }
 
+  function getPluralLogs(count) {
+    if (!isRu) {
+      return count === 1 ? "1 entry" : count + " entries";
+    }
+    const rem10 = count % 10;
+    const rem100 = count % 100;
+    if (rem100 >= 11 && rem100 <= 19) return count + " записей";
+    if (rem10 === 1) return count + " запись";
+    if (rem10 >= 2 && rem10 <= 4) return count + " записи";
+    return count + " записей";
+  }
+
   function renderLogs(logs) {
     if (!logContainer) return;
     if (!Array.isArray(logs) || logs.length === 0) {
@@ -1106,7 +1232,7 @@ function initPopup() {
       if (logCountTag) logCountTag.textContent = "0 записей";
       return;
     }
-    if (logCountTag) logCountTag.textContent = logs.length + " записей";
+    if (logCountTag) logCountTag.textContent = getPluralLogs(logs.length);
     const lines = logs.map((l) => {
       const time = formatTime(l.timestamp || l.time);
       const lvl = (l.level || "INFO").toUpperCase().padEnd(5);
@@ -1157,10 +1283,45 @@ function initPopup() {
   }
 
   if (btnClearLogs) {
+    let isConfirmingClear = false;
+    let confirmClearTimer = null;
+    const btnClearLogsText = document.getElementById("btnClearLogsText");
+
     btnClearLogs.addEventListener("click", () => {
-      if (typeof confirm === "function" && !confirm("Очистить журнал событий?")) {
+      // 2-step inline confirmation replacing window.confirm() in MV3 popup (EXT-01)
+      // confirmClearLogs
+      if (!isConfirmingClear) {
+        isConfirmingClear = true;
+        if (btnClearLogsText) {
+          btnClearLogsText.textContent = "Точно очистить?";
+        }
+        btnClearLogs.style.borderColor = "var(--danger)";
+        btnClearLogs.style.color = "var(--danger)";
+
+        if (confirmClearTimer) clearTimeout(confirmClearTimer);
+        confirmClearTimer = setTimeout(() => {
+          isConfirmingClear = false;
+          if (btnClearLogsText) {
+            btnClearLogsText.textContent = "Очистить";
+          }
+          btnClearLogs.style.borderColor = "";
+          btnClearLogs.style.color = "";
+        }, 3000);
         return;
       }
+
+      // Step 2: Confirmed clear logs
+      isConfirmingClear = false;
+      if (confirmClearTimer) {
+        clearTimeout(confirmClearTimer);
+        confirmClearTimer = null;
+      }
+      if (btnClearLogsText) {
+        btnClearLogsText.textContent = "Очистить";
+      }
+      btnClearLogs.style.borderColor = "";
+      btnClearLogs.style.color = "";
+
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "CLEAR_LOGS", type: "CLEAR_LOGS" }, () => {
           renderLogs([]);

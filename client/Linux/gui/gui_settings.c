@@ -1,5 +1,10 @@
 #include "gui.h"
 
+extern bool gui_confirm(GtkWindow *parent, const char *format, ...);
+extern const char *T(const char *s);
+extern bool safe_save_config(GtkWindow *parent);
+extern void statusbar_set_text(const char *text);
+
 GList *g_proxies_list = NULL;
 char *g_default_proxy = NULL;
 
@@ -61,16 +66,13 @@ void apply_proxies_to_lib() {
     ProxyBridge_SetDefaultProxy(resolve_proxy_id(g_default_proxy));
 }
 
-static bool confirm(GtkWindow *parent, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    char *msg = g_strdup_vprintf(format, args);
-    va_end(args);
-    GtkWidget *q = gtk_message_dialog_new(parent, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO, "%s", msg);
-    int resp = gtk_dialog_run(GTK_DIALOG(q));
-    gtk_widget_destroy(q);
-    g_free(msg);
-    return resp == GTK_RESPONSE_YES;
+static void on_password_icon_pressed(GtkEntry *entry, GtkEntryIconPosition icon_pos, GdkEvent *event, gpointer user_data) {
+    if (icon_pos == GTK_ENTRY_ICON_SECONDARY) {
+        gboolean visible = gtk_entry_get_visibility(entry);
+        gtk_entry_set_visibility(entry, !visible);
+        gtk_entry_set_icon_from_icon_name(entry, GTK_ENTRY_ICON_SECONDARY,
+                                         !visible ? "view-conceal-symbolic" : "view-reveal-symbolic");
+    }
 }
 
 static bool port_text_valid(const char *text, int *port_out) {
@@ -115,7 +117,7 @@ static ProxyData *get_selected_proxy(ConfigInfo *info) {
 static void on_start_test_clicked(GtkWidget *widget, gpointer data) {
     ConfigInfo *info = (ConfigInfo *)data;
     ProxyData *px = get_selected_proxy(info);
-    const char *err = !px ? "Error: Select a proxy to test."
+    const char *err = !px ? T("Error: Select a proxy to test.")
                     : px->id == 0 ? "Error: This proxy was rejected by the engine, edit and save it again." : NULL;
     if (err) {
         gtk_text_buffer_set_text(info->output_buffer, err, -1);
@@ -123,15 +125,24 @@ static void on_start_test_clicked(GtkWidget *widget, gpointer data) {
     }
 
     const char *t_host = gtk_entry_get_text(GTK_ENTRY(info->test_host));
-    int t_port = (int)parse_long(gtk_entry_get_text(GTK_ENTRY(info->test_port)));
-    if (t_port <= 0 || t_port > 65535) t_port = 80;
+    if (!t_host || !*t_host) {
+        gtk_text_buffer_set_text(info->output_buffer, T("Error: Target host cannot be empty."), -1);
+        return;
+    }
 
-    gtk_text_buffer_set_text(info->output_buffer, "Testing connection... Please wait...", -1);
+    const char *t_port_str = gtk_entry_get_text(GTK_ENTRY(info->test_port));
+    int t_port = 0;
+    if (!port_text_valid(t_port_str, &t_port)) {
+        gtk_text_buffer_set_text(info->output_buffer, T("Error: Target port must be between 1 and 65535."), -1);
+        return;
+    }
+
+    gtk_text_buffer_set_text(info->output_buffer, T("Testing connection... Please wait..."), -1);
     gtk_widget_set_sensitive(info->test_btn, FALSE);
 
     TestJob *job = g_malloc0(sizeof(TestJob));
     job->proxy_id = px->id;
-    job->host = g_strdup(*t_host ? t_host : "google.com");
+    job->host = g_strdup(t_host);
     job->port = (uint16_t)t_port;
     job->buffer = g_object_ref(info->output_buffer);
     job->btn = g_object_ref(info->test_btn);
@@ -144,14 +155,17 @@ static void refresh_proxy_store(ConfigInfo *info) {
         ProxyData *p = (ProxyData *)l->data;
         char *addr = g_strdup_printf("%s:%u", p->host, p->port);
         bool is_def = g_default_proxy && strcmp(g_default_proxy, p->name) == 0;
+        char *type_str = p->id == 0 ?
+            (p->type == PROXY_TYPE_HTTP ? "HTTP [Rejected]" : "SOCKS5 [Rejected]") :
+            (p->type == PROXY_TYPE_HTTP ? "HTTP" : "SOCKS5");
         GtkTreeIter iter;
         gtk_list_store_append(info->store, &iter);
         gtk_list_store_set(info->store, &iter,
             COL_NAME, p->name,
-            COL_TYPE, p->type == PROXY_TYPE_HTTP ? "HTTP" : "SOCKS5",
+            COL_TYPE, type_str,
             COL_ADDR, addr,
             COL_AUTH, (p->username && *p->username) ? "Yes" : "No",
-            COL_DEFAULT, is_def ? "Yes" : "",
+            COL_DEFAULT, is_def ? "Yes" : (p->id == 0 ? "[Rejected]" : ""),
             COL_PTR, p,
             -1);
         g_free(addr);
@@ -188,9 +202,9 @@ static void rename_proxy_refs(const char *old_name, const char *new_name) {
 
 // existing == NULL adds. returns the saved proxy or NULL
 static ProxyData *proxy_edit_dialog(GtkWindow *parent, ProxyData *existing) {
-    GtkWidget *dialog = gtk_dialog_new_with_buttons(existing ? "Edit Proxy" : "Add Proxy", parent,
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(existing ? T("Edit Proxy") : T("Add Proxy"), parent,
                                          GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                         "Cancel", GTK_RESPONSE_CANCEL, "Save", GTK_RESPONSE_ACCEPT, NULL);
+                                         T("Cancel"), GTK_RESPONSE_CANCEL, T("Save"), GTK_RESPONSE_ACCEPT, NULL);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 420, -1);
     GtkWidget *grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(grid), 5);
@@ -205,12 +219,16 @@ static ProxyData *proxy_edit_dialog(GtkWindow *parent, ProxyData *existing) {
     GtkWidget *user_entry = gtk_entry_new();
     GtkWidget *pass_entry = gtk_entry_new();
     gtk_entry_set_visibility(GTK_ENTRY(pass_entry), FALSE);
-    grid_row(grid, 0, "Name:", name_entry);
-    grid_row(grid, 1, "Type:", type_combo);
-    grid_row(grid, 2, "Host:", ip_entry);
-    grid_row(grid, 3, "Port:", port_entry);
-    grid_row(grid, 4, "Username:", user_entry);
-    grid_row(grid, 5, "Password:", pass_entry);
+    gtk_entry_set_icon_from_icon_name(GTK_ENTRY(pass_entry), GTK_ENTRY_ICON_SECONDARY, "view-reveal-symbolic");
+    gtk_entry_set_icon_tooltip_text(GTK_ENTRY(pass_entry), GTK_ENTRY_ICON_SECONDARY, T("Show/hide password"));
+    g_signal_connect(pass_entry, "icon-press", G_CALLBACK(on_password_icon_pressed), NULL);
+
+    grid_row(grid, 0, T("Name:"), name_entry);
+    grid_row(grid, 1, T("Type:"), type_combo);
+    grid_row(grid, 2, T("Host:"), ip_entry);
+    grid_row(grid, 3, T("Port:"), port_entry);
+    grid_row(grid, 4, T("Username:"), user_entry);
+    grid_row(grid, 5, T("Password:"), pass_entry);
     GtkWidget *err_label = hint_label("");
     gtk_grid_attach(GTK_GRID(grid), err_label, 0, 6, 2, 1);
 
@@ -228,6 +246,7 @@ static ProxyData *proxy_edit_dialog(GtkWindow *parent, ProxyData *existing) {
         gtk_entry_set_text(GTK_ENTRY(name_entry), "default");
     }
     gtk_widget_show_all(dialog);
+    gtk_widget_grab_focus(name_entry);
 
     ProxyData *result = NULL;
     while (!result && gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
@@ -292,7 +311,7 @@ static ProxyData *proxy_edit_dialog(GtkWindow *parent, ProxyData *existing) {
 
 static void commit_proxy_change(ConfigInfo *info, ProxyData *p) {
     if (!p) return;
-    save_config();
+    safe_save_config(info && info->dialog ? GTK_WINDOW(info->dialog) : NULL);
     refresh_proxy_store(info);
     select_proxy_row(info, p);
 }
@@ -306,7 +325,7 @@ static void on_proxy_edit(GtkWidget *widget, gpointer data) {
     ConfigInfo *info = (ConfigInfo *)data;
     ProxyData *sel = get_selected_proxy(info);
     if (!sel) {
-        show_message(GTK_WINDOW(info->dialog), GTK_MESSAGE_WARNING, "Select a proxy first.");
+        show_message(GTK_WINDOW(info->dialog), GTK_MESSAGE_WARNING, T("Select a proxy first."));
         return;
     }
     commit_proxy_change(info, proxy_edit_dialog(GTK_WINDOW(info->dialog), sel));
@@ -320,10 +339,10 @@ static void on_proxy_delete(GtkWidget *widget, gpointer data) {
     ConfigInfo *info = (ConfigInfo *)data;
     ProxyData *p = get_selected_proxy(info);
     if (!p) {
-        show_message(GTK_WINDOW(info->dialog), GTK_MESSAGE_WARNING, "Select a proxy first.");
+        show_message(GTK_WINDOW(info->dialog), GTK_MESSAGE_WARNING, T("Select a proxy first."));
         return;
     }
-    if (!confirm(GTK_WINDOW(info->dialog), "Delete proxy '%s'?\nRules using it will fall back to the default proxy.", p->name)) return;
+    if (!gui_confirm(GTK_WINDOW(info->dialog), T("Delete proxy '%s'?\nRules using it will fall back to the default proxy."), p->name)) return;
 
     if (p->id) ProxyBridge_DeleteProxy(p->id);
     for (GList *l = g_rules_list; l != NULL; l = l->next) {
@@ -338,7 +357,7 @@ static void on_proxy_delete(GtkWidget *widget, gpointer data) {
         set_str(&g_default_proxy, g_proxies_list ? ((ProxyData *)g_proxies_list->data)->name : NULL);
         ProxyBridge_SetDefaultProxy(resolve_proxy_id(g_default_proxy));
     }
-    save_config();
+    safe_save_config(GTK_WINDOW(info->dialog));
     refresh_proxy_store(info);
 }
 
@@ -346,7 +365,7 @@ static void on_proxy_set_default(GtkWidget *widget, gpointer data) {
     ConfigInfo *info = (ConfigInfo *)data;
     ProxyData *p = get_selected_proxy(info);
     if (!p) {
-        show_message(GTK_WINDOW(info->dialog), GTK_MESSAGE_WARNING, "Select a proxy first.");
+        show_message(GTK_WINDOW(info->dialog), GTK_MESSAGE_WARNING, T("Select a proxy first."));
         return;
     }
     set_str(&g_default_proxy, p->name);
@@ -354,15 +373,15 @@ static void on_proxy_set_default(GtkWidget *widget, gpointer data) {
     commit_proxy_change(info, p);
 
     char *status_msg = g_strdup_printf("Default proxy: %s (%s:%u)", p->name, p->host, p->port);
-    gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id, status_msg);
+    statusbar_set_text(status_msg);
     g_free(status_msg);
 }
 
 void on_proxy_configure(GtkWidget *widget, gpointer data) {
     ConfigInfo info = {0};
-    info.dialog = gtk_dialog_new_with_buttons("Proxy Settings", GTK_WINDOW(window),
+    info.dialog = gtk_dialog_new_with_buttons(T("Proxy Settings"), GTK_WINDOW(window),
                                          GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                         "Close", GTK_RESPONSE_CLOSE, NULL);
+                                         T("Close"), GTK_RESPONSE_CLOSE, NULL);
     gtk_window_set_default_size(GTK_WINDOW(info.dialog), 650, 560);
 
     GtkWidget *grid = gtk_grid_new();
@@ -374,7 +393,7 @@ void on_proxy_configure(GtkWidget *widget, gpointer data) {
     info.store = gtk_list_store_new(N_COLS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_POINTER);
     info.tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(info.store));
     g_object_unref(info.store);
-    const char *titles[] = {"Name", "Type", "Host:Port", "Auth", "Default"};
+    const char *titles[] = {T("Name"), T("Type"), "Host:Port", "Auth", T("Default")};
     for (int i = 0; i < 5; i++) {
         GtkTreeViewColumn *c = gtk_tree_view_column_new_with_attributes(titles[i], gtk_cell_renderer_text_new(), "text", i, NULL);
         gtk_tree_view_column_set_resizable(c, TRUE);
@@ -390,7 +409,7 @@ void on_proxy_configure(GtkWidget *widget, gpointer data) {
     gtk_grid_attach(GTK_GRID(grid), tree_scroll, 0, 0, 4, 1);
 
     GtkWidget *btn_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    const char *labels[] = {"Add", "Edit", "Delete", "Set Default"};
+    const char *labels[] = {T("New"), T("Edit"), T("Delete"), T("Set Default")};
     void (*cbs[])(GtkWidget *, gpointer) = {on_proxy_add, on_proxy_edit, on_proxy_delete, on_proxy_set_default};
     for (int i = 0; i < 4; i++) {
         GtkWidget *b = gtk_button_new_with_label(labels[i]);
@@ -400,23 +419,23 @@ void on_proxy_configure(GtkWidget *widget, gpointer data) {
     gtk_grid_attach(GTK_GRID(grid), btn_box, 0, 1, 4, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), 0, 2, 4, 1);
 
-    GtkWidget *test_label = gtk_label_new("<b>Test Selected Proxy</b>");
-    gtk_label_set_use_markup(GTK_LABEL(test_label), TRUE);
+    GtkWidget *test_label = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(test_label), "<b>Test Selected Proxy</b>");
     gtk_widget_set_halign(test_label, GTK_ALIGN_START);
     gtk_grid_attach(GTK_GRID(grid), test_label, 0, 3, 4, 1);
 
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Target:"), 0, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new(T("Target:")), 0, 4, 1, 1);
     info.test_host = gtk_entry_new();
-    gtk_entry_set_text(GTK_ENTRY(info.test_host), "google.com");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(info.test_host), "1.1.1.1");
     gtk_widget_set_hexpand(info.test_host, TRUE);
     gtk_grid_attach(GTK_GRID(grid), info.test_host, 1, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Port:"), 2, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new(T("Port:")), 2, 4, 1, 1);
     info.test_port = gtk_entry_new();
-    gtk_entry_set_text(GTK_ENTRY(info.test_port), "80");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(info.test_port), "443");
     gtk_widget_set_size_request(info.test_port, 80, -1);
     gtk_grid_attach(GTK_GRID(grid), info.test_port, 3, 4, 1, 1);
 
-    info.test_btn = gtk_button_new_with_label("Start Test");
+    info.test_btn = gtk_button_new_with_label(T("Start Test"));
     g_signal_connect(info.test_btn, "clicked", G_CALLBACK(on_start_test_clicked), &info);
     gtk_grid_attach(GTK_GRID(grid), info.test_btn, 0, 5, 4, 1);
 
@@ -446,11 +465,11 @@ typedef struct {
 } ProfilesInfo;
 
 static void update_profile_ui() {
-    char *title = g_strdup_printf("ProxyBridge - %s", g_active_profile);
+    char *title = g_strdup_printf("PEC - %s", g_active_profile);
     gtk_window_set_title(GTK_WINDOW(window), title);
     g_free(title);
     title = g_strdup_printf("Active profile: %s", g_active_profile);
-    gtk_statusbar_push(GTK_STATUSBAR(status_bar), status_context_id, title);
+    statusbar_set_text(title);
     g_free(title);
 }
 
@@ -460,7 +479,7 @@ static void reapply_active_profile() {
     apply_proxies_to_lib();
     apply_rules_to_lib();
     gui_sync_switches();
-    save_config();
+    safe_save_config(NULL);
     refresh_rules_window();
     update_profile_ui();
 }
@@ -487,13 +506,13 @@ static char *selected_profile_name(ProfilesInfo *pi) {
 // NULL on cancel
 static char *ask_profile_name(GtkWindow *parent, const char *title, const char *initial) {
     GtkWidget *d = gtk_dialog_new_with_buttons(title, parent, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                               "Cancel", GTK_RESPONSE_CANCEL, "OK", GTK_RESPONSE_ACCEPT, NULL);
+                                               T("Cancel"), GTK_RESPONSE_CANCEL, "OK", GTK_RESPONSE_ACCEPT, NULL);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(d));
     gtk_container_set_border_width(GTK_CONTAINER(box), 10);
     GtkWidget *entry = gtk_entry_new();
     gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
     gtk_entry_set_text(GTK_ENTRY(entry), initial);
-    gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Profile name:"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), gtk_label_new(T("Profile name:")), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 5);
     gtk_dialog_set_default_response(GTK_DIALOG(d), GTK_RESPONSE_ACCEPT);
     gtk_widget_show_all(d);
@@ -513,21 +532,31 @@ static char *ask_profile_name(GtkWindow *parent, const char *title, const char *
 static void on_profile_switch(GtkWidget *widget, gpointer data) {
     ProfilesInfo *pi = (ProfilesInfo *)data;
     char *name = selected_profile_name(pi);
-    if (name && strcmp(name, g_active_profile) != 0 && profile_activate(name)) {
-        reapply_active_profile();
-        refresh_profile_store(pi);
+    if (name) {
+        if (strcmp(name, g_active_profile) != 0) {
+            if (profile_activate(name)) {
+                reapply_active_profile();
+                refresh_profile_store(pi);
+            } else {
+                show_message(GTK_WINDOW(pi->dialog), GTK_MESSAGE_ERROR, "Failed to switch to profile '%s'.", name);
+            }
+        }
+        g_free(name);
     }
-    g_free(name);
 }
 
 static void on_profile_new(GtkWidget *widget, gpointer data) {
     ProfilesInfo *pi = (ProfilesInfo *)data;
-    char *name = ask_profile_name(GTK_WINDOW(pi->dialog), "New Profile", "");
-    if (name && profile_create(name, false)) {
-        save_config();
-        refresh_profile_store(pi);
+    char *name = ask_profile_name(GTK_WINDOW(pi->dialog), T("New Profile"), "");
+    if (name) {
+        if (profile_create(name, false)) {
+            safe_save_config(GTK_WINDOW(pi->dialog));
+            refresh_profile_store(pi);
+        } else {
+            show_message(GTK_WINDOW(pi->dialog), GTK_MESSAGE_ERROR, "Failed to create profile '%s'.", name);
+        }
+        g_free(name);
     }
-    g_free(name);
 }
 
 static void on_profile_duplicate(GtkWidget *widget, gpointer data) {
@@ -535,29 +564,37 @@ static void on_profile_duplicate(GtkWidget *widget, gpointer data) {
     char *src = selected_profile_name(pi);
     if (!src) return;
     char *initial = g_strdup_printf("%s copy", src);
-    char *name = ask_profile_name(GTK_WINDOW(pi->dialog), "Duplicate Profile", initial);
+    char *name = ask_profile_name(GTK_WINDOW(pi->dialog), T("Duplicate Profile"), initial);
     char *prev = g_strdup(g_active_profile);
     // copies the active profile, so make the source active for a moment (library state is untouched)
-    if (name && profile_activate(src)) {
-        profile_create(name, true);
-        profile_activate(prev);
-        save_config();
-        refresh_profile_store(pi);
+    if (name) {
+        if (profile_activate(src) && profile_create(name, true)) {
+            profile_activate(prev);
+            safe_save_config(GTK_WINDOW(pi->dialog));
+            refresh_profile_store(pi);
+        } else {
+            show_message(GTK_WINDOW(pi->dialog), GTK_MESSAGE_ERROR, "Failed to duplicate profile '%s'.", src);
+        }
+        g_free(name);
     }
-    g_free(prev); g_free(initial); g_free(name); g_free(src);
+    g_free(prev); g_free(initial); g_free(src);
 }
 
 static void on_profile_rename(GtkWidget *widget, gpointer data) {
     ProfilesInfo *pi = (ProfilesInfo *)data;
     char *old = selected_profile_name(pi);
     if (!old) return;
-    char *name = ask_profile_name(GTK_WINDOW(pi->dialog), "Rename Profile", old);
-    if (name && profile_rename(profile_find(old), name)) {
-        save_config();
-        refresh_profile_store(pi);
-        update_profile_ui();
+    char *name = ask_profile_name(GTK_WINDOW(pi->dialog), T("Rename Profile"), old);
+    if (name) {
+        if (profile_rename(profile_find(old), name)) {
+            safe_save_config(GTK_WINDOW(pi->dialog));
+            refresh_profile_store(pi);
+            update_profile_ui();
+        } else {
+            show_message(GTK_WINDOW(pi->dialog), GTK_MESSAGE_ERROR, "Failed to rename profile '%s'.", old);
+        }
+        g_free(name);
     }
-    g_free(name);
     g_free(old);
 }
 
@@ -566,13 +603,15 @@ static void on_profile_delete(GtkWidget *widget, gpointer data) {
     char *name = selected_profile_name(pi);
     if (!name) return;
     if (!g_profiles->next) {
-        show_message(GTK_WINDOW(pi->dialog), GTK_MESSAGE_WARNING, "The last profile cannot be deleted.");
-    } else if (confirm(GTK_WINDOW(pi->dialog), "Delete profile '%s' with all its proxies and rules?", name)) {
+        show_message(GTK_WINDOW(pi->dialog), GTK_MESSAGE_WARNING, T("The last profile cannot be deleted."));
+    } else if (gui_confirm(GTK_WINDOW(pi->dialog), "Delete profile '%s' with all its proxies and rules?", name)) {
         bool was_active = strcmp(g_active_profile, name) == 0;
         if (profile_delete(profile_find(name))) {
             if (was_active) reapply_active_profile();
-            else save_config();
+            else safe_save_config(GTK_WINDOW(pi->dialog));
             refresh_profile_store(pi);
+        } else {
+            show_message(GTK_WINDOW(pi->dialog), GTK_MESSAGE_ERROR, "Failed to delete profile '%s'.", name);
         }
     }
     g_free(name);
@@ -580,10 +619,10 @@ static void on_profile_delete(GtkWidget *widget, gpointer data) {
 
 static void on_profile_import(GtkWidget *widget, gpointer data) {
     ProfilesInfo *pi = (ProfilesInfo *)data;
-    GtkWidget *dialog = gtk_file_chooser_dialog_new("Import Profile", GTK_WINDOW(pi->dialog), GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                    "Cancel", GTK_RESPONSE_CANCEL, "Import", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *dialog = gtk_file_chooser_dialog_new(T("Import Profile"), GTK_WINDOW(pi->dialog), GTK_FILE_CHOOSER_ACTION_OPEN,
+                                                    T("Cancel"), GTK_RESPONSE_CANCEL, T("Import"), GTK_RESPONSE_ACCEPT, NULL);
     GtkFileFilter *filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "ProxyBridge profiles (*.pbprofile)");
+    gtk_file_filter_set_name(filter, "PEC profiles (*.pbprofile)");
     gtk_file_filter_add_pattern(filter, "*.pbprofile");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
     GtkFileFilter *all = gtk_file_filter_new();
@@ -595,7 +634,7 @@ static void on_profile_import(GtkWidget *widget, gpointer data) {
         char err[256];
         Profile *p = filename ? profile_import(filename, err, sizeof err) : NULL;
         if (p) {
-            save_config();
+            safe_save_config(GTK_WINDOW(pi->dialog));
             refresh_profile_store(pi);
             show_message(GTK_WINDOW(pi->dialog), GTK_MESSAGE_INFO, "Imported as profile '%s'. Use Switch to activate it.", p->name);
         } else {
@@ -610,8 +649,8 @@ static void on_profile_export(GtkWidget *widget, gpointer data) {
     ProfilesInfo *pi = (ProfilesInfo *)data;
     char *name = selected_profile_name(pi);
     if (!name) return;
-    GtkWidget *dialog = gtk_file_chooser_dialog_new("Export Profile", GTK_WINDOW(pi->dialog), GTK_FILE_CHOOSER_ACTION_SAVE,
-                                                    "Cancel", GTK_RESPONSE_CANCEL, "Export", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *dialog = gtk_file_chooser_dialog_new(T("Export Profile"), GTK_WINDOW(pi->dialog), GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                    T("Cancel"), GTK_RESPONSE_CANCEL, T("Export"), GTK_RESPONSE_ACCEPT, NULL);
     gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
     char *suggested = g_strdup_printf("%s.pbprofile", name);
     gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), suggested);
@@ -636,8 +675,8 @@ static void on_profile_row_activated(GtkTreeView *tree, GtkTreePath *path, GtkTr
 
 void on_profiles_clicked(GtkWidget *widget, gpointer data) {
     ProfilesInfo pi = {0};
-    pi.dialog = gtk_dialog_new_with_buttons("Profiles", GTK_WINDOW(window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                            "Close", GTK_RESPONSE_CLOSE, NULL);
+    pi.dialog = gtk_dialog_new_with_buttons(T("Profiles"), GTK_WINDOW(window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                            T("Close"), GTK_RESPONSE_CLOSE, NULL);
     gtk_window_set_default_size(GTK_WINDOW(pi.dialog), 560, 360);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(pi.dialog));
     gtk_container_set_border_width(GTK_CONTAINER(box), 10);
@@ -645,7 +684,7 @@ void on_profiles_clicked(GtkWidget *widget, gpointer data) {
     pi.store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_STRING);
     pi.tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(pi.store));
     g_object_unref(pi.store);
-    const char *titles[] = {"Profile", "Status"};
+    const char *titles[] = {T("Profile"), T("Status")};
     for (int i = 0; i < 2; i++) {
         GtkTreeViewColumn *c = gtk_tree_view_column_new_with_attributes(titles[i], gtk_cell_renderer_text_new(), "text", i, NULL);
         gtk_tree_view_column_set_expand(c, i == 0);
@@ -657,7 +696,7 @@ void on_profiles_clicked(GtkWidget *widget, gpointer data) {
     gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
 
     GtkWidget *btns = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    const char *labels[] = {"Switch", "New", "Duplicate", "Rename", "Delete", "Import...", "Export..."};
+    const char *labels[] = {T("Switch"), T("New"), T("Duplicate"), T("Rename"), T("Delete"), T("Import"), T("Export")};
     void (*cbs[])(GtkWidget *, gpointer) = {on_profile_switch, on_profile_new, on_profile_duplicate, on_profile_rename, on_profile_delete,
                                             on_profile_import, on_profile_export};
     for (int i = 0; i < 7; i++) {

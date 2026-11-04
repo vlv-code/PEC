@@ -148,6 +148,22 @@ install_files() {
         cp "$SCRIPT_DIR/ProxyBridgeGUI" /usr/local/bin/
         chmod 755 /usr/local/bin/ProxyBridgeGUI 
     fi
+
+    # Install desktop entry if present
+    if [ -f "$SCRIPT_DIR/pec-client.desktop" ]; then
+        echo "Installing pec-client.desktop to /usr/share/applications/..."
+        mkdir -p /usr/share/applications
+        cp "$SCRIPT_DIR/pec-client.desktop" /usr/share/applications/
+        chmod 644 /usr/share/applications/pec-client.desktop
+    fi
+
+    # Install polkit policy if present
+    if [ -f "$SCRIPT_DIR/org.pec.proxybridge.policy" ]; then
+        echo "Installing org.pec.proxybridge.policy to /usr/share/polkit-1/actions/..."
+        mkdir -p /usr/share/polkit-1/actions
+        cp "$SCRIPT_DIR/org.pec.proxybridge.policy" /usr/share/polkit-1/actions/
+        chmod 644 /usr/share/polkit-1/actions/org.pec.proxybridge.policy
+    fi
     
     echo "Files installed"
 }
@@ -220,13 +236,18 @@ main() {
     
     echo ""
     echo "==================================="
-    echo "Installation Complete!"
+    echo "PEC Installation Complete!"
     echo "==================================="
     echo ""
-    echo "You can now run ProxyBridge from anywhere:"
+    echo "You can now run PEC from anywhere:"
     echo "  sudo ProxyBridge --help"
     if [ -f /usr/local/bin/ProxyBridgeGUI ]; then
-       echo "  sudo ProxyBridgeGUI      (Graphical Interface)"
+       echo "  pkexec ProxyBridgeGUI    (Graphical Interface / Desktop Launcher)"
+       echo "  sudo ProxyBridgeGUI      (GUI under X11)"
+       echo ""
+       echo "Note for Wayland sessions:"
+       echo "  If running with sudo fails under Wayland, use 'pkexec ProxyBridgeGUI'"
+       echo "  or authorize root: 'xhost +SI:localuser:root && sudo ProxyBridgeGUI'"
     fi
     echo "  sudo ProxyBridge --proxy socks5://IP:PORT --rule \"app:*:*:TCP:PROXY\""
     echo ""

@@ -95,107 +95,135 @@ inline void ApplyProfileTheme(const PBProfile* prof, ImGuiStyle* dst = nullptr)
 
     PecTheme::IsLightMode = (mode == "light" || preset == "enterprise-light" || preset == "minimal-light" || preset == "light");
 
-    if (preset == "nordic-arctic" || preset == "nord") {
-        // Nordic Arctic (Matches Screenshot 2)
-        PecTheme::CanvasBg      = ImVec4(0.141f, 0.161f, 0.200f, 1.0f); // #242933
-        PecTheme::CardBg        = ImVec4(0.180f, 0.204f, 0.251f, 1.0f); // #2e3440
-        PecTheme::CardBgHover   = ImVec4(0.231f, 0.259f, 0.322f, 1.0f); // #3b4252
-        PecTheme::FrameBg       = ImVec4(0.231f, 0.259f, 0.322f, 1.0f); // #3b4252
-        PecTheme::FrameBgHover  = ImVec4(0.263f, 0.302f, 0.373f, 1.0f); // #434c5e
-        PecTheme::FrameBgActive = ImVec4(0.298f, 0.341f, 0.416f, 1.0f); // #4c566a
-        PecTheme::PrimaryAccent = ImVec4(0.533f, 0.753f, 0.816f, 1.0f); // #88c0d0 Ice Blue
-        PecTheme::HoverAccent   = ImVec4(0.506f, 0.631f, 0.757f, 1.0f); // #81a1c1
-        PecTheme::ActiveAccent  = ImVec4(0.369f, 0.506f, 0.675f, 1.0f); // #5e81ac
-        PecTheme::BorderColor   = ImVec4(0.298f, 0.341f, 0.416f, 1.0f); // #4c566a
-        PecTheme::BorderLight   = ImVec4(0.298f, 0.341f, 0.416f, 0.6f);
-        PecTheme::TextPrimary   = ImVec4(0.925f, 0.937f, 0.957f, 1.0f); // #eceff4
-        PecTheme::TextSecondary = ImVec4(0.847f, 0.871f, 0.914f, 1.0f); // #d8dee9
-        PecTheme::TextMuted     = PecTheme::TextSecondary;
-    }
-    else if (preset == "dark-obsidian" || preset == "obsidian") {
-        // Dark Obsidian
-        PecTheme::CanvasBg      = ImVec4(0.051f, 0.067f, 0.090f, 1.0f); // #0d1117
-        PecTheme::CardBg        = ImVec4(0.086f, 0.106f, 0.133f, 1.0f); // #161b22
-        PecTheme::CardBgHover   = ImVec4(0.129f, 0.149f, 0.176f, 1.0f); // #21262d
-        PecTheme::FrameBg       = ImVec4(0.129f, 0.149f, 0.176f, 1.0f); // #21262d
-        PecTheme::FrameBgHover  = ImVec4(0.188f, 0.212f, 0.239f, 1.0f); // #30363d
-        PecTheme::FrameBgActive = ImVec4(0.235f, 0.263f, 0.290f, 1.0f);
-        PecTheme::PrimaryAccent = ImVec4(0.753f, 0.518f, 0.988f, 1.0f); // #c084fc Purple
-        PecTheme::HoverAccent   = ImVec4(0.847f, 0.706f, 0.996f, 1.0f); // #d8b4fe
-        PecTheme::ActiveAccent  = ImVec4(0.659f, 0.333f, 0.969f, 1.0f); // #a855f7
-        PecTheme::BorderColor   = ImVec4(0.188f, 0.212f, 0.239f, 1.0f); // #30363d
-        PecTheme::BorderLight   = ImVec4(0.188f, 0.212f, 0.239f, 0.6f);
-        PecTheme::TextPrimary   = ImVec4(0.941f, 0.965f, 0.988f, 1.0f); // #f0f6fc
-        PecTheme::TextSecondary = ImVec4(0.545f, 0.580f, 0.620f, 1.0f); // #8b949e
-        PecTheme::TextMuted     = PecTheme::TextSecondary;
-    }
-    else if (preset == "emerald-secops" || preset == "emerald" || preset == "emerald-sentinel") {
-        // Emerald SecOps / Emerald Sentinel
-        PecTheme::CanvasBg      = ImVec4(0.024f, 0.075f, 0.051f, 1.0f); // #06130d
-        PecTheme::CardBg        = ImVec4(0.043f, 0.122f, 0.086f, 1.0f); // #0b1f16
-        PecTheme::CardBgHover   = ImVec4(0.067f, 0.180f, 0.129f, 1.0f); // #112e21
-        PecTheme::FrameBg       = ImVec4(0.067f, 0.180f, 0.129f, 1.0f); // #112e21
-        PecTheme::FrameBgHover  = ImVec4(0.075f, 0.227f, 0.165f, 1.0f); // #133a2a
-        PecTheme::FrameBgActive = ImVec4(0.090f, 0.275f, 0.200f, 1.0f);
-        PecTheme::PrimaryAccent = ImVec4(0.204f, 0.827f, 0.600f, 1.0f); // #34d399 Emerald
-        PecTheme::HoverAccent   = ImVec4(0.431f, 0.906f, 0.718f, 1.0f); // #6ee7b7
-        PecTheme::ActiveAccent  = ImVec4(0.063f, 0.725f, 0.506f, 1.0f); // #10b981
-        PecTheme::BorderColor   = ImVec4(0.075f, 0.227f, 0.165f, 1.0f); // #133a2a
-        PecTheme::BorderLight   = ImVec4(0.075f, 0.227f, 0.165f, 0.6f);
-        PecTheme::TextPrimary   = ImVec4(0.925f, 0.992f, 0.961f, 1.0f); // #ecfdf5
-        PecTheme::TextSecondary = ImVec4(0.431f, 0.906f, 0.718f, 1.0f); // #6ee7b7
-        PecTheme::TextMuted     = PecTheme::TextSecondary;
-    }
-    else if (preset == "sunset-amber" || preset == "amber") {
-        // Sunset Amber
-        PecTheme::CanvasBg      = ImVec4(0.110f, 0.075f, 0.027f, 1.0f); // #1c1307
-        PecTheme::CardBg        = ImVec4(0.149f, 0.094f, 0.020f, 1.0f); // #261805
-        PecTheme::CardBgHover   = ImVec4(0.200f, 0.130f, 0.035f, 1.0f);
-        PecTheme::FrameBg       = ImVec4(0.200f, 0.130f, 0.035f, 1.0f);
-        PecTheme::FrameBgHover  = ImVec4(0.250f, 0.165f, 0.045f, 1.0f);
-        PecTheme::FrameBgActive = ImVec4(0.300f, 0.200f, 0.055f, 1.0f);
-        PecTheme::PrimaryAccent = ImVec4(0.961f, 0.620f, 0.043f, 1.0f); // #f59e0b Amber
-        PecTheme::HoverAccent   = ImVec4(0.984f, 0.749f, 0.141f, 1.0f); // #fbbf24
-        PecTheme::ActiveAccent  = ImVec4(0.851f, 0.467f, 0.024f, 1.0f); // #d97706
-        PecTheme::BorderColor   = ImVec4(0.471f, 0.208f, 0.059f, 1.0f); // #78350f
-        PecTheme::BorderLight   = ImVec4(0.471f, 0.208f, 0.059f, 0.6f);
-        PecTheme::TextPrimary   = ImVec4(0.996f, 0.953f, 0.780f, 1.0f); // #fef3c7
-        PecTheme::TextSecondary = ImVec4(0.992f, 0.902f, 0.541f, 1.0f); // #fde68a
-        PecTheme::TextMuted     = PecTheme::TextSecondary;
-    }
-    else if (PecTheme::IsLightMode) {
-        // Enterprise Light
+    if (PecTheme::IsLightMode) {
+        // Light Mode Base Canvas & Panels
         PecTheme::CanvasBg      = ImVec4(0.945f, 0.961f, 0.976f, 1.0f); // #f1f5f9
         PecTheme::CardBg        = ImVec4(1.000f, 1.000f, 1.000f, 1.0f); // #ffffff
         PecTheme::CardBgHover   = ImVec4(0.965f, 0.976f, 0.988f, 1.0f);
         PecTheme::FrameBg       = ImVec4(0.886f, 0.910f, 0.941f, 1.0f); // #e2e8f0
         PecTheme::FrameBgHover  = ImVec4(0.796f, 0.835f, 0.882f, 1.0f); // #cbd5e1
         PecTheme::FrameBgActive = ImVec4(0.682f, 0.741f, 0.804f, 1.0f);
-        PecTheme::PrimaryAccent = ImVec4(0.145f, 0.388f, 0.922f, 1.0f); // #2563eb Blue
-        PecTheme::HoverAccent   = ImVec4(0.231f, 0.510f, 0.965f, 1.0f); // #3b82f6
-        PecTheme::ActiveAccent  = ImVec4(0.114f, 0.306f, 0.847f, 1.0f); // #1d4ed8
         PecTheme::BorderColor   = ImVec4(0.796f, 0.835f, 0.882f, 1.0f); // #cbd5e1
         PecTheme::BorderLight   = ImVec4(0.796f, 0.835f, 0.882f, 0.6f);
         PecTheme::TextPrimary   = ImVec4(0.059f, 0.090f, 0.165f, 1.0f); // #0f172a
         PecTheme::TextSecondary = ImVec4(0.392f, 0.455f, 0.545f, 1.0f); // #64748b
         PecTheme::TextMuted     = PecTheme::TextSecondary;
+
+        // Palette Accents for Light Mode
+        if (preset == "dark-obsidian" || preset == "obsidian") {
+            PecTheme::PrimaryAccent = ImVec4(0.576f, 0.200f, 0.918f, 1.0f); // #9333ea Purple
+            PecTheme::HoverAccent   = ImVec4(0.659f, 0.333f, 0.969f, 1.0f); // #a855f7
+            PecTheme::ActiveAccent  = ImVec4(0.494f, 0.145f, 0.804f, 1.0f); // #7e22ce
+        }
+        else if (preset == "emerald-secops" || preset == "emerald" || preset == "emerald-sentinel") {
+            PecTheme::PrimaryAccent = ImVec4(0.020f, 0.588f, 0.412f, 1.0f); // #059669 Emerald
+            PecTheme::HoverAccent   = ImVec4(0.063f, 0.725f, 0.506f, 1.0f); // #10b981
+            PecTheme::ActiveAccent  = ImVec4(0.016f, 0.471f, 0.329f, 1.0f); // #047857
+        }
+        else if (preset == "sunset-amber" || preset == "amber") {
+            PecTheme::PrimaryAccent = ImVec4(0.851f, 0.467f, 0.024f, 1.0f); // #d97706 Amber
+            PecTheme::HoverAccent   = ImVec4(0.961f, 0.620f, 0.043f, 1.0f); // #f59e0b
+            PecTheme::ActiveAccent  = ImVec4(0.706f, 0.353f, 0.016f, 1.0f); // #b45309
+        }
+        else if (preset == "nordic-arctic" || preset == "nord") {
+            PecTheme::PrimaryAccent = ImVec4(0.369f, 0.506f, 0.675f, 1.0f); // #5e81ac Nordic Blue
+            PecTheme::HoverAccent   = ImVec4(0.506f, 0.631f, 0.757f, 1.0f); // #81a1c1
+            PecTheme::ActiveAccent  = ImVec4(0.298f, 0.416f, 0.569f, 1.0f); // #4c6a91
+        }
+        else {
+            // Default Enterprise / Cyber Light
+            PecTheme::PrimaryAccent = ImVec4(0.145f, 0.388f, 0.922f, 1.0f); // #2563eb Blue
+            PecTheme::HoverAccent   = ImVec4(0.231f, 0.510f, 0.965f, 1.0f); // #3b82f6
+            PecTheme::ActiveAccent  = ImVec4(0.114f, 0.306f, 0.847f, 1.0f); // #1d4ed8
+        }
     }
     else {
-        // Default Cyber Blue
-        PecTheme::CanvasBg      = ImVec4(0.043f, 0.067f, 0.125f, 1.0f); // #0B1120
-        PecTheme::CardBg        = ImVec4(0.075f, 0.114f, 0.212f, 1.0f); // #131D36
-        PecTheme::CardBgHover   = ImVec4(0.094f, 0.141f, 0.255f, 1.0f);
-        PecTheme::FrameBg       = ImVec4(0.118f, 0.161f, 0.231f, 1.0f); // #1E293B
-        PecTheme::FrameBgHover  = ImVec4(0.150f, 0.205f, 0.295f, 1.0f);
-        PecTheme::FrameBgActive = ImVec4(0.180f, 0.245f, 0.350f, 1.0f);
-        PecTheme::PrimaryAccent = ImVec4(0.008f, 0.518f, 0.780f, 1.0f); // #0284C7
-        PecTheme::HoverAccent   = ImVec4(0.220f, 0.741f, 0.973f, 1.0f); // #38BDF8
-        PecTheme::ActiveAccent  = ImVec4(0.055f, 0.647f, 0.914f, 1.0f); // #0EA5E9
-        PecTheme::BorderColor   = ImVec4(0.118f, 0.161f, 0.231f, 1.0f); // #1E293B
-        PecTheme::BorderLight   = ImVec4(0.200f, 0.260f, 0.360f, 0.6f);
-        PecTheme::TextPrimary   = ImVec4(0.973f, 0.980f, 0.988f, 1.0f); // #F8FAFC
-        PecTheme::TextSecondary = ImVec4(0.580f, 0.639f, 0.722f, 1.0f); // #94A3B8
-        PecTheme::TextMuted     = PecTheme::TextSecondary;
+        // Dark Mode Presets
+        if (preset == "nordic-arctic" || preset == "nord") {
+            // Nordic Arctic (Matches Screenshot 2)
+            PecTheme::CanvasBg      = ImVec4(0.141f, 0.161f, 0.200f, 1.0f); // #242933
+            PecTheme::CardBg        = ImVec4(0.180f, 0.204f, 0.251f, 1.0f); // #2e3440
+            PecTheme::CardBgHover   = ImVec4(0.231f, 0.259f, 0.322f, 1.0f); // #3b4252
+            PecTheme::FrameBg       = ImVec4(0.231f, 0.259f, 0.322f, 1.0f); // #3b4252
+            PecTheme::FrameBgHover  = ImVec4(0.263f, 0.302f, 0.373f, 1.0f); // #434c5e
+            PecTheme::FrameBgActive = ImVec4(0.298f, 0.341f, 0.416f, 1.0f); // #4c566a
+            PecTheme::PrimaryAccent = ImVec4(0.533f, 0.753f, 0.816f, 1.0f); // #88c0d0 Ice Blue
+            PecTheme::HoverAccent   = ImVec4(0.506f, 0.631f, 0.757f, 1.0f); // #81a1c1
+            PecTheme::ActiveAccent  = ImVec4(0.369f, 0.506f, 0.675f, 1.0f); // #5e81ac
+            PecTheme::BorderColor   = ImVec4(0.298f, 0.341f, 0.416f, 1.0f); // #4c566a
+            PecTheme::BorderLight   = ImVec4(0.298f, 0.341f, 0.416f, 0.6f);
+            PecTheme::TextPrimary   = ImVec4(0.925f, 0.937f, 0.957f, 1.0f); // #eceff4
+            PecTheme::TextSecondary = ImVec4(0.847f, 0.871f, 0.914f, 1.0f); // #d8dee9
+            PecTheme::TextMuted     = PecTheme::TextSecondary;
+        }
+        else if (preset == "dark-obsidian" || preset == "obsidian") {
+            // Dark Obsidian
+            PecTheme::CanvasBg      = ImVec4(0.051f, 0.067f, 0.090f, 1.0f); // #0d1117
+            PecTheme::CardBg        = ImVec4(0.086f, 0.106f, 0.133f, 1.0f); // #161b22
+            PecTheme::CardBgHover   = ImVec4(0.129f, 0.149f, 0.176f, 1.0f); // #21262d
+            PecTheme::FrameBg       = ImVec4(0.129f, 0.149f, 0.176f, 1.0f); // #21262d
+            PecTheme::FrameBgHover  = ImVec4(0.188f, 0.212f, 0.239f, 1.0f); // #30363d
+            PecTheme::FrameBgActive = ImVec4(0.235f, 0.263f, 0.290f, 1.0f);
+            PecTheme::PrimaryAccent = ImVec4(0.753f, 0.518f, 0.988f, 1.0f); // #c084fc Purple
+            PecTheme::HoverAccent   = ImVec4(0.847f, 0.706f, 0.996f, 1.0f); // #d8b4fe
+            PecTheme::ActiveAccent  = ImVec4(0.659f, 0.333f, 0.969f, 1.0f); // #a855f7
+            PecTheme::BorderColor   = ImVec4(0.188f, 0.212f, 0.239f, 1.0f); // #30363d
+            PecTheme::BorderLight   = ImVec4(0.188f, 0.212f, 0.239f, 0.6f);
+            PecTheme::TextPrimary   = ImVec4(0.941f, 0.965f, 0.988f, 1.0f); // #f0f6fc
+            PecTheme::TextSecondary = ImVec4(0.545f, 0.580f, 0.620f, 1.0f); // #8b949e
+            PecTheme::TextMuted     = PecTheme::TextSecondary;
+        }
+        else if (preset == "emerald-secops" || preset == "emerald" || preset == "emerald-sentinel") {
+            // Emerald SecOps / Emerald Sentinel
+            PecTheme::CanvasBg      = ImVec4(0.024f, 0.075f, 0.051f, 1.0f); // #06130d
+            PecTheme::CardBg        = ImVec4(0.043f, 0.122f, 0.086f, 1.0f); // #0b1f16
+            PecTheme::CardBgHover   = ImVec4(0.067f, 0.180f, 0.129f, 1.0f); // #112e21
+            PecTheme::FrameBg       = ImVec4(0.067f, 0.180f, 0.129f, 1.0f); // #112e21
+            PecTheme::FrameBgHover  = ImVec4(0.075f, 0.227f, 0.165f, 1.0f); // #133a2a
+            PecTheme::FrameBgActive = ImVec4(0.090f, 0.275f, 0.200f, 1.0f);
+            PecTheme::PrimaryAccent = ImVec4(0.204f, 0.827f, 0.600f, 1.0f); // #34d399 Emerald
+            PecTheme::HoverAccent   = ImVec4(0.431f, 0.906f, 0.718f, 1.0f); // #6ee7b7
+            PecTheme::ActiveAccent  = ImVec4(0.063f, 0.725f, 0.506f, 1.0f); // #10b981
+            PecTheme::BorderColor   = ImVec4(0.075f, 0.227f, 0.165f, 1.0f); // #133a2a
+            PecTheme::BorderLight   = ImVec4(0.075f, 0.227f, 0.165f, 0.6f);
+            PecTheme::TextPrimary   = ImVec4(0.925f, 0.992f, 0.961f, 1.0f); // #ecfdf5
+            PecTheme::TextSecondary = ImVec4(0.431f, 0.906f, 0.718f, 1.0f); // #6ee7b7
+            PecTheme::TextMuted     = PecTheme::TextSecondary;
+        }
+        else if (preset == "sunset-amber" || preset == "amber") {
+            // Sunset Amber
+            PecTheme::CanvasBg      = ImVec4(0.110f, 0.075f, 0.027f, 1.0f); // #1c1307
+            PecTheme::CardBg        = ImVec4(0.149f, 0.094f, 0.020f, 1.0f); // #261805
+            PecTheme::CardBgHover   = ImVec4(0.200f, 0.130f, 0.035f, 1.0f);
+            PecTheme::FrameBg       = ImVec4(0.200f, 0.130f, 0.035f, 1.0f);
+            PecTheme::FrameBgHover  = ImVec4(0.250f, 0.165f, 0.045f, 1.0f);
+            PecTheme::FrameBgActive = ImVec4(0.300f, 0.200f, 0.055f, 1.0f);
+            PecTheme::PrimaryAccent = ImVec4(0.961f, 0.620f, 0.043f, 1.0f); // #f59e0b Amber
+            PecTheme::HoverAccent   = ImVec4(0.984f, 0.749f, 0.141f, 1.0f); // #fbbf24
+            PecTheme::ActiveAccent  = ImVec4(0.851f, 0.467f, 0.024f, 1.0f); // #d97706
+            PecTheme::BorderColor   = ImVec4(0.471f, 0.208f, 0.059f, 1.0f); // #78350f
+            PecTheme::BorderLight   = ImVec4(0.471f, 0.208f, 0.059f, 0.6f);
+            PecTheme::TextPrimary   = ImVec4(0.996f, 0.953f, 0.780f, 1.0f); // #fef3c7
+            PecTheme::TextSecondary = ImVec4(0.992f, 0.902f, 0.541f, 1.0f); // #fde68a
+            PecTheme::TextMuted     = PecTheme::TextSecondary;
+        }
+        else {
+            // Default Cyber Blue
+            PecTheme::CanvasBg      = ImVec4(0.043f, 0.067f, 0.125f, 1.0f); // #0B1120
+            PecTheme::CardBg        = ImVec4(0.075f, 0.114f, 0.212f, 1.0f); // #131D36
+            PecTheme::CardBgHover   = ImVec4(0.094f, 0.141f, 0.255f, 1.0f);
+            PecTheme::FrameBg       = ImVec4(0.118f, 0.161f, 0.231f, 1.0f); // #1E293B
+            PecTheme::FrameBgHover  = ImVec4(0.150f, 0.205f, 0.295f, 1.0f);
+            PecTheme::FrameBgActive = ImVec4(0.180f, 0.245f, 0.350f, 1.0f);
+            PecTheme::PrimaryAccent = ImVec4(0.008f, 0.518f, 0.780f, 1.0f); // #0284C7
+            PecTheme::HoverAccent   = ImVec4(0.220f, 0.741f, 0.973f, 1.0f); // #38BDF8
+            PecTheme::ActiveAccent  = ImVec4(0.055f, 0.647f, 0.914f, 1.0f); // #0EA5E9
+            PecTheme::BorderColor   = ImVec4(0.118f, 0.161f, 0.231f, 1.0f); // #1E293B
+            PecTheme::BorderLight   = ImVec4(0.200f, 0.260f, 0.360f, 0.6f);
+            PecTheme::TextPrimary   = ImVec4(0.973f, 0.980f, 0.988f, 1.0f); // #F8FAFC
+            PecTheme::TextSecondary = ImVec4(0.580f, 0.639f, 0.722f, 1.0f); // #94A3B8
+            PecTheme::TextMuted     = PecTheme::TextSecondary;
+        }
     }
 
     // Override with custom RGB values if provided in profile

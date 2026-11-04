@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PEC Proxy Client
+GenericName=Proxy Client
+GenericName[ru]=Прокси-клиент
+Comment=Universal proxy client with eBPF redirection
+Comment[ru]=Универсальный прокси-клиент с перенаправлением eBPF
+Exec=pkexec /usr/local/bin/ProxyBridgeGUI
+Icon=network-vpn
+Terminal=false
+Categories=Network;Security;
+StartupNotify=true
+Keywords=proxy;vpn;ebpf;network;pec;
+Keywords[ru]=прокси;vpn;ebpf;сеть;pec;

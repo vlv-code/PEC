@@ -112,6 +112,36 @@ static volatile DWORD     g_lastSyncError = 0;
 static volatile DWORD     g_lastSyncTick = 0;
 static SYSTEMTIME         g_lastSyncTime = { 0 };
 static wchar_t            g_lastSyncStatusStr[128] = L"Ожидание синхронизации...";
+
+#ifndef PEC_PROFILE_LOCK_DEFINED
+#define PEC_PROFILE_LOCK_DEFINED
+#ifdef __cplusplus
+static inline void PecProfileLock() {
+    EnterCriticalSection(&g_profileCs);
+}
+static inline void PecProfileUnlock() {
+    LeaveCriticalSection(&g_profileCs);
+}
+#else
+static inline void PecProfileLock() {}
+static inline void PecProfileUnlock() {}
+#endif
+#endif
+
+static inline void PecSyncSetStatusStr(const wchar_t* str)
+{
+    PecProfileLock();
+    lstrcpynW(g_lastSyncStatusStr, str, 128);
+    PecProfileUnlock();
+}
+
+static inline void PecSyncGetStatusStr(wchar_t* out, int maxLen)
+{
+    PecProfileLock();
+    lstrcpynW(out, g_lastSyncStatusStr, maxLen);
+    PecProfileUnlock();
+}
+
 static HWND               g_hSyncMainWnd = NULL;
 static wchar_t            g_appInstanceId[128] = { 0 };
 static wchar_t            g_selectedProxyHost[128] = { 0 };
@@ -584,7 +614,19 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
     (void)param;
     while (g_syncRunning)
     {
-        if (g_profile.pecSync.serverUrl[0] != 0)
+        wchar_t srvUrl[512] = { 0 };
+        wchar_t fltTok[256] = { 0 };
+        wchar_t instTok[256] = { 0 };
+        int intervalMin = 15;
+        PecProfileLock();
+        lstrcpynW(srvUrl, g_profile.pecSync.serverUrl, 512);
+        lstrcpynW(fltTok, g_profile.pecSync.fleetToken, 256);
+        lstrcpynW(instTok, g_profile.pecSync.instanceToken, 256);
+        intervalMin = g_profile.pecSync.intervalMinutes;
+        PecProfileUnlock();
+        if (intervalMin <= 0) intervalMin = 15;
+
+        if (srvUrl[0] != 0)
         {
             URL_COMPONENTS uc;
             wchar_t host[256] = { 0 };
@@ -596,7 +638,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
             uc.lpszUrlPath = path;
             uc.dwUrlPathLength = 2047;
 
-            if (WinHttpCrackUrl(g_profile.pecSync.serverUrl, 0, 0, &uc))
+            if (WinHttpCrackUrl(srvUrl, 0, 0, &uc))
             {
                 BOOL isHttps = (uc.nScheme == INTERNET_SCHEME_HTTPS);
                 BOOL isLoopback = (_wcsicmp(host, L"localhost") == 0 || _wcsicmp(host, L"127.0.0.1") == 0 ||
@@ -604,7 +646,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                 if (!isHttps && !isLoopback)
                 {
                     g_lastSyncError = ERROR_ACCESS_DENIED;
-                    _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Ошибка: требуется HTTPS для удаленного сервера");
+                    PecSyncSetStatusStr(L"Ошибка: требуется HTTPS для удаленного сервера");
                     PB_WriteAppLog("PecSync: Insecure HTTP rejected for remote host %ls (HTTPS required)", host);
                 }
                 else
@@ -647,16 +689,18 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                         {
                             // Build headers: use instanceToken if available (enrolled), otherwise fleetToken
                             wchar_t tokenBuf[256] = { 0 };
-                            if (g_profile.pecSync.instanceToken[0] != 0)
+                            if (instTok[0] != 0)
                             {
-                                lstrcpynW(tokenBuf, g_profile.pecSync.instanceToken, 256);
+                                lstrcpynW(tokenBuf, instTok, 256);
                             }
                             else
                             {
                                 PecLoadInstanceToken(tokenBuf, 256);
                                 if (tokenBuf[0] != 0)
                                 {
+                                    PecProfileLock();
                                     lstrcpynW(g_profile.pecSync.instanceToken, tokenBuf, 256);
+                                    PecProfileUnlock();
                                 }
                             }
 
@@ -671,7 +715,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                             {
                                 _snwprintf_s(hdrs, 512, _TRUNCATE,
                                     L"Content-Type: application/json\r\nx-fleet-token: %ls\r\n",
-                                    g_profile.pecSync.fleetToken);
+                                    fltTok);
                             }
 
                             // Collect machine info
@@ -766,7 +810,9 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                     g_lastSyncError = 0;
                                     g_lastSyncTick = GetTickCount();
                                     GetLocalTime((SYSTEMTIME*)&g_lastSyncTime);
-                                    _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Синхронизировано (%ls)", host);
+                                    wchar_t syncOkStr[128];
+                                    _snwprintf_s(syncOkStr, 128, _TRUNCATE, L"Синхронизировано (%ls)", host);
+                                    PecSyncSetStatusStr(syncOkStr);
                                     PB_WriteAppLog("PecSync: Синхронизация с сервером %ls выполнена успешно (HTTP 200)", host);
                                     DWORD avail = 0;
                                     char* rBuf = NULL;
@@ -793,9 +839,11 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                             {
                                                 wchar_t wTok[256] = { 0 };
                                                 MultiByteToWideChar(CP_UTF8, 0, issuedTok, -1, wTok, 256);
+                                                PecProfileLock();
                                                 lstrcpynW(g_profile.pecSync.instanceToken, wTok, 256);
-                                                PecSaveInstanceToken(wTok);
                                                 PB_ProfileSave(g_activeProfile, &g_profile);
+                                                PecProfileUnlock();
+                                                PecSaveInstanceToken(wTok);
                                             }
 
                                             JVal* actProxy = json_get(respRoot, "activeProxy");
@@ -894,10 +942,12 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                                             }
                                                             if (needsUpdate)
                                                             {
+                                                                PecProfileLock();
                                                                 g_profile.cfgCount = newCount;
                                                                 for (int i = 0; i < newCount; i++)
                                                                     g_profile.cfg[i] = newConfigs[i];
                                                                 PB_ProfileSave(g_activeProfile, &g_profile);
+                                                                PecProfileUnlock();
                                                                 if (g_hSyncMainWnd)
                                                                 {
                                                                     PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);
@@ -928,12 +978,14 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
 
                                                     if (needsUpdate)
                                                     {
+                                                        PecProfileLock();
                                                         lstrcpynW(g_profile.cfg[0].host, wHost, 128);
                                                         lstrcpynW(g_profile.cfg[0].port, wPort, 16);
                                                         lstrcpynW(g_profile.cfg[0].user, wUser, 128);
                                                         lstrcpynW(g_profile.cfg[0].pass, wPass, 128);
                                                         lstrcpynW(g_profile.cfg[0].type, wProto, 16);
                                                         PB_ProfileSave(g_activeProfile, &g_profile);
+                                                        PecProfileUnlock();
                                                         if (g_hSyncMainWnd)
                                                         {
                                                             PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);
@@ -1054,12 +1106,14 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                                             }
                                                             if (rulesDiffer)
                                                             {
+                                                                PecProfileLock();
                                                                 g_profile.ruleCount = mergedCount;
                                                                 for (int i = 0; i < mergedCount; i++)
                                                                 {
                                                                     g_profile.rule[i] = mergedRules[i];
                                                                 }
                                                                 PB_ProfileSave(g_activeProfile, &g_profile);
+                                                                PecProfileUnlock();
                                                                 PB_WriteAppLog("PecSync: Правила маршрутизации синхронизированы (%d корп., %d польз.)",
                                                                     newRuleCount, mergedCount - newRuleCount);
                                                                 if (g_hSyncMainWnd)
@@ -1075,10 +1129,71 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                             }
 
                                             long nInterval = json_long(respRoot, "syncIntervalMinutes", 0);
-                                            if (nInterval > 0 && nInterval <= 1440 && g_profile.pecSync.intervalMinutes != (int)nInterval)
+                                            if (nInterval > 0 && nInterval <= 1440)
                                             {
-                                                g_profile.pecSync.intervalMinutes = (int)nInterval;
-                                                PB_ProfileSave(g_activeProfile, &g_profile);
+                                                PecProfileLock();
+                                                if (g_profile.pecSync.intervalMinutes != (int)nInterval)
+                                                {
+                                                    g_profile.pecSync.intervalMinutes = (int)nInterval;
+                                                    PB_ProfileSave(g_activeProfile, &g_profile);
+                                                }
+                                                PecProfileUnlock();
+                                            }
+
+                                            JVal* thObj = json_get(respRoot, "theme");
+                                            if (thObj && thObj->type == J_OBJ)
+                                            {
+                                                const char* szPreset = json_str(thObj, "preset", "cyber-blue");
+                                                const char* szMode   = json_str(thObj, "mode", "dark");
+                                                const char* szLayout = json_str(thObj, "layout", "console");
+                                                const char* szPrim   = json_str(thObj, "primary", NULL);
+                                                const char* szBg     = json_str(thObj, "background", NULL);
+                                                const char* szCard   = json_str(thObj, "card", NULL);
+
+                                                wchar_t wPreset[64] = { 0 };
+                                                wchar_t wMode[32] = { 0 };
+                                                wchar_t wLayout[32] = { 0 };
+                                                MultiByteToWideChar(CP_UTF8, 0, szPreset, -1, wPreset, 64);
+                                                MultiByteToWideChar(CP_UTF8, 0, szMode, -1, wMode, 32);
+                                                MultiByteToWideChar(CP_UTF8, 0, szLayout, -1, wLayout, 32);
+
+                                                COLORREF primCol = g_profile.theme.primary;
+                                                COLORREF bgCol   = g_profile.theme.background;
+                                                COLORREF cardCol = g_profile.theme.card;
+                                                if (szPrim) primCol = PB_ParseHexColor(szPrim, primCol);
+                                                if (szBg)   bgCol   = PB_ParseHexColor(szBg, bgCol);
+                                                if (szCard) cardCol = PB_ParseHexColor(szCard, cardCol);
+
+                                                BOOL themeChanged = FALSE;
+                                                if (!g_profile.theme.hasTheme ||
+                                                    wcscmp(g_profile.theme.preset, wPreset) != 0 ||
+                                                    wcscmp(g_profile.theme.mode, wMode) != 0 ||
+                                                    wcscmp(g_profile.theme.layout, wLayout) != 0 ||
+                                                    g_profile.theme.primary != primCol ||
+                                                    g_profile.theme.background != bgCol ||
+                                                    g_profile.theme.card != cardCol)
+                                                {
+                                                    g_profile.theme.hasTheme = 1;
+                                                    lstrcpynW(g_profile.theme.preset, wPreset, 64);
+                                                    lstrcpynW(g_profile.theme.mode, wMode, 32);
+                                                    lstrcpynW(g_profile.theme.layout, wLayout, 32);
+                                                    g_profile.theme.primary    = primCol;
+                                                    g_profile.theme.background = bgCol;
+                                                    g_profile.theme.card       = cardCol;
+                                                    themeChanged = TRUE;
+                                                }
+
+                                                if (themeChanged)
+                                                {
+                                                    PecProfileLock();
+                                                    PB_ProfileSave(g_activeProfile, &g_profile);
+                                                    PecProfileUnlock();
+                                                    PB_WriteAppLog("PecSync: Тема оформления обновлена с сервера (%s, %s)", szPreset, szMode);
+                                                    if (g_hSyncMainWnd)
+                                                    {
+                                                        PostMessageW(g_hSyncMainWnd, WM_APP_RELOAD_PROFILE, 0, 0);
+                                                    }
+                                                }
                                             }
 
                                             JVal* upd = json_get(respRoot, "update");
@@ -1126,7 +1241,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                                 else
                                 {
                                     g_lastSyncError = status;
-                                    _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Ошибка Fleet: HTTP %lu", status);
+                                    { wchar_t errB[128]; _snwprintf_s(errB, 128, _TRUNCATE, L"Ошибка Fleet: HTTP %lu", status); PecSyncSetStatusStr(errB); }
                                     PB_WriteAppLog("PecSync: Сервер вернул ошибку HTTP %lu (URL: %ls)", status, g_profile.pecSync.serverUrl);
                                 }
                             }
@@ -1134,7 +1249,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                             {
                                 DWORD err = GetLastError();
                                 g_lastSyncError = err;
-                                _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Ошибка отправки (код %lu)", err);
+                                { wchar_t errB[128]; _snwprintf_s(errB, 128, _TRUNCATE, L"Ошибка отправки (код %lu)", err); PecSyncSetStatusStr(errB); }
                                 const char* errDesc = PecFormatWinHttpError(err);
                                 if (errDesc) {
                                     PB_WriteAppLog("PecSync: Ошибка отправки запроса на %ls (WinHttp err %lu: %s)", host, err, errDesc);
@@ -1149,7 +1264,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                         {
                             DWORD err = GetLastError();
                             g_lastSyncError = err;
-                            _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Сбой запроса (код %lu)", err);
+                            { wchar_t errB[128]; _snwprintf_s(errB, 128, _TRUNCATE, L"Сбой запроса (код %lu)", err); PecSyncSetStatusStr(errB); }
                             PB_WriteAppLog("PecSync: WinHttpOpenRequest failed for %ls (err %lu)", fullPath, err);
                         }
                         WinHttpCloseHandle(hConnect);
@@ -1158,7 +1273,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
                     {
                         DWORD err = GetLastError();
                         g_lastSyncError = err;
-                        _snwprintf_s(g_lastSyncStatusStr, 128, _TRUNCATE, L"Сбой подключения (%ls:%d)", host, uc.nPort);
+                        { wchar_t errB[128]; _snwprintf_s(errB, 128, _TRUNCATE, L"Сбой подключения (%ls:%d)", host, uc.nPort); PecSyncSetStatusStr(errB); }
                         const char* errDesc = PecFormatWinHttpError(err);
                         if (errDesc) {
                             PB_WriteAppLog("PecSync: Не удалось подключиться к серверу %ls:%d (WinHttp error %lu: %s)", host, uc.nPort, err, errDesc);
@@ -1186,9 +1301,7 @@ static DWORD WINAPI PecSyncThreadProc(LPVOID param)
             PB_WriteAppLog("PecSync: serverUrl не настроен в профиле (pecSync.serverUrl пуст)");
         }
 
-        DWORD intervalMin = g_profile.pecSync.intervalMinutes;
-        if (intervalMin <= 0) intervalMin = 15;
-        DWORD waitMs = (!g_syncEverSucceeded) ? 15000 : (intervalMin * 60 * 1000);
+        DWORD waitMs = (!g_syncEverSucceeded) ? 15000 : ((DWORD)intervalMin * 60 * 1000);
 
         WaitForSingleObject(g_hSyncWakeEvent, waitMs);
         ResetEvent(g_hSyncWakeEvent);

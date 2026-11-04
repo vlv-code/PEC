@@ -200,23 +200,32 @@ if ($success) {
         }
     }
 
-    # ── C GUI (MSVC) ─────────────────────────────────────────────────────────
-    # Single self-contained PEC-App.exe (~0.5 MB, static CRT) that loads
-    # ProxyBridgeCore.dll from its own folder. No extra runtime or DLLs.
-    Write-Host "`nBuilding C GUI (MSVC)..." -ForegroundColor Green
+    # ── Modern DirectX 11 / ImGui GUI (MSVC) ─────────────────────────────────
+    # Self-contained PEC-App.exe that loads ProxyBridgeCore.dll from its own folder.
+    # By default, compiles the modern DirectX 11 / ImGui GUI (main_imgui.cpp),
+    # matching src/appPackager.ts and Makefile.msvc, with fallback to main.c if absent.
+    Write-Host "`nBuilding GUI (MSVC)..." -ForegroundColor Green
     if ($script:foundVcvarsPath -and (Test-Path $script:foundVcvarsPath)) {
-        # Production build. Compiler: size-optimized static-CRT release with the security
-        # hardening set - /GS (stack cookies), /guard:cf (Control Flow Guard), /sdl (extra
-        # security diagnostics), /GL + /Gy for whole-program opt & COMDAT folding.
-        # Linker: /DYNAMICBASE + /HIGHENTROPYVA (64-bit ASLR), /NXCOMPAT (DEP),
-        # /guard:cf (CFG), /CETCOMPAT (shadow-stack), /LTCG, dead-code strip.
-        $guiClArgs = "/nologo /utf-8 /O1 /Os /MT /GL /Gy /GS /guard:cf /sdl /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 " +
-                     "/DNDEBUG /D_CRT_SECURE_NO_WARNINGS /DUNICODE /D_UNICODE " +
-                     "main.c profile\profile.c app.res " +
-                     "/Fe:PEC-App.exe " +
-                     "/link /LTCG /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /RELEASE " +
-                     "/DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /guard:cf /CETCOMPAT " +
-                     "user32.lib gdi32.lib comctl32.lib shell32.lib comdlg32.lib winhttp.lib advapi32.lib ws2_32.lib"
+        $isImgui = Test-Path "gui\main_imgui.cpp"
+        if ($isImgui) {
+            Write-Host "  Compiling modern DirectX 11 / Dear ImGui GUI (main_imgui.cpp)..." -ForegroundColor Cyan
+            $guiClArgs = "/nologo /utf-8 /O2 /std:c++17 /EHsc /MT /GL /Gy /GS /guard:cf /sdl /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 " +
+                         "/DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_RAND_S /D_WIN32_WINNT=0x0601 /DUNICODE /D_UNICODE " +
+                         "main_imgui.cpp imgui\imgui*.cpp imgui\backends\imgui_impl_win32.cpp imgui\backends\imgui_impl_dx11.cpp profile\profile.c profile\json.c app.res " +
+                         "/Fe:PEC-App.exe " +
+                         "/link /LTCG /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /RELEASE " +
+                         "/DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /guard:cf /CETCOMPAT " +
+                         "d3d11.lib dxgi.lib d3dcompiler.lib user32.lib gdi32.lib comctl32.lib shell32.lib comdlg32.lib dwmapi.lib shlwapi.lib uxtheme.lib winhttp.lib advapi32.lib ws2_32.lib ole32.lib crypt32.lib wintrust.lib"
+        } else {
+            Write-Host "  Compiling fallback Win32 COMCTL32 GUI (main.c)..." -ForegroundColor Yellow
+            $guiClArgs = "/nologo /utf-8 /O1 /Os /MT /GL /Gy /GS /guard:cf /sdl /W4 /wd4100 /wd4189 /wd4267 /wd4244 /wd4996 " +
+                         "/DNDEBUG /D_CRT_SECURE_NO_WARNINGS /DUNICODE /D_UNICODE " +
+                         "main.c profile\profile.c app.res " +
+                         "/Fe:PEC-App.exe " +
+                         "/link /LTCG /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /RELEASE " +
+                         "/DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /guard:cf /CETCOMPAT " +
+                         "user32.lib gdi32.lib comctl32.lib shell32.lib comdlg32.lib winhttp.lib advapi32.lib ws2_32.lib"
+        }
 
         # Sources live in subfolders. rc runs from res\ so app.rc's relative paths
         # (resource.h, app.manifest, logo.ico) resolve; it writes app.res back to gui\.
@@ -229,10 +238,10 @@ if ($success) {
 
         if ($guiExit -eq 0 -and (Test-Path "gui\PEC-App.exe")) {
             Move-Item "gui\PEC-App.exe" -Destination "$OutputDir\PEC-App.exe" -Force
-            Write-Host "  C GUI built: PEC-App.exe" -ForegroundColor Gray
+            Write-Host "  GUI built: PEC-App.exe" -ForegroundColor Gray
             Remove-Item "gui\*.obj","gui\app.res" -Force -ErrorAction SilentlyContinue
         } else {
-            Write-Host "  C GUI build failed!" -ForegroundColor Red
+            Write-Host "  GUI build failed!" -ForegroundColor Red
             Write-Host $guiOut
         }
     } else {

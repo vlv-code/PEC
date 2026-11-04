@@ -66,6 +66,12 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(safeCfg.name || "PEC Corp Proxy")}</title>
+  <script>
+    try {
+      var m = localStorage.getItem("pec_theme_mode") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      if (m) document.documentElement.setAttribute("data-theme", m);
+    } catch(e) {}
+  </script>
   <style>
     :root, [data-theme="dark"] {
       --primary: ${effectiveColors.primary};
@@ -77,8 +83,11 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       --text-muted: #94a3b8;
       --primary-rgb: ${primaryRgb};
       --success: #10b981;
+      --success-rgb: 16, 185, 129;
       --danger: #e05252;
+      --danger-rgb: 224, 82, 82;
       --warning: #f59e0b;
+      --warning-rgb: 245, 158, 11;
       --border-color: var(--border);
       --text-main: var(--text);
       --bg-hover: rgba(255, 255, 255, 0.08);
@@ -90,25 +99,28 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       --card-inner: #e2e8f0;
       --border: #cbd5e1;
       --text: #0f172a;
-      --text-muted: #64748b;
+      --text-muted: #475569;
       --primary: #2563eb;
       --primary-rgb: 37, 99, 235;
       --success: #059669;
+      --success-rgb: 5, 150, 105;
       --danger: #dc2626;
-      --warning: #d97706;
+      --danger-rgb: 220, 38, 38;
+      --warning: #b45309;
+      --warning-rgb: 180, 83, 9;
       --border-color: var(--border);
       --text-main: var(--text);
       --bg-hover: rgba(0, 0, 0, 0.06);
       --accent-color: var(--primary);
     }
 
-    /* 5 Color Palettes (High-Contrast Harmonized) */
+    /* 6 Color Palettes (WCAG AA Compliant High-Contrast) */
     [data-palette="cyber"] { --primary: #38bdf8; --primary-rgb: 56, 189, 248; }
     [data-palette="cyber"]:not([data-theme="light"]), [data-palette="cyber"][data-theme="dark"] {
       --bg: #090e1a; --card: #111a2e; --card-inner: #16223b; --border: #1e2c4a; --text: #f1f5f9; --text-muted: #94a3b8;
     }
     [data-palette="cyber"][data-theme="light"] {
-      --bg: #f1f5f9; --card: #ffffff; --card-inner: #e2e8f0; --border: #cbd5e1; --text: #0f172a; --text-muted: #64748b;
+      --bg: #f0f9ff; --card: #ffffff; --card-inner: #e0f2fe; --border: #bae6fd; --text: #0f172a; --text-muted: #0369a1; --primary: #0284c7; --primary-rgb: 2, 132, 199;
     }
 
     [data-palette="obsidian"] { --primary: #c084fc; --primary-rgb: 192, 132, 252; }
@@ -116,7 +128,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       --bg: #0d1117; --card: #161b22; --card-inner: #21262d; --border: #30363d; --text: #f0f6fc; --text-muted: #8b949e;
     }
     [data-palette="obsidian"][data-theme="light"] {
-      --bg: #faf5ff; --card: #ffffff; --card-inner: #f3e8ff; --border: #e9d5ff; --text: #1e1b4b; --text-muted: #6b21a8;
+      --bg: #faf5ff; --card: #ffffff; --card-inner: #f3e8ff; --border: #e9d5ff; --text: #1e1b4b; --text-muted: #6b21a8; --primary: #7e22ce; --primary-rgb: 126, 34, 206;
     }
 
     [data-palette="nord"] { --primary: #88c0d0; --primary-rgb: 136, 192, 208; }
@@ -124,7 +136,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       --bg: #242933; --card: #2e3440; --card-inner: #3b4252; --border: #4c566a; --text: #eceff4; --text-muted: #d8dee9;
     }
     [data-palette="nord"][data-theme="light"] {
-      --bg: #eceff4; --card: #ffffff; --card-inner: #e5e9f0; --border: #d8dee9; --text: #2e3440; --text-muted: #4c566a;
+      --bg: #f8fafc; --card: #ffffff; --card-inner: #e2e8f0; --border: #cbd5e1; --text: #1e293b; --text-muted: #0e7490; --primary: #0e7490; --primary-rgb: 14, 116, 144;
     }
 
     [data-palette="emerald"] { --primary: #34d399; --primary-rgb: 52, 211, 153; }
@@ -132,7 +144,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       --bg: #06130d; --card: #0b1f16; --card-inner: #112e21; --border: #133a2a; --text: #ecfdf5; --text-muted: #6ee7b7;
     }
     [data-palette="emerald"][data-theme="light"] {
-      --bg: #f0fdf4; --card: #ffffff; --card-inner: #dcfce7; --border: #bbf7d0; --text: #064e3b; --text-muted: #047857;
+      --bg: #f0fdf4; --card: #ffffff; --card-inner: #dcfce7; --border: #bbf7d0; --text: #064e3b; --text-muted: #047857; --primary: #059669; --primary-rgb: 5, 150, 105;
     }
 
     [data-palette="light"] { --primary: #3b82f6; --primary-rgb: 59, 130, 246; }
@@ -140,20 +152,19 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       --bg: #0f172a; --card: #1e293b; --card-inner: #283548; --border: #334155; --text: #f8fafc; --text-muted: #94a3b8;
     }
     [data-palette="light"][data-theme="light"] {
-      --bg: #f1f5f9; --card: #ffffff; --card-inner: #e2e8f0; --border: #cbd5e1; --text: #0f172a; --text-muted: #64748b;
+      --bg: #f1f5f9; --card: #ffffff; --card-inner: #e2e8f0; --border: #cbd5e1; --text: #0f172a; --text-muted: #475569; --primary: #2563eb; --primary-rgb: 37, 99, 235;
     }
 
-    /* 6. Amber (Warm Sunset) */
     [data-palette="amber"] { --primary: #f59e0b; --primary-rgb: 245, 158, 11; }
     [data-palette="amber"]:not([data-theme="light"]), [data-palette="amber"][data-theme="dark"] {
       --bg: #1c1307; --card: #261805; --card-inner: #3d2406; --border: #78350f; --text: #fef3c7; --text-muted: #fde68a;
     }
     [data-palette="amber"][data-theme="light"] {
-      --bg: #fffbeb; --card: #ffffff; --card-inner: #fef3c7; --border: #fde68a; --text: #78350f; --text-muted: #b45309;
+      --bg: #fffbeb; --card: #ffffff; --card-inner: #fef3c7; --border: #fde68a; --text: #78350f; --text-muted: #92400e; --primary: #b45309; --primary-rgb: 180, 83, 9;
     }
 
     ${safeCfg.themeColor || safeCfg.themeBackground || safeCfg.themeCard ? `
-    /* Custom User Theme Overrides (High Specificity to prevent [data-palette] clobbering) */
+    /* Custom User Theme Overrides */
     body[data-palette], body[data-theme] {
       ${safeCfg.themeColor ? `--primary: ${effectiveColors.primary} !important; --primary-rgb: ${primaryRgb} !important; --accent-color: var(--primary) !important;` : ""}
       ${safeCfg.themeBackground ? `--bg: ${effectiveColors.bg} !important;` : ""}
@@ -161,7 +172,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
     ` : ""}
 
-    /* Layout 1. Terminal: 0px razor-sharp retro-terminal corners matching dashboard */
+    /* Layout 1. Terminal: 0px razor-sharp retro-terminal corners */
     [data-layout="terminal"],
     [data-layout="terminal"] *,
     [data-layout="terminal"] *::before,
@@ -183,9 +194,6 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     [data-layout="terminal"] .tab-btn,
     [data-layout="terminal"] .badge,
     [data-layout="terminal"] .tag,
-    [data-layout="terminal"] .switch,
-    [data-layout="terminal"] .slider,
-    [data-layout="terminal"] .status-dot,
     [data-layout="terminal"] .btn-icon,
     [data-layout="terminal"] .btn-icon-minimal {
       border-radius: 0 !important;
@@ -219,7 +227,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
     [data-layout="console"] .hero-meta,
     [data-layout="console"] .rules-notice,
-    [data-layout="console"] .log-box {
+    [data-layout="console"] .log-terminal {
       border-radius: 8px;
     }
 
@@ -345,9 +353,9 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       border-radius: 999px;
       font-size: 11px;
       font-weight: 600;
-      background: rgba(16, 185, 129, 0.15);
+      background: rgba(var(--success-rgb), 0.15);
       color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      border: 1px solid rgba(var(--success-rgb), 0.3);
       line-height: 1;
     }
     .status-badge .dot {
@@ -357,19 +365,19 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       background: var(--success);
     }
     .status-badge.offline {
-      background: rgba(239, 68, 68, 0.15);
+      background: rgba(var(--danger-rgb), 0.15);
       color: var(--danger);
-      border-color: rgba(239, 68, 68, 0.3);
+      border-color: rgba(var(--danger-rgb), 0.3);
     }
     .status-badge.offline .dot { background: var(--danger); }
     .status-badge.bypass {
-      background: rgba(245, 158, 11, 0.15);
+      background: rgba(var(--warning-rgb), 0.15);
       color: var(--warning);
-      border-color: rgba(245, 158, 11, 0.3);
+      border-color: rgba(var(--warning-rgb), 0.3);
     }
     .status-badge.bypass .dot { background: var(--warning); }
 
-    /* Tabs (Symmetrical Modern Segmented Control) */
+    /* Tabs (Symmetrical Modern Segmented Control with WAI-ARIA support) */
     .tabs {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -423,6 +431,9 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
 
     .tab-content { display: none; }
     .tab-content.active { display: block; }
+    .tab-content:focus-visible {
+      outline: none;
+    }
 
     /* Cards */
     .card {
@@ -464,29 +475,28 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     .btn-icon-minimal.btn-power-active,
     .btn-icon-minimal.is-active#btnPowerToggle {
       color: var(--success) !important;
-      background: rgba(16, 185, 129, 0.14) !important;
-      border-color: rgba(16, 185, 129, 0.45) !important;
-      box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
+      background: rgba(var(--success-rgb), 0.14) !important;
+      border-color: rgba(var(--success-rgb), 0.45) !important;
+      box-shadow: 0 0 8px rgba(var(--success-rgb), 0.25);
     }
     .btn-icon-minimal.btn-power-disabled,
     .btn-icon-minimal.is-disabled#btnPowerToggle {
       color: var(--danger) !important;
-      background: rgba(224, 82, 82, 0.12) !important;
-      border-color: rgba(224, 82, 82, 0.35) !important;
+      background: rgba(var(--danger-rgb), 0.12) !important;
+      border-color: rgba(var(--danger-rgb), 0.35) !important;
     }
     .btn-icon-minimal.btn-pause-active,
     .btn-icon-minimal.is-active#btnPauseToggle {
       color: var(--warning) !important;
-      background: rgba(245, 158, 11, 0.16) !important;
-      border-color: rgba(245, 158, 11, 0.5) !important;
-      box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
+      background: rgba(var(--warning-rgb), 0.16) !important;
+      border-color: rgba(var(--warning-rgb), 0.5) !important;
+      box-shadow: 0 0 8px rgba(var(--warning-rgb), 0.25);
     }
     .btn-icon-minimal:active,
     .btn-theme-toggle:active,
     .btn-sm:active,
     .btn-sec:active,
     .btn-primary-sm:active,
-    .btn-action:active,
     .tab-btn:active {
       transform: translateY(1px) scale(0.95) !important;
       filter: brightness(0.85) contrast(1.15) !important;
@@ -495,6 +505,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
 
     /* Accessibility: Focus-visible states */
     .btn-action:focus-visible,
+    .btn-icon:focus-visible,
     .btn-icon-minimal:focus-visible,
     .btn-primary-sm:focus-visible,
     .tab-btn:focus-visible,
@@ -502,12 +513,16 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     .form-input:focus-visible,
     .form-select:focus-visible,
     .btn-quick-add:focus-visible,
-    .btn-sm:focus-visible {
+    .btn-sm:focus-visible,
+    .btn-sec:focus-visible,
+    .rule-del-btn:focus-visible,
+    a:focus-visible {
       outline: 2px solid var(--primary) !important;
       outline-offset: 2px !important;
       box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.25) !important;
     }
     [data-layout="terminal"] .btn-action:focus-visible,
+    [data-layout="terminal"] .btn-icon:focus-visible,
     [data-layout="terminal"] .btn-icon-minimal:focus-visible,
     [data-layout="terminal"] .btn-primary-sm:focus-visible,
     [data-layout="terminal"] .tab-btn:focus-visible,
@@ -522,9 +537,9 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     .btn-sm:disabled,
     .btn-sec:disabled,
     .btn-primary-sm:disabled,
-    .btn-action:disabled,
     .btn-icon:disabled,
-    .btn-icon-minimal:disabled {
+    .btn-icon-minimal:disabled,
+    :disabled {
       opacity: 0.5 !important;
       cursor: not-allowed !important;
       pointer-events: none !important;
@@ -532,34 +547,6 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       box-shadow: none !important;
     }
 
-    /* Inline PNG icon pack */
-    .icon-inline {
-      width: 14px;
-      height: 14px;
-      vertical-align: -2px;
-      display: inline-block;
-      object-fit: contain;
-      flex-shrink: 0;
-      pointer-events: none;
-    }
-    .icon-inline-lg {
-      width: 18px;
-      height: 18px;
-      vertical-align: -4px;
-      display: inline-block;
-      object-fit: contain;
-      flex-shrink: 0;
-      pointer-events: none;
-    }
-    .icon-inline-sm {
-      width: 12px;
-      height: 12px;
-      vertical-align: -1px;
-      display: inline-block;
-      object-fit: contain;
-      flex-shrink: 0;
-      pointer-events: none;
-    }
     .card-header {
       display: flex;
       justify-content: space-between;
@@ -585,6 +572,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       text-align: center;
       line-height: 1;
       flex-shrink: 0;
+      transition: transform 0.2s ease;
     }
     #tabRulesDefaultPolicy {
       max-width: 80px;
@@ -635,6 +623,8 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       justify-content: center;
       width: 24px;
       height: 24px;
+      min-width: 24px;
+      min-height: 24px;
       font-size: 12px;
       padding: 0;
       transition: all 0.15s ease;
@@ -647,51 +637,15 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
     .tag.corp-tag {
       color: var(--primary);
-      border-color: rgba(56, 189, 248, 0.3);
-      background: rgba(56, 189, 248, 0.1);
+      border-color: rgba(var(--primary-rgb), 0.3);
+      background: rgba(var(--primary-rgb), 0.1);
     }
     .tag.user-tag {
       color: var(--warning);
-      border-color: rgba(245, 158, 11, 0.3);
-      background: rgba(245, 158, 11, 0.1);
+      border-color: rgba(var(--warning-rgb), 0.3);
+      background: rgba(var(--warning-rgb), 0.1);
     }
 
-    /* Hero Card in Conn Tab */
-    .hero-card {
-      text-align: center;
-      padding: 14px 12px;
-    }
-    .hero-header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 10px;
-    }
-    .status-orb {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: rgba(239, 68, 68, 0.2);
-      border: 2px solid var(--danger);
-      box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
-      transition: all 0.3s;
-    }
-    .status-orb.active {
-      background: rgba(16, 185, 129, 0.2);
-      border-color: var(--success);
-      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
-    }
-    .status-orb.bypass {
-      background: rgba(245, 158, 11, 0.2);
-      border-color: var(--warning);
-      box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
-    }
-    .hero-status-title {
-      font-weight: 700;
-      font-size: 14px;
-      color: var(--text);
-    }
     .hero-meta {
       background: var(--card-inner);
       border-radius: 8px;
@@ -717,48 +671,10 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       white-space: nowrap;
     }
 
-    /* 3 Action Buttons */
-    .action-bar {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-    .btn-action {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 4px;
-      color: var(--text);
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 5px;
-      font-size: 11px;
-      font-weight: 600;
-      transition: all 0.15s;
-    }
-    .btn-action:hover {
-      background: var(--card-inner);
-      border-color: var(--primary);
-    }
-    .btn-action:active {
-      transform: scale(0.98);
-    }
-    .action-icon {
-      color: var(--primary);
-    }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     button.btn-icon-minimal.spin, button.spin { animation: none !important; }
     .sync-icon { display: inline-block; line-height: 1; transform-origin: center center; }
     .sync-icon.spin, span.spin { display: inline-block; animation: spin 0.8s linear infinite; transform-origin: center center; }
-    .action-label {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 100%;
-    }
 
     /* Rows */
     .row {
@@ -810,6 +726,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       border-radius: 6px;
       color: var(--primary);
       padding: 6px 10px;
+      min-height: 28px;
       font-size: 11px;
       font-weight: 600;
       cursor: pointer;
@@ -819,7 +736,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
     .btn-quick-add:hover {
       border-color: var(--primary);
-      background: rgba(56, 189, 248, 0.05);
+      background: rgba(var(--primary-rgb), 0.08);
     }
     .rule-form {
       display: flex;
@@ -837,6 +754,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       font-size: 11px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       outline: none;
+      min-height: 28px;
     }
     .form-input:focus {
       border-color: var(--primary);
@@ -854,6 +772,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       color: var(--text);
       font-size: 11px;
       outline: none;
+      min-height: 28px;
     }
     .btn-primary-sm {
       background: var(--primary);
@@ -863,6 +782,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       padding: 6px 12px;
       font-size: 11px;
       font-weight: 700;
+      min-height: 28px;
       cursor: pointer;
       transition: opacity 0.15s;
       white-space: nowrap;
@@ -884,6 +804,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     .user-rules-list {
       max-height: 120px;
       overflow-y: auto;
+      overscroll-behavior: contain;
       border-top: 1px solid var(--border);
       padding-top: 6px;
       margin-top: 4px;
@@ -917,17 +838,17 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       gap: 6px;
     }
     .rule-badge {
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       padding: 1px 4px;
       border-radius: 3px;
     }
     .rule-badge.proxy {
-      background: rgba(16, 185, 129, 0.15);
+      background: rgba(var(--success-rgb), 0.15);
       color: var(--success);
     }
     .rule-badge.direct {
-      background: rgba(245, 158, 11, 0.15);
+      background: rgba(var(--warning-rgb), 0.15);
       color: var(--warning);
     }
     .rule-del-btn {
@@ -937,6 +858,12 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       cursor: pointer;
       padding: 2px 4px;
       border-radius: 3px;
+      min-width: 24px;
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
     }
     .rule-del-btn:hover {
       color: var(--danger);
@@ -951,6 +878,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       border-radius: 5px;
       font-size: 11px;
       font-weight: 600;
+      min-height: 24px;
       cursor: pointer;
       transition: all 0.15s;
     }
@@ -967,6 +895,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       color: #94a3b8;
       height: 120px;
       overflow-y: auto;
+      overscroll-behavior: contain;
       white-space: pre-wrap;
       word-break: break-all;
       margin: 4px 0 8px 0;
@@ -986,9 +915,13 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       color: var(--text);
       font-weight: 500;
       padding: 5px 8px;
+      min-height: 28px;
       border-radius: 6px;
       cursor: pointer;
       font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       text-align: center;
       transition: background 0.15s;
     }
@@ -1006,7 +939,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     </div>
     <div class="header-actions">
       <button id="btnThemeToggle" class="btn-theme-toggle" title="${t.toggleTheme || "Переключить тему (День / Ночь)"}" aria-label="Toggle theme"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg></button>
-      <div class="status-badge offline" id="statusPill">
+      <div class="status-badge offline" id="statusPill" role="status" aria-live="polite">
         <span class="dot"></span>
         <span id="statusText">${t.offline}</span>
       </div>
@@ -1014,18 +947,19 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   </header>
 
   <!-- Navigation Tabs -->
-  <div class="tabs" role="tablist" aria-label="Navigation Tabs">
-    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus" role="tab" aria-selected="true" aria-controls="tab-status">${t.tabConn || "Главная"}</button>
-    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting" role="tab" aria-selected="false" aria-controls="tab-routing">${t.tabRules || "Роутинг"}</button>
-    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo" role="tab" aria-selected="false" aria-controls="tab-info">${t.tabDiag || "Инфо"}</button>
+  <div class="tabs" role="tablist" aria-label="${t.isRu ? "Навигация по разделам" : "Navigation Tabs"}">
+    <button class="tab-btn active" data-tab="tab-status" id="tabBtnStatus" role="tab" aria-selected="true" aria-controls="tab-status" tabindex="0">${t.tabConn || "Главная"}</button>
+    <button class="tab-btn" data-tab="tab-routing" id="tabBtnRouting" role="tab" aria-selected="false" aria-controls="tab-routing" tabindex="-1">${t.tabRules || "Роутинг"}</button>
+    <button class="tab-btn" data-tab="tab-info" id="tabBtnInfo" role="tab" aria-selected="false" aria-controls="tab-info" tabindex="-1">${t.tabDiag || "Инфо"}</button>
   </div>
 
   <!-- TAB 1: Main (Главная) -->
-  <div class="tab-content active" id="tab-status" role="tabpanel" aria-labelledby="tabBtnStatus">
+  <div class="tab-content active" id="tab-status" role="tabpanel" tabindex="0" aria-labelledby="tabBtnStatus">
     <div class="card" id="cardConnection">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
         <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><path d="M9 2v6M15 2v6M6 8h12a2 2 0 0 1 2 2v2a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6v-2a2 2 0 0 1 2-2zM12 18v4"/></svg> ${t.connGateway || "Подключение к прокси"}</span>
         <div class="card-header-actions">
+          <span id="btnPauseLabel" class="pause-countdown" aria-live="polite" style="display: none; font-size: 11px; font-weight: 600; color: var(--warning); margin-right: 4px;"></span>
           <button class="btn-icon-minimal" id="btnSyncNow" title="${t.btnSync || "Синхронизировать сейчас"}"><span class="sync-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg></span></button>
           <button class="btn-icon-minimal" id="btnPowerToggle" title="${t.btnPower || "Включить / Выключить прокси"}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg></button>
           <button class="btn-icon-minimal" id="btnPauseToggle" title="${t.btnPause || (t.isRu ? `Приостановить прокси на ${safeCfg.bypassAutoTimeoutMinutes || 15} минут` : `Pause proxy for ${safeCfg.bypassAutoTimeoutMinutes || 15} minutes`)}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg></button>
@@ -1049,7 +983,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   </div>
 
   <!-- TAB 2: Routing -->
-  <div class="tab-content" id="tab-routing" role="tabpanel" aria-labelledby="tabBtnRouting">
+  <div class="tab-content" id="tab-routing" role="tabpanel" tabindex="0" aria-labelledby="tabBtnRouting">
     <div class="card" id="cardProxySelector" style="margin-bottom: 8px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <span style="font-weight: 600; font-size: 12px; color: var(--text);">🌐 ${t.isRu ? "Прокси-сервер" : "Proxy Server"}</span>
@@ -1066,7 +1000,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
           <span class="card-title">${t.corpRules || "Корпоративные правила"} <span id="corpRulesCountBadge" class="badge" style="font-size: 10px; margin-left: 2px;">0</span></span>
         </div>
         <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
-          <span class="tag" id="tabRulesDefaultPolicy" style="font-size: 9px; padding: 1px 5px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="DIRECT">DIRECT</span>
+          <span class="tag" id="tabRulesDefaultPolicy" style="font-size: 10px; padding: 1px 5px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="DIRECT">DIRECT</span>
           <span id="corpRulesToggleChevron" class="accordion-chevron" style="flex-shrink: 0;">▼</span>
         </div>
       </div>
@@ -1075,7 +1009,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
           <span class="label">${t.isRu ? "Профиль" : "Profile"}</span>
           <span class="tag corp-tag" id="corpProfileNameBadge">${t.fromServer || "От сервера"}</span>
         </div>
-        <div id="corpRulesContainer" style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+        <div id="corpRulesContainer" style="max-height: 120px; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px;">
           <div class="empty-rules" id="corpRulesEmpty">${t.isRu ? "Правила маршрутизации не заданы (все запросы по умолчанию)" : "No routing rules defined (all requests follow default policy)"}</div>
         </div>
         <div class="rules-notice" style="margin-top: 8px;">
@@ -1088,7 +1022,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       <div class="card-header">
         <span class="card-title">${t.userOverrides || "Мои исключения"}</span>
         <div style="display: flex; gap: 6px; align-items: center;">
-          <button type="button" id="btnCopyUserExceptions" class="btn-icon" title="${t.isRu ? "Скопировать список в буфер" : "Copy exceptions to clipboard"}">📋</button>
+          <button type="button" id="btnCopyUserExceptions" class="btn-icon" title="${t.isRu ? "Скопировать список в буфер" : "Copy exceptions to clipboard"}" aria-label="${t.isRu ? "Скопировать список в буфер" : "Copy exceptions to clipboard"}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
           <span class="tag user-tag">${t.localBadge || "Локально"}</span>
         </div>
       </div>
@@ -1096,7 +1030,8 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
         ${t.addCurrentSite || "+ Добавить текущий сайт"}
       </button>
       <div class="rule-form">
-        <input type="text" id="inputPattern" placeholder="${t.patternPlaceholder || "*.example.com или домен"}" class="form-input" autocomplete="off" spellcheck="false">
+        <input type="text" id="inputPattern" placeholder="${t.patternPlaceholder || "*.example.com или домен"}" class="form-input" autocomplete="off" spellcheck="false" aria-describedby="ruleInputError">
+        <div id="ruleInputError" role="alert" style="display: none; color: var(--danger); font-size: 10px; margin-top: 2px; font-weight: 600;"></div>
         <div class="rule-form-row">
           <select id="selectAction" class="form-select">
             <option value="PROXY">${t.throughProxy || "PROXY (через прокси)"}</option>
@@ -1112,7 +1047,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   </div>
 
   <!-- TAB 3: Diagnostics & Info -->
-  <div class="tab-content" id="tab-info" role="tabpanel" aria-labelledby="tabBtnInfo">
+  <div class="tab-content" id="tab-info" role="tabpanel" tabindex="0" aria-labelledby="tabBtnInfo">
     <div class="card">
       <div class="card-header">
         <span class="card-title">${t.connParams || "Параметры соединения"}</span>
@@ -1124,20 +1059,20 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       <div class="row">
         <span class="label">${t.latency}</span>
         <div class="row-action">
-          <span class="val" id="pingVal" title="—">—</span>
+          <span class="val" id="pingVal" title="—" role="status" aria-live="polite">—</span>
           <button id="btnTestLatency" class="btn-sm">${t.testBtn || "Тест"}</button>
         </div>
       </div>
       <div class="row">
         <span class="label">${t.exitIp}</span>
         <div class="row-action">
-          <span class="val" id="exitIpVal" title="—">—</span>
+          <span class="val" id="exitIpVal" title="—" role="status" aria-live="polite">—</span>
           <button id="btnCheckIp" class="btn-sm">${t.checkBtn || "Проверить"}</button>
         </div>
       </div>
       <div class="row" style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--border);">
         <span class="label">${t.helpdesk}</span>
-        <span class="val" style="font-size: 11px;"><a href="${escapeHtml(support.href)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHtml(support.label)}</a></span>
+        <span class="val" style="font-size: 11px;"><a href="${escapeHtml(support.href)}" style="color: var(--primary); text-decoration: none;">${escapeHtml(support.label)}</a></span>
       </div>
     </div>
 
@@ -1149,10 +1084,12 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       <pre id="logContainer" class="log-terminal"></pre>
       <div class="log-actions">
         <button id="btnCopyLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span id="btnCopyLogsText">${t.copyLogs}</span></button>
-        <button id="btnClearLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> ${t.clearLogs}</button>
+        <button id="btnClearLogs" class="btn-sec"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span id="btnClearLogsText">${t.clearLogs}</span></button>
       </div>
     </div>
   </div>
+
+  <div id="toastContainer" role="status" aria-live="polite" style="position: fixed; bottom: 8px; left: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 9999; pointer-events: none;"></div>
 
   <script src="popup.js"></script>
 </body>

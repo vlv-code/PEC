@@ -286,6 +286,11 @@ static bool             g_engineStarted = false;
 static bool             g_connLogging = true;
 static bool             g_proxiedOnly = false;
 static UINT             g_wmTaskbarCreated = 0;
+static float g_dpiScale = 1.0f;
+static float g_baseDpiScale = 1.0f;
+static int   g_activeTab = 0;
+static bool  g_focusSearch = false;
+
 
 // -----------------------------------------------------------------------------
 // Live Connection Stream Ring Buffer (Tab 2)
@@ -659,7 +664,10 @@ static void SetProxyEnabled(bool enabled)
     if (g_api.SetEnabled) {
         g_api.SetEnabled(enabled ? TRUE : FALSE);
     }
-    LogAdd(enabled ? "Статус прокси переключен: ВКЛЮЧЕН" : "Статус прокси переключен: ПРИОСТАНОВЛЕН");
+    UpdateTitle(g_hWnd);
+    char buf[128];
+    snprintf(buf, sizeof(buf), T(S_LOG_PROXY_STATE), enabled ? T(S_STATUS_ACTIVE) : T(S_STATUS_PAUSED));
+    LogAdd(buf);
 }
 
 static void SwitchActiveProxy(int cfgIndex)
@@ -676,14 +684,38 @@ static void SwitchActiveProxy(int cfgIndex)
         proxyName = WToUtf8(g_profile.cfg[0].name[0] ? g_profile.cfg[0].name : g_profile.cfg[0].host);
     }
 
+    PecSyncSetSelectedProxy(g_profile.cfg[0].host, _wtoi(g_profile.cfg[0].port));
     UnapplyProfile();
     ApplyConfigs();
     ApplyRules();
     SaveProfile();
+    UpdateTitle(g_hWnd);
 
     char buf[256];
-    snprintf(buf, sizeof(buf), "Основной прокси переключен на: %s", proxyName.c_str());
+    snprintf(buf, sizeof(buf), T(S_LOG_PROXY_SWITCHED), proxyName.c_str());
     LogAdd(buf);
+}
+
+
+static void UpdateTitle(HWND hWnd)
+{
+    if (!hWnd) return;
+    wchar_t t[256];
+    const wchar_t* engState = !g_engineStarted ? L" [ENGINE: ERROR]" : (g_proxyEnabled ? L"" : TW(S_TITLE_PAUSED));
+    ProfileLock lock;
+    if (g_profile.cfgCount > 0 && g_profile.cfg[0].host[0])
+    {
+        _snwprintf_s(t, 256, _TRUNCATE, L"%ls - %ls [%ls: %ls:%ls]%ls",
+                     APP_TITLE_W, g_activeProfile,
+                     g_profile.cfg[0].name[0] ? g_profile.cfg[0].name : g_profile.cfg[0].type,
+                     g_profile.cfg[0].host, g_profile.cfg[0].port,
+                     engState);
+    }
+    else
+    {
+        _snwprintf_s(t, 256, _TRUNCATE, L"%ls - %ls%ls", APP_TITLE_W, g_activeProfile, engState);
+    }
+    SetWindowTextW(hWnd, t);
 }
 
 static void OpenLogsFolder()
@@ -723,8 +755,26 @@ static void TrayAdd(HWND hWnd)
 static void TrayUpdateTip(const wchar_t* tip)
 {
     if (!g_trayAdded) return;
-    wcsncpy(g_trayData.szTip, tip, 127);
+    wchar_t fullTip[128];
+    if (wcsstr(tip, L"PEC-App") == nullptr) {
+        _snwprintf_s(fullTip, 128, _TRUNCATE, L"PEC-App - %ls", tip);
+    } else {
+        lstrcpynW(fullTip, tip, 128);
+    }
+    wcsncpy(g_trayData.szTip, fullTip, 127);
     Shell_NotifyIconW(NIM_MODIFY, &g_trayData);
+}
+
+static void TrayShowBalloon(const wchar_t* title, const wchar_t* msg)
+{
+    if (!g_trayAdded) return;
+    NOTIFYICONDATAW nid = g_trayData;
+    nid.uFlags |= NIF_INFO;
+    lstrcpynW(nid.szInfoTitle, title, 64);
+    lstrcpynW(nid.szInfo, msg, 256);
+    nid.dwInfoFlags = NIIF_INFO;
+    nid.uTimeout = 5000;
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
 static void TrayRemove()
@@ -1046,18 +1096,31 @@ static void RenderHeader()
     if (g_pairedExt.paired) {
         RenderPill(T(S_STATUS_PAIRED), ImVec4(0.08f, 0.28f, 0.18f, 1.0f), ImVec4(0.3f, 0.9f, 0.5f, 1.0f));
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(u8"Расширение активно в браузере (версия %ls, %ls)\nСинхронизация работает по порту 20809",
+            ImGui::SetTooltip(T(S_TOOLTIP_EXT_ACTIVE),
                 g_pairedExt.version[0] ? g_pairedExt.version : L"1.0.0",
                 g_pairedExt.browser[0] ? g_pairedExt.browser : L"chromium");
         }
     } else {
         RenderPill(T(S_STATUS_WAIT_EXT), PecTheme::CardBg, PecTheme::TextMuted);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(u8"Локальный порт 20809 слушается.\nДля спаривания убедитесь, что в браузере запущено расширение PEC v1.0.0+.");
+            ImGui::SetTooltip("%s", T(S_TOOLTIP_EXT_WAIT));
         }
     }
 
-    // PEC Server Sync Status Indicator & Force Sync
+    // Engine Health Status Pill (WIN-15)
+    ImGui::SameLine(0, 10.0f);
+    if (!g_engineStarted) {
+        RenderPill(T(S_STATUS_ENGINE_ERR), ImVec4(0.35f, 0.10f, 0.10f, 1.0f), PecTheme::DangerRed);
+    } else if (g_lastSyncError != 0) {
+        RenderPill(T(S_STATUS_ENGINE_DEGRADED), ImVec4(0.35f, 0.25f, 0.05f, 1.0f), PecTheme::WarningAlert);
+    } else {
+        RenderPill(T(S_STATUS_ENGINE_OK), ImVec4(0.08f, 0.28f, 0.18f, 1.0f), PecTheme::SuccessDirect);
+    }
+
+    // PEC Server Sync Status Indicator (thread-safe reading, WIN-07)
+    wchar_t syncStatusSnapshot[128] = { 0 };
+    PecSyncGetStatusStr(syncStatusSnapshot, 128);
+
     ImGui::SameLine(0, 10.0f);
     char syncTimeStr[64] = "";
     if (g_lastSyncTime.wYear > 0) {
@@ -1072,32 +1135,32 @@ static void RenderHeader()
         snprintf(pillText, sizeof(pillText), "%s (%s)", T(S_STATUS_SYNC_OK), syncTimeStr[0] ? syncTimeStr : "OK");
         RenderPill(pillText, ImVec4(0.08f, 0.28f, 0.18f, 1.0f), PecTheme::SuccessDirect);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(u8"Синхронизация с сервером PEC активна\nПоследний обмен: %s\nСтатус: %ls\nСервер: %ls",
+            ImGui::SetTooltip(T(S_TOOLTIP_SYNC_OK),
                 syncTimeStr[0] ? syncTimeStr : "OK",
-                g_lastSyncStatusStr,
+                syncStatusSnapshot,
                 g_profile.pecSync.serverUrl[0] ? g_profile.pecSync.serverUrl : L"—");
         }
     } else if (g_lastSyncError != 0) {
         RenderPill(T(S_STATUS_SYNC_ERR), ImVec4(0.35f, 0.10f, 0.10f, 1.0f), PecTheme::DangerRed);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(u8"Ошибка связи с сервером PEC (код %lu)\n%ls\nСервер: %ls",
+            ImGui::SetTooltip(T(S_TOOLTIP_SYNC_ERR),
                 g_lastSyncError,
-                g_lastSyncStatusStr,
+                syncStatusSnapshot,
                 g_profile.pecSync.serverUrl[0] ? g_profile.pecSync.serverUrl : L"—");
         }
     } else {
         RenderPill(T(S_STATUS_SYNC_WAIT), PecTheme::CardBg, PecTheme::TextMuted);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(u8"Синхронизация с сервером PEC\n%ls", g_lastSyncStatusStr);
+            ImGui::SetTooltip(T(S_TOOLTIP_SYNC_WAIT), syncStatusSnapshot);
         }
     }
 
     ImGui::SameLine(0, 6.0f);
-    if (ImGui::Button(u8"🔄##forcesyncheader")) {
+    if (ImGui::Button("[R]##forcesyncheader")) {
         PecSyncTriggerNow();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(u8"Синхронизировать конфигурацию с сервером PEC сейчас");
+        ImGui::SetTooltip("%s", T(S_TOOLTIP_SYNC_BTN));
     }
 
     // Language Selector (RU | EN | ZH)
@@ -1121,8 +1184,17 @@ static void RenderHeader()
             ProfileLock lk;
             lstrcpynW(g_profile.language, langCodes[l], 8);
             SaveProfile();
+            UpdateTitle(g_hWnd);
         }
         ImGui::PopStyleColor(2);
+    }
+
+    ImGui::SameLine(0, 6.0f);
+    if (ImGui::Button("[*]##settingsBtn", ImVec2(28.0f, 0))) {
+        g_activeTab = 4;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", T(S_TAB_SETTINGS));
     }
 
     // Status Toggle Button placed in the far right corner
@@ -1143,7 +1215,7 @@ static void RenderHeader()
         }
         ImGui::PopStyleColor(3);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(u8"Трафик перехватывается согласно правилам маршрутизации.\nНажмите, чтобы временно приостановить работу.");
+            ImGui::SetTooltip("%s", T(S_TOOLTIP_TRAFFIC_ACTIVE));
         }
     } else {
         snprintf(statBtnText, sizeof(statBtnText), "⏸ %s##statbtn", T(S_STATUS_PAUSED));
@@ -1156,7 +1228,7 @@ static void RenderHeader()
         }
         ImGui::PopStyleColor(3);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(u8"Проксирование приостановлено (весь трафик направляется напрямую).\nНажмите, чтобы включить.");
+            ImGui::SetTooltip("%s", T(S_TOOLTIP_TRAFFIC_PAUSED));
         }
     }
 
@@ -1174,6 +1246,10 @@ static void RenderRulesTab()
     ProfileLock lock;
     // Search input & match counter
     ImGui::PushItemWidth(320.0f);
+    if (g_focusSearch) {
+        ImGui::SetKeyboardFocusHere();
+        g_focusSearch = false;
+    }
     ImGui::InputTextWithHint("##rulesearch", T(S_RULES_SEARCH), g_ruleSearch, sizeof(g_ruleSearch));
     ImGui::PopItemWidth();
 
@@ -1211,6 +1287,9 @@ static void RenderRulesTab()
         OpenRuleModal(-1);
     }
     ImGui::SameLine();
+    // Disable ▲/▼ when search filter is active (WIN-14)
+    bool searchActive = (g_ruleSearch[0] != 0);
+    ImGui::BeginDisabled(searchActive || g_selectedRuleIdx <= 0 || g_selectedRuleIdx >= g_profile.ruleCount);
     if (ImGui::Button(u8"▲") && g_selectedRuleIdx > 0 && g_selectedRuleIdx < g_profile.ruleCount) {
         PBRule temp = g_profile.rule[g_selectedRuleIdx];
         g_profile.rule[g_selectedRuleIdx] = g_profile.rule[g_selectedRuleIdx - 1];
@@ -1220,7 +1299,10 @@ static void RenderRulesTab()
         ApplyRules();
         SaveProfile();
     }
+    ImGui::EndDisabled();
+
     ImGui::SameLine();
+    ImGui::BeginDisabled(searchActive || g_selectedRuleIdx < 0 || g_selectedRuleIdx >= g_profile.ruleCount - 1);
     if (ImGui::Button(u8"▼") && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount - 1) {
         PBRule temp = g_profile.rule[g_selectedRuleIdx];
         g_profile.rule[g_selectedRuleIdx] = g_profile.rule[g_selectedRuleIdx + 1];
@@ -1230,21 +1312,15 @@ static void RenderRulesTab()
         ApplyRules();
         SaveProfile();
     }
+    ImGui::EndDisabled();
+
     ImGui::SameLine();
-    if (ImGui::Button(T(S_BTN_REMOVE)) && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount) {
-        if (g_profile.rule[g_selectedRuleIdx].nativeId && g_api.DeleteRule) {
-            g_api.DeleteRule(g_profile.rule[g_selectedRuleIdx].nativeId);
-            g_profile.rule[g_selectedRuleIdx].nativeId = 0;
-        }
-        for (int i = g_selectedRuleIdx; i < g_profile.ruleCount - 1; i++) {
-            g_profile.rule[i] = g_profile.rule[i + 1];
-        }
-        g_profile.ruleCount--;
-        if (g_selectedRuleIdx >= g_profile.ruleCount) g_selectedRuleIdx = g_profile.ruleCount - 1;
-        UnapplyRules();
-        ApplyRules();
-        SaveProfile();
+    // Delete rule with confirmation (WIN-03)
+    ImGui::BeginDisabled(g_selectedRuleIdx < 0 || g_selectedRuleIdx >= g_profile.ruleCount);
+    if (ImGui::Button(T(S_BTN_REMOVE))) {
+        ImGui::OpenPopup("DeleteRuleConfirm");
     }
+    ImGui::EndDisabled();
     ImGui::SameLine();
     if (ImGui::Button(T(S_BTN_CLONE)) && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount && g_profile.ruleCount < PB_MAX_RULE) {
         PBRule clone = g_profile.rule[g_selectedRuleIdx];
@@ -1324,9 +1400,9 @@ static void RenderRulesTab()
             // Column 1: Rule Target / Name with corporate / custom indicator
             ImGui::TableSetColumnIndex(1);
             if (r->isCorporate) {
-                ImGui::TextColored(PecTheme::PrimaryAccent, u8"[Корп]");
+                ImGui::TextColored(PecTheme::PrimaryAccent, "[%s]", T(S_TAG_CORP));
             } else {
-                ImGui::TextColored(PecTheme::SuccessDirect, u8"[Польз]");
+                ImGui::TextColored(PecTheme::SuccessDirect, "[%s]", T(S_TAG_USER));
             }
             ImGui::SameLine(0, 6.0f);
 
@@ -1370,7 +1446,7 @@ static void RenderRulesTab()
 
             // Column 3: Proxy name
             ImGui::TableSetColumnIndex(3);
-            std::string proxyLabel = "По умолчанию";
+            std::string proxyLabel = T(S_L_DEFAULT);
             for (int k = 0; k < g_profile.cfgCount; k++) {
                 if (g_profile.cfg[k].storedId == r->cfgStoredId) {
                     proxyLabel = WToUtf8(g_profile.cfg[k].name[0] ? g_profile.cfg[k].name : g_profile.cfg[k].host);
@@ -1380,6 +1456,36 @@ static void RenderRulesTab()
             ImGui::TextUnformatted(proxyLabel.c_str());
         }
         ImGui::EndTable();
+    }
+
+
+    if (ImGui::BeginPopupModal("DeleteRuleConfirm", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("%s", T(S_CONFIRM_DEL_RULE_MSG));
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        if (ImGui::Button(T(S_BTN_DELETE), ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            if (g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount) {
+                if (g_profile.rule[g_selectedRuleIdx].nativeId && g_api.DeleteRule) {
+                    g_api.DeleteRule(g_profile.rule[g_selectedRuleIdx].nativeId);
+                    g_profile.rule[g_selectedRuleIdx].nativeId = 0;
+                }
+                for (int i = g_selectedRuleIdx; i < g_profile.ruleCount - 1; i++) {
+                    g_profile.rule[i] = g_profile.rule[i + 1];
+                }
+                g_profile.ruleCount--;
+                if (g_selectedRuleIdx >= g_profile.ruleCount) g_selectedRuleIdx = g_profile.ruleCount - 1;
+                UnapplyRules();
+                ApplyRules();
+                SaveProfile();
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(T(S_BTN_CANCEL), ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     // Modal Dialog: Add / Edit Rule
@@ -1395,9 +1501,9 @@ static void RenderRulesTab()
 
         if (g_isEditRule && g_editRuleIdx >= 0 && g_editRuleIdx < g_profile.ruleCount) {
             if (g_profile.rule[g_editRuleIdx].isCorporate) {
-                ImGui::TextColored(PecTheme::PrimaryAccent, u8"ℹ Корпоративное правило (синхронизируется с сервера)");
+                ImGui::TextColored(PecTheme::PrimaryAccent, "%s", T(S_INFO_CORP_RULE));
             } else {
-                ImGui::TextColored(PecTheme::SuccessDirect, u8"ℹ Пользовательское правило (локальное)");
+                ImGui::TextColored(PecTheme::SuccessDirect, "%s", T(S_INFO_USER_RULE));
             }
             ImGui::Spacing();
         }
@@ -1467,7 +1573,10 @@ static void RenderRulesTab()
         snprintf(saveRuleBtn, sizeof(saveRuleBtn), "%s##saverule", T(S_BTN_SAVE));
         snprintf(cancelRuleBtn, sizeof(cancelRuleBtn), "%s##cancelrule", T(S_BTN_CANCEL));
 
-        if (ImGui::Button(saveRuleBtn, ImVec2(120, 0))) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+        if (ImGui::Button(saveRuleBtn, ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
             PBRule* target = nullptr;
             if (g_isEditRule && g_editRuleIdx >= 0 && g_editRuleIdx < g_profile.ruleCount) {
                 target = &g_profile.rule[g_editRuleIdx];
@@ -1522,6 +1631,10 @@ static void RenderConnectionsTab()
 {
     // Search input
     ImGui::PushItemWidth(300.0f);
+    if (g_focusSearch) {
+        ImGui::SetKeyboardFocusHere();
+        g_focusSearch = false;
+    }
     ImGui::InputTextWithHint("##connsearch", T(S_SEARCH_CUE), g_connSearch, sizeof(g_connSearch));
     ImGui::PopItemWidth();
 
@@ -1628,12 +1741,32 @@ static void RenderConnectionsTab()
                 // Status
                 ImGui::TableSetColumnIndex(5);
                 ImGui::TextColored(e.isDirect ? PecTheme::TextMuted : PecTheme::HoverAccent, "%s", e.status);
+
+                // Context menu for row (WIN-13)
+                char rowPopupId[32];
+                snprintf(rowPopupId, sizeof(rowPopupId), "ConnRowCtx_%d", row_i);
+                if (ImGui::BeginPopupContextItem(rowPopupId)) {
+                    if (ImGui::MenuItem(T(S_MENU_COPY_ROW))) {
+                        char clipBuf[512];
+                        snprintf(clipBuf, sizeof(clipBuf), "%s\t%s\t%s\t%s\t%s\t%s",
+                            e.time, e.process, e.hostIp, e.action, e.proxy, e.status);
+                        ImGui::SetClipboardText(clipBuf);
+                    }
+                    if (ImGui::MenuItem(T(S_MENU_COPY_HOST))) {
+                        ImGui::SetClipboardText(e.hostIp);
+                    }
+                    if (ImGui::MenuItem(T(S_MENU_COPY_PROC))) {
+                        ImGui::SetClipboardText(e.process);
+                    }
+                    ImGui::EndPopup();
+                }
             }
         }
 
         if (g_connAutoScroll) {
-            ImGui::SetScrollHereY(1.0f);
-            ImGui::SetScrollY(ImGui::GetScrollMaxY());
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 30.0f) {
+                ImGui::SetScrollHereY(1.0f);
+            }
         }
 
         ImGui::EndTable();
@@ -1650,6 +1783,10 @@ static void RenderEngineLogsTab()
 {
     // Search input
     ImGui::PushItemWidth(260.0f);
+    if (g_focusSearch) {
+        ImGui::SetKeyboardFocusHere();
+        g_focusSearch = false;
+    }
     ImGui::InputTextWithHint("##englogsearch", T(S_SEARCH_CUE), g_logSearch, sizeof(g_logSearch));
     ImGui::PopItemWidth();
 
@@ -1680,8 +1817,9 @@ static void RenderEngineLogsTab()
 
     ImGui::SameLine();
     char copyAllBtnLabel[128];
-    snprintf(copyAllBtnLabel, sizeof(copyAllBtnLabel), "%s##copylogall", (g_lang == 0 ? u8"Скопировать весь лог##copylogall" : T(S_LOG_COPY_ALL)));
-    if (ImGui::Button(g_lang == 0 ? u8"Скопировать весь лог##copylogall" : copyAllBtnLabel)) {
+    // Button label: Скопировать весь лог##copylogall
+    snprintf(copyAllBtnLabel, sizeof(copyAllBtnLabel), "%s##copylogall", T(S_LOG_COPY_ALL));
+    if (ImGui::Button(copyAllBtnLabel)) {
         EnterCriticalSection(&g_logCs);
         std::string allLogs;
         for (const auto& entry : g_logEntries) {
@@ -1739,12 +1877,33 @@ static void RenderEngineLogsTab()
             } else {
                 ImGui::TextColored(PecTheme::TextPrimary, "%s", entry.message.c_str());
             }
+
+            char logPopupId[32];
+            snprintf(logPopupId, sizeof(logPopupId), "LogLineCtx_%d", i);
+            if (ImGui::BeginPopupContextItem(logPopupId)) {
+                if (ImGui::MenuItem(T(S_MENU_COPY_LINE))) {
+                    char clipBuf[512];
+                    snprintf(clipBuf, sizeof(clipBuf), "[%s] %s", entry.time, entry.message.c_str());
+                    ImGui::SetClipboardText(clipBuf);
+                }
+                if (ImGui::MenuItem(T(S_LOG_COPY_ALL))) {
+                    std::string allLogs;
+                    for (const auto& el : g_logEntries) {
+                        allLogs += "["; allLogs += el.time; allLogs += "] ";
+                        allLogs += el.message; allLogs += "\r\n";
+                    }
+                    ImGui::SetClipboardText(allLogs.c_str());
+                }
+                ImGui::EndPopup();
+            }
         }
     }
     LeaveCriticalSection(&g_logCs);
 
     if (g_logAutoScroll) {
-        ImGui::SetScrollHereY(1.0f);
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 30.0f) {
+            ImGui::SetScrollHereY(1.0f);
+        }
     }
 
     ImGui::EndChild();
@@ -1768,30 +1927,16 @@ static void RenderProxiesTab()
         OpenProxyModal(-1);
     }
     ImGui::SameLine();
-    if (ImGui::Button(delPrx) && g_selectedProxyIdx >= 0 && g_selectedProxyIdx < g_profile.cfgCount) {
-        if (g_profile.cfgCount > 1) {
-            UINT32 delStoredId = g_profile.cfg[g_selectedProxyIdx].storedId;
-            if (g_profile.cfg[g_selectedProxyIdx].nativeId && g_api.DeleteProxyConfig) {
-                g_api.DeleteProxyConfig(g_profile.cfg[g_selectedProxyIdx].nativeId);
-            }
-            for (int i = g_selectedProxyIdx; i < g_profile.cfgCount - 1; i++) {
-                g_profile.cfg[i] = g_profile.cfg[i + 1];
-            }
-            g_profile.cfgCount--;
-            if (g_selectedProxyIdx >= g_profile.cfgCount) g_selectedProxyIdx = g_profile.cfgCount - 1;
-
-            for (int r = 0; r < g_profile.ruleCount; r++) {
-                if (g_profile.rule[r].cfgStoredId == delStoredId) {
-                    g_profile.rule[r].cfgStoredId = 0;
-                }
-            }
-
-            UnapplyProfile();
-            ApplyConfigs();
-            ApplyRules();
-            SaveProfile();
-        }
+    bool canDeleteProxy = (g_profile.cfgCount > 1);
+    ImGui::BeginDisabled(!canDeleteProxy || g_selectedProxyIdx < 0 || g_selectedProxyIdx >= g_profile.cfgCount);
+    if (ImGui::Button(delPrx)) {
+        ImGui::OpenPopup("DeleteProxyConfirm");
     }
+    ImGui::EndDisabled();
+    if (!canDeleteProxy && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("%s", T(S_ERR_LAST_PROXY));
+    }
+
     ImGui::SameLine();
     if (ImGui::Button(testPrx)) {
         for (int i = 0; i < g_profile.cfgCount; i++) {
@@ -1799,11 +1944,11 @@ static void RenderProxiesTab()
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"🔄 Синхронизировать с сервером")) {
+    if (ImGui::Button(T(S_BTN_SYNC_SERVER))) { // Синхронизировать с сервером
         PecSyncTriggerNow();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(u8"Синхронизировать конфигурацию с сервером PEC");
+        ImGui::SetTooltip("%s", T(S_TOOLTIP_SYNC_BTN));
     }
 
     ImGui::Spacing();
@@ -1882,13 +2027,13 @@ static void RenderProxiesTab()
 
             // Column 4: Authentication
             ImGui::TableSetColumnIndex(4);
-            std::string auth = c->user[0] ? WToUtf8(c->user) : u8"Без пароля";
+            std::string auth = c->user[0] ? WToUtf8(c->user) : T(S_L_NOPASS);
             ImGui::TextUnformatted(auth.c_str());
 
             // Column 5: DNS
             ImGui::TableSetColumnIndex(5);
             ImGui::TextColored(c->sendDomain ? PecTheme::SuccessDirect : PecTheme::TextMuted,
-                               c->sendDomain ? u8"Удаленный" : u8"Локальный");
+                               c->sendDomain ? T(S_L_REMOTE) : T(S_L_LOCAL));
 
             // Column 6: Latency / Ping status
             ImGui::TableSetColumnIndex(6);
@@ -1898,7 +2043,7 @@ static void RenderProxiesTab()
                 lat = g_proxyLatencies[i];
             }
             if (lat.testing) {
-                ImGui::TextColored(PecTheme::HoverAccent, u8"Проверка...");
+                ImGui::TextColored(PecTheme::HoverAccent, "%s", T(S_LAT_CHECKING));
             } else if (lat.ms >= 0) {
                 ImGui::TextColored(PecTheme::SuccessDirect, "%s", lat.status);
             } else {
@@ -1906,6 +2051,44 @@ static void RenderProxiesTab()
             }
         }
         ImGui::EndTable();
+    }
+
+
+    if (ImGui::BeginPopupModal("DeleteProxyConfirm", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("%s", T(S_CONFIRM_DEL_PROXY_MSG));
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        if (ImGui::Button(T(S_BTN_DELETE), ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            if (g_selectedProxyIdx >= 0 && g_selectedProxyIdx < g_profile.cfgCount && g_profile.cfgCount > 1) {
+                UINT32 delStoredId = g_profile.cfg[g_selectedProxyIdx].storedId;
+                if (g_profile.cfg[g_selectedProxyIdx].nativeId && g_api.DeleteProxyConfig) {
+                    g_api.DeleteProxyConfig(g_profile.cfg[g_selectedProxyIdx].nativeId);
+                }
+                for (int i = g_selectedProxyIdx; i < g_profile.cfgCount - 1; i++) {
+                    g_profile.cfg[i] = g_profile.cfg[i + 1];
+                }
+                g_profile.cfgCount--;
+                if (g_selectedProxyIdx >= g_profile.cfgCount) g_selectedProxyIdx = g_profile.cfgCount - 1;
+
+                for (int r = 0; r < g_profile.ruleCount; r++) {
+                    if (g_profile.rule[r].cfgStoredId == delStoredId) {
+                        g_profile.rule[r].cfgStoredId = 0;
+                    }
+                }
+
+                UnapplyProfile();
+                ApplyConfigs();
+                ApplyRules();
+                SaveProfile();
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(T(S_BTN_CANCEL), ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     // Modal: Add / Edit Proxy
@@ -1927,10 +2110,25 @@ static void RenderProxiesTab()
         ImGui::Combo("##pmType", &g_pmType, typeItems, IM_ARRAYSIZE(typeItems));
 
         ImGui::Text("%s", T(S_L_HOST));
+        bool hostEmpty = (g_pmHost[0] == 0);
+        if (hostEmpty) ImGui::PushStyleColor(ImGuiCol_Border, PecTheme::DangerRed);
         ImGui::InputText("##pmHost", g_pmHost, sizeof(g_pmHost));
+        if (hostEmpty) {
+            ImGui::PopStyleColor();
+            ImGui::TextColored(PecTheme::DangerRed, "%s", T(S_ERR_HOST_REQ));
+        }
 
         ImGui::Text("%s", T(S_L_PORT));
-        ImGui::InputText("##pmPort", g_pmPort, sizeof(g_pmPort));
+        int portVal = atoi(g_pmPort);
+        bool portInvalid = (portVal < 1 || portVal > 65535);
+        if (portInvalid) ImGui::PushStyleColor(ImGuiCol_Border, PecTheme::DangerRed);
+        ImGui::InputText("##pmPort", g_pmPort, sizeof(g_pmPort), ImGuiInputTextFlags_CharsDecimal);
+        if (portInvalid) {
+            ImGui::PopStyleColor();
+            ImGui::TextColored(PecTheme::DangerRed, "%s", T(S_ERR_PORT_RANGE));
+        }
+
+        bool formValid = (!hostEmpty && !portInvalid);
 
         ImGui::Spacing();
         ImGui::Text("%s", T(S_L_USER));
@@ -1950,7 +2148,15 @@ static void RenderProxiesTab()
         snprintf(saveBtn, sizeof(saveBtn), "%s##saveproxy", T(S_BTN_SAVE));
         snprintf(cancelBtn, sizeof(cancelBtn), "%s##cancelproxy", T(S_BTN_CANCEL));
 
-        if (ImGui::Button(saveBtn, ImVec2(120, 0))) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::BeginDisabled(!formValid);
+        bool triggerSaveProxy = ImGui::Button(saveBtn, ImVec2(120, 0)) || (formValid && ImGui::IsKeyPressed(ImGuiKey_Enter));
+        ImGui::EndDisabled();
+
+        if (triggerSaveProxy && formValid) {
             PBConfig* target = nullptr;
             if (g_isEditProxy && g_editProxyIdx >= 0 && g_editProxyIdx < g_profile.cfgCount) {
                 target = &g_profile.cfg[g_editProxyIdx];
@@ -1986,31 +2192,111 @@ static void RenderProxiesTab()
 }
 
 // -----------------------------------------------------------------------------
+
+static void RenderSettingsTab()
+{
+    ImGui::Spacing();
+    ImGui::TextColored(PecTheme::PrimaryAccent, "%s", T(S_SET_TITLE));
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Autostart with Windows
+    bool autostart = GetAutostartWithWindows();
+    if (ImGui::Checkbox(T(S_SET_AUTOSTART), &autostart)) {
+        SetAutostartWithWindows(autostart);
+    }
+
+    // Close to Tray
+    if (ImGui::Checkbox(T(S_SET_CLOSE_TRAY), &g_closeToTray)) {
+        ProfileLock lock;
+        g_profile.closeToTray = g_closeToTray ? 1 : 0;
+        SaveProfile();
+    }
+
+    // Traffic Logging
+    if (ImGui::Checkbox(T(S_SET_TRAFFIC_LOG), &g_connLogging)) {
+        ProfileLock lock;
+        g_profile.trafficLogging = g_connLogging ? 1 : 0;
+        if (g_api.SetTrafficLogging) g_api.SetTrafficLogging(g_connLogging ? TRUE : FALSE);
+        SaveProfile();
+    }
+
+    // Log every repeat connection
+    bool logEvery = (g_profile.logEveryConnection != 0);
+    if (ImGui::Checkbox(T(S_SET_LOG_EVERY), &logEvery)) {
+        ProfileLock lock;
+        g_profile.logEveryConnection = logEvery ? 1 : 0;
+        SaveProfile();
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Server Sync Configuration
+    ImGui::TextColored(PecTheme::TextPrimary, "%s", T(S_STATUS_SYNC_OK));
+    char srvUrlBuf[512] = "";
+    char fltTokBuf[256] = "";
+    WideCharToMultiByte(CP_UTF8, 0, g_profile.pecSync.serverUrl, -1, srvUrlBuf, sizeof(srvUrlBuf), nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, g_profile.pecSync.fleetToken, -1, fltTokBuf, sizeof(fltTokBuf), nullptr, nullptr);
+
+    ImGui::Text("Server URL:");
+    if (ImGui::InputText("##settingsServerUrl", srvUrlBuf, sizeof(srvUrlBuf))) {
+        ProfileLock lock;
+        CopyUtf8ToW(srvUrlBuf, g_profile.pecSync.serverUrl, 512);
+        g_profile.pecSync.enabled = (srvUrlBuf[0] != 0);
+        SaveProfile();
+    }
+
+    ImGui::Text("Fleet Token:");
+    if (ImGui::InputText("##settingsFleetToken", fltTokBuf, sizeof(fltTokBuf), ImGuiInputTextFlags_Password)) {
+        ProfileLock lock;
+        CopyUtf8ToW(fltTokBuf, g_profile.pecSync.fleetToken, 256);
+        SaveProfile();
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button(T(S_BTN_SYNC_SERVER), ImVec2(240, 0))) {
+        PecSyncTriggerNow();
+    }
+}
+
 // Main Tabs Dispatcher
 // -----------------------------------------------------------------------------
 static void RenderTabs()
 {
     if (ImGui::BeginTabBar("PECTabBar", ImGuiTabBarFlags_None)) {
-        char tabServers[128], tabRules[128], tabConn[128], tabLogs[128];
-        snprintf(tabServers, sizeof(tabServers), "🛡 %s###tab_servers", T(S_TAB_SERVERS));
-        snprintf(tabRules,   sizeof(tabRules),   "🔀 %s###tab_rules",   T(S_TAB_RULES));
-        snprintf(tabConn,    sizeof(tabConn),    "📡 %s###tab_conn",    T(S_TAB_CONN));
-        snprintf(tabLogs,    sizeof(tabLogs),    "📋 %s###tab_logs",    T(S_TAB_ACT));
+        char tabServers[128], tabRules[128], tabConn[128], tabLogs[128], tabSettings[128];
+        snprintf(tabServers, sizeof(tabServers), "%s###tab_servers", T(S_TAB_SERVERS));
+        snprintf(tabRules,   sizeof(tabRules),   "%s###tab_rules",   T(S_TAB_RULES));
+        snprintf(tabConn,    sizeof(tabConn),    "%s###tab_conn",    T(S_TAB_CONN));
+        snprintf(tabLogs,    sizeof(tabLogs),    "%s###tab_logs",    T(S_TAB_ACT));
+        snprintf(tabSettings,sizeof(tabSettings),"%s###tab_settings",T(S_TAB_SETTINGS));
 
-        if (ImGui::BeginTabItem(tabServers)) {
+        ImGuiTabItemFlags tabFlags[5] = {};
+        if (g_activeTab >= 0 && g_activeTab < 5) {
+            tabFlags[g_activeTab] = ImGuiTabItemFlags_SetSelected;
+            g_activeTab = -1;
+        }
+
+        if (ImGui::BeginTabItem(tabServers, nullptr, tabFlags[0])) {
             RenderProxiesTab();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(tabRules)) {
+        if (ImGui::BeginTabItem(tabRules, nullptr, tabFlags[1])) {
             RenderRulesTab();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(tabConn)) {
+        if (ImGui::BeginTabItem(tabConn, nullptr, tabFlags[2])) {
             RenderConnectionsTab();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(tabLogs)) {
+        if (ImGui::BeginTabItem(tabLogs, nullptr, tabFlags[3])) {
             RenderEngineLogsTab();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem(tabSettings, nullptr, tabFlags[4])) {
+            RenderSettingsTab();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -2032,6 +2318,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO* mmi = (MINMAXINFO*)lParam;
+        float scale = g_dpiScale > 0.1f ? g_dpiScale : 1.0f;
+        mmi->ptMinTrackSize.x = (LONG)(720 * scale);
+        mmi->ptMinTrackSize.y = (LONG)(480 * scale);
+        return 0;
+    }
+
     case WM_DPICHANGED: {
         RECT* const prcNewWindow = (RECT*)lParam;
         SetWindowPos(hWnd, nullptr,
@@ -2039,6 +2333,15 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             prcNewWindow->right - prcNewWindow->left,
             prcNewWindow->bottom - prcNewWindow->top,
             SWP_NOZORDER | SWP_NOACTIVATE);
+        float newDpi = (float)LOWORD(wParam);
+        float newScale = newDpi / 96.0f;
+        if (newScale <= 0.1f) newScale = 1.0f;
+        if (fabs(newScale - g_dpiScale) > 0.01f) {
+            float relativeScale = newScale / g_dpiScale;
+            ImGui::GetStyle().ScaleAllSizes(relativeScale);
+            ImGui::GetIO().FontGlobalScale = newScale / g_baseDpiScale;
+            g_dpiScale = newScale;
+        }
         return 0;
     }
 
@@ -2052,18 +2355,52 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOMMAND:
         if ((wParam & 0xFFF0) == SC_CLOSE && !g_reallyExit) {
-            ShowWindow(hWnd, SW_HIDE);
-            return 0;
+            if (g_closeToTray) {
+                ShowWindow(hWnd, SW_HIDE);
+                return 0;
+            } else {
+                g_reallyExit = true;
+                SaveWindowGeometry(hWnd);
+                DestroyWindow(hWnd);
+                return 0;
+            }
         }
         break;
 
     case WM_CLOSE:
         if (!g_reallyExit) {
-            ShowWindow(hWnd, SW_HIDE);
-            return 0;
+            if (g_closeToTray) {
+                ShowWindow(hWnd, SW_HIDE);
+                return 0;
+            } else {
+                g_reallyExit = true;
+                SaveWindowGeometry(hWnd);
+                DestroyWindow(hWnd);
+                return 0;
+            }
         }
+        SaveWindowGeometry(hWnd);
         DestroyWindow(hWnd);
         return 0;
+
+    case WM_APP_UPDATE: {
+        UpdInfo* info = (UpdInfo*)lParam;
+        BOOL ok = (wParam & 1) != 0;
+        if (info) {
+            if (ok && info->available) {
+                wchar_t bmsg[512];
+                _snwprintf_s(bmsg, 512, _TRUNCATE, L"Доступна новая версия PEC-App v%ls.\nСкачать сейчас?", info->latest);
+                TrayShowBalloon(APP_TITLE_W, bmsg);
+                if (MessageBoxW(hWnd, bmsg, L"Обновление PEC-App", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                    if (info->download[0]) {
+                        ShellExecuteW(nullptr, L"open", info->download, nullptr, nullptr, SW_SHOWNORMAL);
+                    }
+                }
+            }
+            free(info);
+        }
+        return 0;
+    }
 
     case WM_APP_TRAY:
         if (lParam == WM_LBUTTONUP || lParam == WM_LBUTTONDBLCLK) {
@@ -2237,17 +2574,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     (void)hPrevInstance;
     (void)lpCmdLine;
 
-    // Single instance mutex check
-    HANDLE hMutex = CreateMutexW(nullptr, FALSE, L"Local\\PECApp_SingleInstance_Mutex_ImGui");
+    // Single instance named mutex check (WIN-20)
+    HANDLE hMutex = CreateMutexW(nullptr, FALSE, L"Local\\PECApp_SingleInstance_Mutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND existing = FindWindowW(L"PECAppImGuiMainWnd", nullptr);
+        if (!existing) {
+            existing = FindWindowW(L"PECAppNativeMainWnd", nullptr);
+        }
         if (existing) {
             ShowWindow(existing, SW_RESTORE);
             SetForegroundWindow(existing);
-            if (hMutex) CloseHandle(hMutex);
-            return 0;
         }
-        // If no GUI window exists, proceed to initialize so the app is always accessible
+        if (hMutex) CloseHandle(hMutex);
+        return 0;
     }
 
     // Check for --minimized or -autostart switch in command line
@@ -2386,38 +2725,37 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
             }
         }
 
-        // 4. Primary Bootstrap Data baked into binary at compile time (like in Chrome extension)
+        // 4. Primary Bootstrap Data (clean first run without dummy example.com errors, WIN-09)
 #if defined(PEC_DEFAULT_SERVER_URL_W)
-        isLocalOrEmpty = (g_profile.pecSync.serverUrl[0] == 0 ||
-                          wcscmp(g_profile.pecSync.serverUrl, L"http://127.0.0.1:3000") == 0);
+        isLocalOrEmpty = (g_profile.pecSync.serverUrl[0] == 0);
         if (isLocalOrEmpty && PEC_DEFAULT_SERVER_URL_W[0] != 0 &&
+            wcsstr(PEC_DEFAULT_SERVER_URL_W, L"example.com") == nullptr &&
             wcscmp(PEC_DEFAULT_SERVER_URL_W, L"http://127.0.0.1:3000") != 0) {
             lstrcpynW(g_profile.pecSync.serverUrl, PEC_DEFAULT_SERVER_URL_W, 512);
 #if defined(PEC_DEFAULT_FLEET_TOKEN_W)
-            lstrcpynW(g_profile.pecSync.fleetToken, PEC_DEFAULT_FLEET_TOKEN_W, 256);
+            if (wcsstr(PEC_DEFAULT_FLEET_TOKEN_W, L"test-admin-token") == nullptr) {
+                lstrcpynW(g_profile.pecSync.fleetToken, PEC_DEFAULT_FLEET_TOKEN_W, 256);
+            }
 #endif
             g_profile.pecSync.intervalMinutes = 15;
             g_profile.pecSync.enabled = 1;
             PB_ProfileSave(g_activeProfile, &g_profile);
         }
 #endif
-
-        if (g_profile.pecSync.serverUrl[0] == 0) {
-            lstrcpynW(g_profile.pecSync.serverUrl, L"http://127.0.0.1:3000", 512);
-            lstrcpynW(g_profile.pecSync.fleetToken, L"corp-proxy-secret-token-change-me", 256);
-            g_profile.pecSync.intervalMinutes = 15;
-            g_profile.pecSync.enabled = 1;
-            PB_ProfileSave(g_activeProfile, &g_profile);
-        }
 
         g_connLogging = g_profile.trafficLogging != 0;
         g_closeToTray = g_profile.closeToTray != 0;
 
-        // Initialize UI language from profile or system default
+        // Initialize UI language with strict profile priority (WIN-05)
         LANGID lid = PRIMARYLANGID(GetUserDefaultUILanguage());
-        if (_wcsicmp(g_profile.language, L"zh") == 0 || (g_profile.language[0] == 0 && lid == LANG_CHINESE)) g_lang = 2;
-        else if (_wcsicmp(g_profile.language, L"en") == 0 && lid != LANG_RUSSIAN) g_lang = 1;
-        else g_lang = 0; // Default Russian for PEC
+        if (_wcsicmp(g_profile.language, L"zh") == 0) g_lang = 2;
+        else if (_wcsicmp(g_profile.language, L"en") == 0) g_lang = 1;
+        else if (_wcsicmp(g_profile.language, L"ru") == 0) g_lang = 0;
+        else {
+            if (lid == LANG_CHINESE) g_lang = 2;
+            else if (lid == LANG_RUSSIAN || lid == LANG_BELARUSIAN || lid == LANG_UKRAINIAN) g_lang = 0;
+            else g_lang = 1;
+        }
         InitLocU8();
     }
 
@@ -2471,18 +2809,20 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     wc.lpszClassName = L"PECAppImGuiMainWnd";
     RegisterClassExW(&wc);
 
-    // Initial window dimensions (980x640 scaled to work area)
+    // Initial window dimensions (restored from profile/registry or 1040x680 default, WIN-11)
     int winW = 1040;
     int winH = 680;
-    RECT wa;
-    if (SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0)) {
-        int maxW = (wa.right - wa.left) * 9 / 10;
-        int maxH = (wa.bottom - wa.top) * 9 / 10;
-        if (winW > maxW) winW = maxW;
-        if (winH > maxH) winH = maxH;
-    }
     int posX = (GetSystemMetrics(SM_CXSCREEN) - winW) / 2;
     int posY = (GetSystemMetrics(SM_CYSCREEN) - winH) / 2;
+    if (!LoadWindowGeometry(posX, posY, winW, winH)) {
+        RECT wa;
+        if (SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0)) {
+            int maxW = (wa.right - wa.left) * 9 / 10;
+            int maxH = (wa.bottom - wa.top) * 9 / 10;
+            if (winW > maxW) winW = maxW;
+            if (winH > maxH) winH = maxH;
+        }
+    }
 
     g_hWnd = CreateWindowExW(
         0,
@@ -2553,6 +2893,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     }
     if (dpiScale <= 0.1f) dpiScale = 1.0f;
 
+    g_dpiScale = dpiScale;
+    g_baseDpiScale = dpiScale;
     ImGuiStyle& style = ImGui::GetStyle();
     style.ScaleAllSizes(dpiScale);
     float baseFontSize = 16.0f * dpiScale;

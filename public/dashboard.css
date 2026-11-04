@@ -84,10 +84,10 @@
       --bg: #edf0f5;
       --card-bg: #ffffff;
       --card-inner: #f1f5f9;
-      --border: #cbd5e1;
+      --border: #94a3b8;
       --text: #0f172a;
-      --text-muted: #475569;
-      --bg-card-subtle: rgba(0, 0, 0, 0.04);
+      --text-muted: #334155;
+      --bg-card-subtle: rgba(0, 0, 0, 0.05);
       --success: #059669;
       --warning: #d97706;
       --danger: #dc2626;
@@ -130,9 +130,9 @@
       --bg: #f8fafc;
       --card-bg: #ffffff;
       --card-inner: #f1f5f9;
-      --border: #cbd5e1;
+      --border: #94a3b8;
       --text: #0f172a;
-      --text-muted: #475569;
+      --text-muted: #334155;
       --primary: #2563eb;
       --primary-hover: #1d4ed8;
       --primary-rgb: 37, 99, 235;
@@ -1381,7 +1381,12 @@
     }
 
     /* Tables */
-    .table-container { overflow-x: auto; }
+    .table-container {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); }
     th { color: var(--text-muted); font-weight: 600; font-size: 12px; }
@@ -2042,6 +2047,18 @@
     @media (max-width: 1024px) {
       .app-studio-grid {
         grid-template-columns: 1fr;
+      }
+      .table-container table {
+        min-width: 640px;
+      }
+      #instancesTable {
+        min-width: 960px;
+      }
+      #desktopInstancesTable {
+        min-width: 860px;
+      }
+      #proxiesTable {
+        min-width: 720px;
       }
     }
 

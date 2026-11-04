@@ -1,7 +1,21 @@
+    // Immediate theme boot to prevent FOUC (Flash of Unstyled/Incorrect Content)
+    try {
+      const _bootLayout = localStorage.getItem('pec_server_layout') || 'console';
+      if (_bootLayout && document.body) document.body.setAttribute('data-layout', _bootLayout);
+      const _bootTheme = localStorage.getItem('pec_server_theme') || 'cyber';
+      if (_bootTheme && document.body) document.body.setAttribute('data-theme', _bootTheme);
+      const _bootMode = localStorage.getItem('pec_server_theme_mode') || 'dark';
+      if (_bootMode && document.body) document.body.setAttribute('data-theme-mode', _bootMode);
+      const _bootLang = localStorage.getItem('pec_lang') || 'ru';
+      if (_bootLang && document.documentElement) document.documentElement.lang = _bootLang;
+    } catch (_) {}
+
     window.addEventListener('unhandledrejection', function(event) {
       if (event.reason && (event.reason.name === 'TypeError' || String(event.reason).includes('fetch') || String(event.reason).includes('Failed to fetch'))) {
         console.warn('Network request error safely handled:', event.reason);
         event.preventDefault();
+      } else {
+        console.warn('Unhandled promise rejection:', event.reason);
       }
     });
 
@@ -12,6 +26,14 @@
     let extensionFiles = {};
     let currentLang = 'ru';
     let currentProxiesList = [];
+    let isDashboardAuthenticated = false;
+
+    // Monotonic sequence guards to prevent out-of-order async API race conditions (WEB-02)
+    let loadInstancesSeq = 0;
+    let loadDesktopInstancesSeq = 0;
+    let fetchStatusSeq = 0;
+    let loadReleasesSeq = 0;
+    let lastInstancesSuccessTime = 0;
 
     // ----------------- Admin Authentication & Onboarding -----------------
     // Server-side sessions: the browser never holds the admin token. The
@@ -41,6 +63,21 @@
         window.__pecTimers = null;
       }
     }
+
+    // WEB-10: Pause polling timers when tab is hidden, resume with single refresh on return
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        stopDashboardTimers();
+      } else {
+        const screen = document.getElementById('authScreen');
+        const isAuthVisible = screen && screen.style.display !== 'none';
+        if (!isAuthVisible && isDashboardAuthenticated) {
+          startDashboardTimers();
+          loadInstances();
+          fetchStatus();
+        }
+      }
+    });
 
     function showAuthStep(step) {
       const screen = document.getElementById('authScreen');
@@ -120,12 +157,13 @@
       const res = await fetch(url, opts);
       if (res.status === 401) {
         stopDashboardTimers();
+        isDashboardAuthenticated = false;
         const screen = document.getElementById('authScreen');
         const isAuthVisible = screen && screen.style.display !== 'none';
         if (!isAuthVisible) {
-          loginPendingRetry = { url: url, opts: opts };
           showAuthStep('login');
         }
+        loginPendingRetry = { url: url, opts: opts };
       }
       return res;
     }
@@ -320,6 +358,9 @@
       }
     }
     function bootDashboard() {
+      if (typeof initTabsAccessibility === 'function') initTabsAccessibility();
+      if (typeof initModalBackdropHandlers === 'function') initModalBackdropHandlers();
+      if (typeof initHashRouting === 'function') initHashRouting();
       refreshAll();
       startDashboardTimers();
     }
@@ -341,6 +382,18 @@
       return dict[key] || fallback || key;
     }
 
+    function extractError(res, data, defaultMsg) {
+      if (data) {
+        if (typeof data.error === 'string' && data.error) return data.error;
+        if (typeof data.message === 'string' && data.message) return data.message;
+        if (typeof data.detail === 'string' && data.detail) return data.detail;
+      }
+      if (res && res.status) {
+        return (defaultMsg || 'HTTP Error') + ' (' + res.status + ')';
+      }
+      return defaultMsg || 'Request failed';
+    }
+
     // ----------------- Toast notifications -----------------
     // Non-blocking feedback replacing window.alert() (which froze the whole
     // tab and made bulk operations painful).
@@ -349,10 +402,18 @@
       if (!host) {
         host = document.createElement('div');
         host.id = 'toastHost';
+        host.setAttribute('role', 'status');
+        host.setAttribute('aria-live', 'polite');
+        host.setAttribute('aria-atomic', 'false');
         host.style.cssText = 'position: fixed; bottom: 18px; right: 18px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 380px;';
         document.body.appendChild(host);
       }
+      // WEB-09: stack limit 5
+      while (host.children.length >= 5) {
+        host.firstElementChild.remove();
+      }
       const el = document.createElement('div');
+      el.setAttribute('role', type === 'error' ? 'alert' : 'status');
       const colors = type === 'error'
         ? 'background: #7f1d1d; border: 1px solid #ef4444;'
         : type === 'success'
@@ -439,6 +500,13 @@
     }
 
     function showPecDialog(mode, message, defaultValue, options) {
+      if (typeof message === 'object' && message !== null) {
+        options = message;
+        message = options.message;
+        if (options.defaultValue !== undefined && defaultValue === null) {
+          defaultValue = options.defaultValue;
+        }
+      }
       options = options || {};
       const isRu = (typeof currentLang !== 'undefined' ? currentLang : 'ru') === 'ru';
       const dlg = getOrCreatePecDialog();
@@ -595,10 +663,19 @@
     }
 
     function pecConfirm(message, options) {
+      if (typeof message === 'object' && message !== null) {
+        options = message;
+        message = options.message;
+      }
       return showPecDialog('confirm', message, null, options);
     }
 
     function pecPrompt(message, defaultValue, options) {
+      if (typeof message === 'object' && message !== null) {
+        options = message;
+        defaultValue = options.defaultValue !== undefined ? options.defaultValue : defaultValue;
+        message = options.message;
+      }
       return showPecDialog('prompt', message, defaultValue, options);
     }
 
@@ -930,6 +1007,14 @@
         if (typeof setAppThemeMode === 'function') {
           setAppThemeMode(currentMode);
         }
+
+        // Persist synchronized theme immediately to server configurations
+        if (typeof saveAppStudioConfig === 'function') {
+          try { saveAppStudioConfig(true); } catch (_) {}
+        }
+        if (typeof saveBuilderConfigOnly === 'function') {
+          try { saveBuilderConfigOnly(false); } catch (_) {}
+        }
       } else {
         if (builderThemeCard) builderThemeCard.classList.remove('locked-by-sync');
         if (builderLockedNotice) builderLockedNotice.style.display = 'none';
@@ -978,6 +1063,66 @@
     function openCustomizationModal() { toggleCustomizationPopover(); }
     function closeCustomizationModal() { closeCustomizationPopover(); }
 
+    let lastActiveElementBeforeModal = null;
+    function rememberModalTrigger(el) {
+      lastActiveElementBeforeModal = el || document.activeElement;
+    }
+
+    function closeAnyOpenModal() {
+      let closed = false;
+      const modals = [
+        { id: 'credsModal', close: function() { closeCredsModal(); } },
+        { id: 'modalAdd3xui', close: function() { closeAdd3xuiModal(); } },
+        { id: 'modal3xuiPanel', close: function() { close3xuiPanelModal(); } },
+        { id: 'modalProxyForm', close: function() { closeProxyFormModal(); } },
+        { id: 'modalEditRule', close: function() { closeEditRuleModal(); } },
+        { id: 'modalGeobaseInspector', close: function() { closeGeobaseInspector(); } },
+        { id: 'modalImportPresets', close: function() { closeImportPresetsModal(); } },
+        { id: 'modalCompilerWarning', close: function() { closeCompilerWarningModal(); } },
+        { id: 'modalBuildLog', close: function() { closeBuildLogModal(); } }
+      ];
+      for (const m of modals) {
+        const el = document.getElementById(m.id);
+        if (el && el.style.display && el.style.display !== 'none') {
+          try { m.close(); closed = true; } catch (_) {}
+        }
+      }
+      const popover = document.getElementById('popoverCustomization');
+      if (popover && popover.style.display !== 'none') {
+        closeCustomizationPopover();
+        closed = true;
+      }
+      const vPopover = document.getElementById('popoverVersionRelease');
+      if (vPopover && vPopover.style.display !== 'none') {
+        closeVersionPopover();
+        closed = true;
+      }
+      if (closed && lastActiveElementBeforeModal && typeof lastActiveElementBeforeModal.focus === 'function') {
+        try { lastActiveElementBeforeModal.focus(); } catch (_) {}
+        lastActiveElementBeforeModal = null;
+      }
+      return closed;
+    }
+
+    function initModalBackdropHandlers() {
+      const modalIds = [
+        'credsModal', 'modalAdd3xui', 'modal3xuiPanel', 'modalProxyForm',
+        'modalEditRule', 'modalGeobaseInspector', 'modalImportPresets',
+        'modalCompilerWarning', 'modalBuildLog'
+      ];
+      modalIds.forEach(id => {
+        const m = document.getElementById(id);
+        if (m && !m._backdropBound) {
+          m._backdropBound = true;
+          m.addEventListener('click', function(e) {
+            if (e.target === m) {
+              closeAnyOpenModal();
+            }
+          });
+        }
+      });
+    }
+
     document.addEventListener('click', function(e) {
       const popover = document.getElementById('popoverCustomization');
       const btn = document.getElementById('btnCustomization');
@@ -997,8 +1142,7 @@
 
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        closeCustomizationPopover();
-        closeVersionPopover();
+        closeAnyOpenModal();
       }
     });
 
@@ -1918,6 +2062,9 @@
 
     function setLanguage(lang) {
       currentLang = (lang === 'en' || lang === 'ru') ? lang : 'ru';
+      if (document.documentElement) {
+        document.documentElement.lang = currentLang;
+      }
       try { localStorage.setItem('pec_lang', currentLang); } catch(e){}
       
       const btnEn = document.getElementById('btnLangEn');
@@ -2009,8 +2156,107 @@
       if (typeof renderProxiesTable === 'function' && currentProxiesList) renderProxiesTable(currentProxiesList);
     }
 
+    const TAB_HASH_MAP = {
+      'routing': '#routing',
+      'proxy-settings': '#proxy-settings',
+      'rotation': '#proxy-settings',
+      'builder': '#extension-builder',
+      'extension-builder': '#extension-builder',
+      'app-studio': '#app-studio',
+      'fleet': '#fleet',
+      'instances': '#fleet',
+      'gpo': '#gpo',
+      'releases': '#releases',
+      'logs': '#logs',
+      'audit': '#logs'
+    };
+
+    function getTabNameFromHash(hash) {
+      if (!hash) return null;
+      const clean = hash.replace(/^[#/]+/, '').toLowerCase();
+      if (clean === 'routing/app' || clean === 'routing-app') return { tab: 'routing', branch: 'app' };
+      if (clean === 'routing/ext' || clean === 'routing-ext') return { tab: 'routing', branch: 'ext' };
+      const map = {
+        'routing': 'routing',
+        'proxy-settings': 'proxy-settings',
+        'proxies': 'proxy-settings',
+        'rotation': 'proxy-settings',
+        'extension-builder': 'builder',
+        'builder': 'builder',
+        'app-studio': 'app-studio',
+        'fleet': 'instances',
+        'instances': 'instances',
+        'gpo': 'gpo',
+        'releases': 'releases',
+        'logs': 'logs',
+        'audit': 'logs'
+      };
+      const t = map[clean];
+      return t ? { tab: t } : null;
+    }
+
+    function initHashRouting() {
+      if (typeof window === 'undefined' || !window.location) return;
+      const parsed = getTabNameFromHash(window.location.hash);
+      if (parsed) {
+        switchTab(parsed.tab, true);
+        if (parsed.branch && typeof switchRoutingBranch === 'function') {
+          switchRoutingBranch(parsed.branch);
+        }
+      }
+      if (!window._pecHashListenerBound) {
+        window._pecHashListenerBound = true;
+        window.addEventListener('hashchange', function() {
+          const m = getTabNameFromHash(window.location.hash);
+          if (m) {
+            switchTab(m.tab, true);
+            if (m.branch && typeof switchRoutingBranch === 'function') {
+              switchRoutingBranch(m.branch);
+            }
+          }
+        });
+      }
+    }
+
+    function initTabsAccessibility() {
+      const nav = document.querySelector('.tabs-nav');
+      if (!nav || nav._a11yBound) return;
+      nav._a11yBound = true;
+      nav.addEventListener('keydown', function(e) {
+        const tabs = Array.from(nav.querySelectorAll('.tab-btn'));
+        const activeIdx = tabs.indexOf(document.activeElement);
+        if (activeIdx === -1) return;
+
+        let nextIdx = -1;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          nextIdx = (activeIdx + 1) % tabs.length;
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          nextIdx = (activeIdx - 1 + tabs.length) % tabs.length;
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          nextIdx = 0;
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          nextIdx = tabs.length - 1;
+        }
+
+        if (nextIdx !== -1) {
+          const nextTab = tabs[nextIdx];
+          nextTab.focus();
+          nextTab.click();
+        }
+      });
+    }
+
     function switchTab(name) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      const skipHashUpdate = Boolean(arguments[1]);
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+        b.tabIndex = -1;
+      });
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
 
       let targetId = 'tab-' + name;
@@ -2024,24 +2270,51 @@
       if (pane) pane.classList.add('active');
 
       const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
+        const dt = b.getAttribute('data-tab') || '';
         const oc = b.getAttribute('onclick') || '';
         const id = b.id || '';
-        return oc.includes(name) ||
-          ((name === 'rotation' || name === 'proxy-settings') && (oc.includes('rotation') || oc.includes('proxy-settings'))) ||
-          ((name === 'fleet' || name === 'instances') && (oc.includes('fleet') || oc.includes('instances') || id === 'tabBtnInstances' || id === 'tab-instances' || id === 'tabBtnFleet'));
+        return dt === name || oc.includes(name) ||
+          ((name === 'rotation' || name === 'proxy-settings') && (dt === 'proxy-settings' || oc.includes('rotation') || oc.includes('proxy-settings'))) ||
+          ((name === 'fleet' || name === 'instances') && (dt === 'instances' || oc.includes('fleet') || oc.includes('instances') || id === 'tabBtnInstances' || id === 'tab-instances' || id === 'tabBtnFleet'));
       });
-      if (btn) btn.classList.add('active');
+      if (btn) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        btn.tabIndex = 0;
+      }
+
+      // Sync active tab with location.hash for deep linking and back/forward navigation (WEB-01)
+      if (!skipHashUpdate && TAB_HASH_MAP[name] && typeof window !== 'undefined' && window.location) {
+        const targetHash = TAB_HASH_MAP[name];
+        if (window.location.hash !== targetHash) {
+          try {
+            if (window.history && window.history.pushState) {
+              window.history.pushState(null, '', targetHash);
+            } else {
+              window.location.hash = targetHash;
+            }
+          } catch (_) {
+            try { window.location.hash = targetHash; } catch (__) {}
+          }
+        }
+      }
 
       if (name === 'instances' || name === 'fleet') {
         loadInstances();
       } else if (name === 'proxy-settings' || name === 'rotation') {
         fetchProxies();
+        if (typeof load3xuiPanels === 'function') load3xuiPanels();
       } else if (name === 'app-studio') {
-        if (!currentAppConfig || !isAppStudioDirty) {
-          loadAppStudioConfig();
-        }
+        if (!currentAppConfig || !isAppStudioDirty) loadAppStudioConfig();
       } else if (name === 'releases') {
         loadReleases();
+      } else if (name === 'logs' || name === 'audit') {
+        fetchStatus();
+      } else if (name === 'builder') {
+        loadBuilderConfig();
+        fetchExtensionInfo();
+      } else if (name === 'routing') {
+        if (!currentProfile) loadProfiles();
       }
     }
 
@@ -2130,26 +2403,51 @@
     async function loadProfiles() {
       try {
         const res = await adminFetch('/api/routing/profiles');
+        if (!res.ok) return;
         allProfiles = await res.json();
         const sel = document.getElementById('profileSelect');
-        
-        sel.innerHTML = allProfiles.map(p => 
-          `<option value="${esc(p.id)}">${esc(p.name)} (${esc(p.defaultPolicy.toUpperCase())} default)${p.isDefault ? ' [DEFAULT]' : ''}</option>`
-        ).join('');
+        if (sel) {
+          sel.innerHTML = allProfiles.map(p => 
+            `<option value="${esc(p.id)}">${esc(p.name)} (${esc(p.defaultPolicy.toUpperCase())} default)${p.isDefault ? ' [DEFAULT]' : ''}</option>`
+          ).join('');
+        }
 
         if (allProfiles.length > 0) {
           currentProfile = allProfiles[0];
           renderProfile(currentProfile);
-          document.getElementById('hdrActiveProfile').textContent = currentProfile.name;
+          const hdr = document.getElementById('hdrActiveProfile');
+          if (hdr) hdr.textContent = currentProfile.name;
         }
       } catch (e) {
         console.error(e);
       }
     }
 
-    function loadSelectedProfile() {
-      const id = document.getElementById('profileSelect').value;
-      const found = allProfiles.find(p => p.id === id);
+    async function loadSelectedProfile() {
+      const sel = document.getElementById('profileSelect');
+      if (!sel) return;
+      const prevId = currentProfile ? currentProfile.id : '';
+      const newId = sel.value;
+      if (prevId === newId) return;
+
+      if (hasUnsavedRouting) {
+        const isRu = currentLang === 'ru';
+        const ok = await pecConfirm({
+          title: isRu ? 'Несохраненные изменения' : 'Unsaved Changes',
+          message: isRu
+            ? 'У вас есть несохраненные изменения в текущем профиле. Сбросить их?'
+            : 'You have unsaved changes in the current profile. Discard them?',
+          isDanger: true,
+          confirmText: isRu ? 'Сбросить' : 'Discard'
+        });
+        if (!ok) {
+          sel.value = prevId;
+          return;
+        }
+        setUnsavedRouting(false);
+      }
+
+      const found = allProfiles.find(p => p.id === newId);
       if (found) {
         currentProfile = found;
         renderProfile(currentProfile);
@@ -2324,6 +2622,38 @@
       if (modal) modal.style.display = 'none';
     }
 
+    function validatePatternToken(token) {
+      if (!token) return { valid: false, error: 'Пустой элемент шаблона' };
+      if (token.includes('/')) {
+        const parts = token.split('/');
+        if (parts.length !== 2) return { valid: false, error: 'Неверный формат CIDR: ' + token };
+        const ip = parts[0];
+        const maskStr = parts[1];
+        const mask = parseInt(maskStr, 10);
+        if (isNaN(mask) || String(mask) !== maskStr) return { valid: false, error: 'Неверная маска CIDR: /' + maskStr };
+        const octets = ip.split('.');
+        if (octets.length === 4) {
+          if (mask < 0 || mask > 32) return { valid: false, error: 'Маска IPv4 CIDR должна быть от 0 до 32' };
+          for (const oct of octets) {
+            if (!/^\d{1,3}$/.test(oct)) return { valid: false, error: 'Неверный октет IPv4: ' + oct };
+            const n = Number(oct);
+            if (n < 0 || n > 255) return { valid: false, error: 'Октет IPv4 должен быть от 0 до 255: ' + oct };
+          }
+          return { valid: true };
+        }
+        if (ip.includes(':')) {
+          if (mask < 0 || mask > 128) return { valid: false, error: 'Маска IPv6 CIDR должна быть от 0 до 128' };
+          if (!/^[0-9a-fA-F:]+$/.test(ip)) return { valid: false, error: 'Неверный адрес IPv6: ' + ip };
+          return { valid: true };
+        }
+        return { valid: false, error: 'Неверный IP в CIDR: ' + token };
+      }
+      if (/[<>"'\\^`{}|\s]/.test(token)) {
+        return { valid: false, error: 'Недопустимые символы в маске домена: ' + token };
+      }
+      return { valid: true };
+    }
+
     function saveEditedRule() {
       if (!currentProfile || !Array.isArray(currentProfile.rules)) return;
       const idxEl = document.getElementById('editRuleIndex');
@@ -2357,6 +2687,18 @@
         }
         return;
       }
+
+      for (const tok of tokens) {
+        const valRes = validatePatternToken(tok);
+        if (!valRes.valid) {
+          if (errEl) {
+            errEl.textContent = (currentLang === 'ru' ? 'Ошибка валидации: ' : 'Validation error: ') + valRes.error;
+            errEl.style.display = 'block';
+          }
+          return;
+        }
+      }
+
       const normalizedPattern = tokens.join(', ');
 
       const rule = currentProfile.rules[idx];
@@ -2405,14 +2747,23 @@
       const action = document.getElementById('newRuleAction').value;
 
       if (!pattern) {
-        toast('Please specify a rule pattern', 'error');
+        toast(currentLang === 'ru' ? 'Укажите шаблон правила' : 'Please specify a rule pattern', 'error');
         return;
       }
       const tokens = pattern.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
       if (tokens.length === 0) {
-        toast('Please specify a rule pattern', 'error');
+        toast(currentLang === 'ru' ? 'Укажите шаблон правила' : 'Please specify a rule pattern', 'error');
         return;
       }
+
+      for (const tok of tokens) {
+        const valRes = validatePatternToken(tok);
+        if (!valRes.valid) {
+          toast((currentLang === 'ru' ? 'Ошибка шаблона: ' : 'Pattern error: ') + valRes.error, 'error');
+          return;
+        }
+      }
+
       const normalizedPattern = tokens.join(', ');
 
       currentProfile.rules.push({
@@ -2432,6 +2783,15 @@
 
     async function saveCurrentProfile() {
       if (!currentProfile) return;
+      const btn = document.querySelector('button[onclick="saveCurrentProfile()"]');
+      let origHtml = '';
+      if (btn) {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        origHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="loading-spinner"></span> ' + (btn.textContent || '').trim();
+      }
+
       currentProfile.name = document.getElementById('profName').value.trim();
       currentProfile.defaultPolicy = document.getElementById('profDefaultPolicy').value;
       currentProfile.targetScope = document.getElementById('profTargetScope').value;
@@ -2456,11 +2816,17 @@
           setUnsavedRouting(false);
           loadProfiles();
         } else {
+          if (res.status === 401) return;
           const data = await res.json().catch(() => ({}));
-          toast('Failed to save profile: ' + (data.error || ('HTTP ' + res.status)), 'error');
+          toast(extractError(res, data, currentLang === 'ru' ? 'Ошибка сохранения профиля' : 'Failed to save profile'), 'error');
         }
       } catch (e) {
         toast('Error saving profile: ' + e, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          if (origHtml) btn.innerHTML = origHtml;
+        }
       }
     }
 
@@ -3050,6 +3416,7 @@
     async function loadBuilderConfig() {
       try {
         const res = await adminFetch('/api/builder/config');
+        if (!res.ok) return;
         const cfg = await res.json();
         
         document.getElementById('bldName').value = cfg.name || 'Corp Proxy Auth & Sync';
@@ -3748,6 +4115,7 @@
       const btn = document.getElementById('btnBuildExtension') || document.querySelector('.builder-actions-row button.btn-success');
       let origHtml = '';
       if (btn) {
+        if (btn.disabled) return false;
         origHtml = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="loading-spinner"></span> ' + (btn.textContent || '').trim();
@@ -3755,8 +4123,8 @@
       try {
         const savedOk = await saveBuilderConfigOnly(false);
         if (savedOk === false) {
-          toast('Build aborted: could not save the builder configuration.', 'error');
-          return;
+          toast(currentLang === 'ru' ? 'Сборка отменена: не удалось сохранить настройки.' : 'Build aborted: could not save the builder configuration.', 'error');
+          return false;
         }
         const res = await adminFetch('/api/builder/build', { method: 'POST' });
         const data = await res.json();
@@ -3767,15 +4135,24 @@
             const extLogBtn = document.getElementById('btnExtViewBuildLog');
             if (extLogBtn) extLogBtn.style.display = 'inline-block';
           }
-          toast('Extension package built successfully! .CRX signed, .ZIP created, and updates.xml regenerated.', 'success');
+          toast(currentLang === 'ru' ? 'Пакет расширения успешно собран! .CRX подписан, .ZIP создан, updates.xml обновлен.' : 'Extension package built successfully! .CRX signed, .ZIP created, and updates.xml regenerated.', 'success');
           fetchExtensionInfo();
           await loadExtensionFiles();
           loadReleases();
+          return true;
         } else {
-          toast('Build error: ' + (data.error || 'Failed'), 'error');
+          const extLogs = (data.result && data.result.buildLog) || data.buildLog;
+          if (Array.isArray(extLogs) && extLogs.length > 0) {
+            lastExtBuildLog = extLogs;
+            const extLogBtn = document.getElementById('btnExtViewBuildLog');
+            if (extLogBtn) extLogBtn.style.display = 'inline-block';
+          }
+          toast(currentLang === 'ru' ? 'Ошибка сборки расширения: ' + (data.error || 'Сбой') : 'Build error: ' + (data.error || 'Failed'), 'error');
+          return false;
         }
       } catch (e) {
-        toast('Error building extension: ' + e, 'error');
+        toast((currentLang === 'ru' ? 'Ошибка сборки расширения: ' : 'Error building extension: ') + e, 'error');
+        return false;
       } finally {
         if (btn) {
           btn.disabled = false;
@@ -3786,7 +4163,11 @@
 
     async function downloadExtensionPackage(type) {
       toast(currentLang === 'ru' ? 'Сборка пакета перед скачиванием...' : 'Building package before download...', 'info');
-      await buildAndPackExtension();
+      const ok = await buildAndPackExtension();
+      if (!ok) {
+        toast(currentLang === 'ru' ? 'Сборка завершилась ошибкой. Скачивание отменено.' : 'Build failed. Download cancelled.', 'error');
+        return;
+      }
       if (type === 'zip') {
         try {
           const res = await adminFetch('/api/extension/download-zip');
@@ -4484,7 +4865,13 @@
 
     async function saveAppStudioConfigAction(silent = false) {
       const btn = document.getElementById('btnAppSaveConfig');
-      if (btn) btn.disabled = true;
+      let origHtml = '';
+      if (btn) {
+        if (btn.disabled) return false;
+        btn.disabled = true;
+        origHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="loading-spinner"></span> ' + (btn.textContent || '').trim();
+      }
       const config = collectAppConfigFromForm();
 
       try {
@@ -4508,7 +4895,10 @@
         toast('Error saving app config: ' + e.message, 'error');
         return false;
       } finally {
-        if (btn) btn.disabled = false;
+        if (btn) {
+          btn.disabled = false;
+          if (origHtml) btn.innerHTML = origHtml;
+        }
       }
     }
 
@@ -5097,7 +5487,8 @@
         const res = await adminFetch('/api/app-builder/download/' + platform);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          toast((currentLang === 'ru' ? 'Ошибка скачивания: ' : 'Download error: ') + (err.error || ('HTTP ' + res.status)), 'error');
+          const errMsg = extractError(res, err, currentLang === 'ru' ? 'Пакет не найден или сборка завершилась ошибкой' : 'Package not found or build failed');
+          toast((currentLang === 'ru' ? 'Ошибка скачивания: ' : 'Download error: ') + errMsg, 'error');
           return;
         }
         const blob = await res.blob();
@@ -5131,7 +5522,8 @@
         const res = await adminFetch('/api/app-builder/scripts/' + (type || 'deploy'));
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          toast((currentLang === 'ru' ? 'Ошибка скачивания: ' : 'Download error: ') + (err.error || ('HTTP ' + res.status)), 'error');
+          const errMsg = extractError(res, err, currentLang === 'ru' ? 'Пакет не найден или сборка завершилась ошибкой' : 'Package not found or build failed');
+          toast((currentLang === 'ru' ? 'Ошибка скачивания: ' : 'Download error: ') + errMsg, 'error');
           return;
         }
         const blob = await res.blob();
@@ -5284,7 +5676,8 @@
         const res = await adminFetch('/api/app-builder/profile');
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          toast((currentLang === 'ru' ? 'Ошибка скачивания: ' : 'Download error: ') + (err.error || ('HTTP ' + res.status)), 'error');
+          const errMsg = extractError(res, err, currentLang === 'ru' ? 'Пакет не найден или сборка завершилась ошибкой' : 'Package not found or build failed');
+          toast((currentLang === 'ru' ? 'Ошибка скачивания: ' : 'Download error: ') + errMsg, 'error');
           return;
         }
         const blob = await res.blob();
@@ -5702,8 +6095,10 @@
     let fleetSortCol = 'lastSync';
     let fleetSortAsc = false;
     let fleetListenersInitialized = false;
+    let lastFleetFetchTime = 0;
 
     async function loadInstances() {
+      const seq = ++loadInstancesSeq;
       try {
         if (!currentProxiesList || !currentProxiesList.length) {
           try {
@@ -5712,7 +6107,19 @@
           } catch (_) {}
         }
         const res = await adminFetch('/api/instances');
+        if (seq < loadInstancesSeq) return;
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status);
+        }
         const data = await res.json();
+        if (seq < loadInstancesSeq) return;
+
+        lastFleetFetchTime = Date.now();
+        const staleBadge = document.getElementById('badgeFleetStale');
+        if (staleBadge) {
+          staleBadge.style.display = 'none';
+        }
+
         const isRu = currentLang === 'ru';
         const badge = document.getElementById('badgeFleetOnline');
         if (badge) {
@@ -5724,6 +6131,13 @@
         initFleetListeners();
       } catch (e) {
         console.error(e);
+        const staleBadge = document.getElementById('badgeFleetStale');
+        if (staleBadge) {
+          const isRu = currentLang === 'ru';
+          const timeStr = lastFleetFetchTime ? new Date(lastFleetFetchTime).toLocaleTimeString() : (isRu ? 'нет связи' : 'no connection');
+          staleBadge.textContent = (isRu ? 'Данные устарели (' : 'Stale data (') + timeStr + ')';
+          staleBadge.style.display = 'inline-block';
+        }
       }
     }
 
@@ -5752,6 +6166,18 @@
         selectedFleetInstances.clear();
         updateFleetBulkBar();
         tbody.innerHTML = '<tr><td colspan="12" style="text-align: center; color: var(--text-muted);">' + (isRu ? 'Пока нет подключенных устройств. Расширения синхронизируются через <code>/api/sync</code> каждые 5 мин.' : 'No instances connected yet. Extensions sync via <code>/api/sync</code> every 5 min.') + '</td></tr>';
+        tbody.removeAttribute('data-rendered-sig');
+        return;
+      }
+
+      // Non-destructive rendering guard: preserve focus and selection
+      if (tbody.contains(document.activeElement)) return;
+      const sel = window.getSelection ? window.getSelection() : null;
+      if (sel && sel.toString() && tbody.contains(sel.anchorNode)) return;
+
+      // Dirty-diff check using serialized signature
+      const currentSig = instances.map(i => `${i.instanceId}:${i.status}:${i.assignedProfileId || ''}:${i.assignedProxyId || ''}:${i.syncCount || 0}:${i.lastHeartbeat || ''}:${i.tokenHash ? 1 : 0}:${i.revoked ? 1 : 0}:${i.username || ''}:${i.pairedAppId || ''}`).join(';') + `;sort:${fleetSortCol}:${fleetSortAsc}`;
+      if (tbody.getAttribute('data-rendered-sig') === currentSig) {
         return;
       }
 
@@ -5760,7 +6186,6 @@
       const defaultProxyName = defaultProxy
         ? (defaultProxy.name || defaultHostPort)
         : (isRu ? 'Серверный по умолчанию' : 'Server Default');
-
 
       // Sort instances
       const sortedInstances = [...instances].sort((a, b) => {
@@ -5799,16 +6224,19 @@
         return fleetSortAsc ? cmp : -cmp;
       });
 
-      // Update header indicators
-      document.querySelectorAll('#instancesTable th.sortable-th').forEach(th => {
-        const col = th.getAttribute('data-sort');
-        th.classList.remove('sort-asc', 'sort-desc');
-        if (col === fleetSortCol) {
-          th.classList.add(fleetSortAsc ? 'sort-asc' : 'sort-desc');
-          th.setAttribute('aria-sort', fleetSortAsc ? 'ascending' : 'descending');
-        } else {
-          th.setAttribute('aria-sort', 'none');
-        }
+      // Memoize profile and proxy structures to avoid re-looping on every instance
+      const memoizedProfiles = (allProfiles || []).map(p => ({
+        id: p.id,
+        name: esc(p.name)
+      }));
+
+      const memoizedProxies = (currentProxiesList || []).map(p => {
+        const pHostPort = p.host && p.host.includes(':') && !p.host.startsWith('[') ? '[' + p.host + ']:' + p.port : p.host + ':' + p.port;
+        const pName = p.name || pHostPort;
+        return {
+          id: p.id,
+          label: `${esc(pName)} (${esc(p.protocol)})`
+        };
       });
 
       tbody.innerHTML = sortedInstances.map(inst => {
@@ -5829,9 +6257,14 @@
 
         const isChecked = selectedFleetInstances.has(inst.instanceId);
 
-        const profileOptions = (allProfiles || []).map(p => {
+        const profileOptions = memoizedProfiles.map(p => {
           const sel = (inst.assignedProfileId === p.id) ? ' selected' : '';
           return `<option value="${esc(p.id)}"${sel}>${esc(p.name)}</option>`;
+        }).join('');
+
+        const proxyOptions = memoizedProxies.map(p => {
+          const sel = inst.assignedProxyId === p.id ? ' selected' : '';
+          return `<option value="${esc(p.id)}"${sel}>${esc(p.label)}</option>`;
         }).join('');
 
         const pairedBadge = inst.pairedAppId
@@ -5857,20 +6290,15 @@
           <td>${esc(inst.syncCount)}</td>
           <td><span class="badge ${badge}">${esc(inst.status)}</span></td>
           <td>
-            <select class="form-select form-select-sm select-instance-profile" data-instance-id="${escapeHtml(inst.instanceId)}" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
+            <select class="form-select form-select-sm select-instance-profile" data-instance-id="${escapeHtml(inst.instanceId)}" data-prev-value="${esc(inst.assignedProfileId || '')}" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
               <option value="">${isRu ? 'По умолчанию (Авто)' : 'Default (Auto)'}</option>
               ${profileOptions}
             </select>
           </td>
           <td>
-            <select class="form-select form-select-sm select-instance-proxy" data-instance-id="${escapeHtml(inst.instanceId)}" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
+            <select class="form-select form-select-sm select-instance-proxy" data-instance-id="${escapeHtml(inst.instanceId)}" data-prev-value="${esc(inst.assignedProxyId || '')}" style="margin-bottom: 0; font-size: 11px; padding: 3px 6px;">
               <option value="">${isRu ? 'По умолчанию (' + esc(defaultProxyName) + ')' : 'Default (' + esc(defaultProxyName) + ')'}</option>
-              ${(currentProxiesList || []).map(p => {
-                const pHostPort = p.host && p.host.includes(':') && !p.host.startsWith('[') ? '[' + p.host + ']:' + p.port : p.host + ':' + p.port;
-                const pName = p.name || pHostPort;
-                const sel = inst.assignedProxyId === p.id ? ' selected' : '';
-                return `<option value="${esc(p.id)}"${sel}>${esc(pName)} (${esc(p.protocol)})</option>`;
-              }).join('')}
+              ${proxyOptions}
             </select>
           </td>
           <td>
@@ -5882,6 +6310,7 @@
         </tr>`;
       }).join('');
 
+      tbody.setAttribute('data-rendered-sig', currentSig);
       updateFleetBulkBar();
     }
 
@@ -6047,6 +6476,7 @@
     let lastLoadedDesktopInstances = [];
 
     async function loadDesktopInstances() {
+      const seq = ++loadDesktopInstancesSeq;
       try {
         if (!currentProxiesList || !currentProxiesList.length) {
           try {
@@ -6055,8 +6485,10 @@
           } catch (_) {}
         }
         const res = await adminFetch('/api/app/instances');
+        if (seq < loadDesktopInstancesSeq) return;
         if (!res.ok) return;
         const data = await res.json();
+        if (seq < loadDesktopInstancesSeq) return;
         lastLoadedDesktopInstances = data.instances || [];
         renderDesktopInstancesTable(lastLoadedDesktopInstances);
       } catch (err) {
@@ -6080,8 +6512,17 @@
         tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">' +
           (isRu ? 'Десктопные клиенты еще не подключались. Запустите PEC-App.exe на рабочей станции.' : 'No desktop clients connected yet. Launch PEC-App.exe on a workstation.') +
           '</td></tr>';
+        tbody.removeAttribute('data-rendered-sig');
         return;
       }
+
+      // Non-destructive rendering guard: preserve focus and selection
+      if (tbody.contains(document.activeElement)) return;
+      const sel = window.getSelection ? window.getSelection() : null;
+      if (sel && sel.toString() && tbody.contains(sel.anchorNode)) return;
+
+      const sig = instances.map(i => `${i.appInstanceId}:${i.status}:${i.assignedProxyId || ''}:${i.lastSync || ''}`).join('|');
+      if (tbody.getAttribute('data-rendered-sig') === sig) return;
 
       const proxies = currentProxiesList || [];
       tbody.innerHTML = instances.map(inst => {
@@ -6111,7 +6552,7 @@
           <td><span class="badge badge-version">v${esc(inst.version || '2.2.0')}</span></td>
           <td>${pairedBadge}</td>
           <td>
-            <select class="form-select form-select-sm desktop-proxy-select" data-app-id="${esc(inst.appInstanceId)}" style="font-size: 12px; max-width: 170px; margin-bottom: 0;">
+            <select class="form-select form-select-sm desktop-proxy-select" data-app-id="${esc(inst.appInstanceId)}" data-prev-value="${esc(inst.assignedProxyId || 'default')}" style="font-size: 12px; max-width: 170px; margin-bottom: 0;">
               ${proxyOptions}
             </select>
           </td>
@@ -6121,6 +6562,7 @@
           </td>
         </tr>`;
       }).join('');
+      tbody.setAttribute('data-rendered-sig', sig);
     }
 
     function initFleetListeners() {
@@ -6213,12 +6655,15 @@
               body: JSON.stringify({ proxyId }),
             });
             if (res.ok) {
+              sel.setAttribute('data-prev-value', proxyId);
               toast(currentLang === 'ru' ? 'Прокси успешно назначен клиенту' : 'Proxy assigned to client', 'success');
               loadDesktopInstances();
             } else {
+              sel.value = sel.getAttribute('data-prev-value') || 'default';
               toast(currentLang === 'ru' ? 'Не удалось назначить прокси' : 'Failed to assign proxy', 'error');
             }
           } catch (err) {
+            sel.value = sel.getAttribute('data-prev-value') || 'default';
             toast((currentLang === 'ru' ? 'Ошибка: ' : 'Error: ') + err.message, 'error');
           }
         });
@@ -6394,7 +6839,8 @@
       }
     });
 
-    async function assignProfileToInstance(instanceId, profileId) {
+    async function assignProfileToInstance(instanceId, profileId, selectEl) {
+      const el = selectEl || document.querySelector(`.select-instance-profile[data-instance-id="${instanceId}"]`);
       try {
         const res = await adminFetch('/api/instances/assign-profile', {
           method: 'POST',
@@ -6403,17 +6849,22 @@
         });
         if (res.ok) {
           toast(currentLang === 'ru' ? 'Профиль для инстанса обновлен' : 'Instance profile updated', 'success');
+          if (el) el.setAttribute('data-prev-value', profileId || '');
           loadInstances();
         } else {
           const err = await res.json().catch(() => ({}));
-          toast(err.error || ('HTTP ' + res.status), 'error');
+          const errMsg = extractError(res, err, 'HTTP ' + res.status);
+          toast(errMsg, 'error');
+          if (el) el.value = el.getAttribute('data-prev-value') || '';
         }
       } catch (e) {
         toast('Assignment error: ' + e, 'error');
+        if (el) el.value = el.getAttribute('data-prev-value') || '';
       }
     }
 
-    async function assignProxyToInstance(instanceId, proxyId) {
+    async function assignProxyToInstance(instanceId, proxyId, selectEl) {
+      const el = selectEl || document.querySelector(`.select-instance-proxy[data-instance-id="${instanceId}"]`);
       try {
         const res = await adminFetch('/api/instances/assign-proxy', {
           method: 'POST',
@@ -6422,13 +6873,17 @@
         });
         if (res.ok) {
           toast(currentLang === 'ru' ? 'Прокси для инстанса обновлен' : 'Instance proxy updated', 'success');
+          if (el) el.setAttribute('data-prev-value', proxyId || '');
           loadInstances();
         } else {
           const data = await res.json().catch(() => ({}));
-          toast('Proxy assignment error: ' + (data.error || res.statusText), 'error');
+          const errMsg = extractError(res, data, res.statusText || 'Failed to assign proxy');
+          toast('Proxy assignment error: ' + errMsg, 'error');
+          if (el) el.value = el.getAttribute('data-prev-value') || '';
         }
       } catch (err) {
         toast('Proxy assignment error: ' + err, 'error');
+        if (el) el.value = el.getAttribute('data-prev-value') || '';
       }
     }
 
@@ -6437,14 +6892,14 @@
       if (selectProxy) {
         const instanceId = selectProxy.getAttribute('data-instance-id');
         const proxyId = selectProxy.value || undefined;
-        assignProxyToInstance(instanceId, proxyId);
+        assignProxyToInstance(instanceId, proxyId, selectProxy);
         return;
       }
       const selectProfile = e.target.closest('.select-instance-profile');
       if (selectProfile) {
         const instanceId = selectProfile.getAttribute('data-instance-id');
         const profileId = selectProfile.value || '';
-        assignProfileToInstance(instanceId, profileId);
+        assignProfileToInstance(instanceId, profileId, selectProfile);
         return;
       }
       const toggleRule = e.target.closest('.toggle-rule-enabled');
@@ -6678,10 +7133,13 @@
 
     // ----------------- System Status & Kill-Switch -----------------
     async function fetchStatus() {
+      const seq = ++fetchStatusSeq;
       try {
         const res = await adminFetch('/api/status');
+        if (seq < fetchStatusSeq) return;
         if (!res.ok) throw new Error('Status fetch failed: ' + res.status);
         const data = await res.json();
+        if (seq < fetchStatusSeq) return;
         const isRu = currentLang === 'ru';
         
         const gatewayDot = document.getElementById('gatewayStatusIndicator');
@@ -6741,6 +7199,25 @@
 
     async function toggleKillSwitch() {
       const desired = !globalKillSwitch;
+      const isRu = currentLang === 'ru';
+      const title = desired
+        ? (isRu ? 'Внимание: Kill-Switch' : 'Warning: Kill-Switch')
+        : (isRu ? 'Отключение Kill-Switch' : 'Disable Kill-Switch');
+      const msg = desired
+        ? (isRu
+            ? 'Вы уверены, что хотите перевести все устройства компании в прямой режим (DIRECT)? Весь трафик устройств пойдёт напрямую в обход прокси.'
+            : 'Are you sure you want to switch all company devices to direct mode (DIRECT)? All client traffic will bypass proxy servers.')
+        : (isRu
+            ? 'Вы уверены, что хотите отключить аварийный режим и вернуть маршрутизацию через прокси?'
+            : 'Are you sure you want to disable emergency direct mode and restore proxy routing?');
+
+      const confirmed = await pecConfirm({
+        title,
+        message: msg,
+        isDanger: desired
+      });
+      if (!confirmed) return;
+
       try {
         const res = await adminFetch('/api/config', {
           method: 'POST',
@@ -6813,6 +7290,14 @@
       const pass = document.getElementById('rotAdminPass').value;
       if (pass) payload.adminPass = pass;
 
+      const btn = document.querySelector('button[onclick*="saveRotationConfig"]') || document.querySelector('[data-i18n="btnSaveScheduler"]');
+      let origHtml = '';
+      if (btn) {
+        origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span> ' + (btn.textContent || '').trim();
+      }
+
       try {
         const res = await adminFetch('/api/rotation/config', {
           method: 'POST',
@@ -6820,15 +7305,20 @@
           body: JSON.stringify(payload)
         });
         if (res.ok) {
-          toast('Rotation schedule updated!', 'success');
+          toast(currentLang === 'ru' ? 'Расписание ротации обновлено!' : 'Rotation schedule updated!', 'success');
           fetchRotationConfig();
           fetchStatus();
         } else {
           const data = await res.json().catch(() => ({}));
-          toast('Failed to save rotation settings: ' + (data.error || ('HTTP ' + res.status)), 'error');
+          toast((currentLang === 'ru' ? 'Ошибка сохранения настроек ротации: ' : 'Failed to save rotation settings: ') + (data.error || ('HTTP ' + res.status)), 'error');
         }
       } catch (e) {
-        toast('Error saving rotation settings: ' + e, 'error');
+        toast((currentLang === 'ru' ? 'Ошибка сохранения настроек ротации: ' : 'Error saving rotation settings: ') + e, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          if (origHtml) btn.innerHTML = origHtml;
+        }
       }
     }
 
@@ -6861,7 +7351,12 @@
     }
 
     async function manualRotate() {
-      if (!await pecConfirm('Rotate proxy credentials immediately?')) return;
+      const isRu = currentLang === 'ru';
+      if (!await pecConfirm({
+        title: isRu ? 'Ротация учетных данных' : 'Rotate Credentials',
+        message: isRu ? 'Выполнить немедленную ротацию учетных данных прокси?' : 'Rotate proxy credentials immediately?',
+        isDanger: true
+      })) return;
       const btn = document.getElementById('btnRotateNow');
       let origHtml = '';
       if (btn) {
@@ -6873,13 +7368,13 @@
         const res = await adminFetch('/api/rotation/rotate-now', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
-          toast('Rotated! New user: ' + data.result.user + ' (source: ' + data.result.source + ')', 'success');
+          toast(isRu ? ('Успешно! Новый пользователь: ' + data.result.user) : ('Rotated! New user: ' + data.result.user + ' (source: ' + data.result.source + ')'), 'success');
           refreshAll();
         } else {
-          toast('Rotation error: ' + data.error, 'error');
+          toast((isRu ? 'Ошибка ротации: ' : 'Rotation error: ') + data.error, 'error');
         }
       } catch (e) {
-        toast('Failed: ' + e, 'error');
+        toast((isRu ? 'Сетевая ошибка: ' : 'Failed: ') + e, 'error');
       } finally {
         if (btn) {
           btn.disabled = false;
@@ -7231,6 +7726,14 @@
         return;
       }
 
+      const btn = document.getElementById('btnSave3xuiPanel');
+      let origHtml = '';
+      if (btn) {
+        origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span> ' + (btn.textContent || '').trim();
+      }
+
       try {
         const url = id ? `/api/3xui/panels/${encodeURIComponent(id)}` : '/api/3xui/panels';
         const method = id ? 'PUT' : 'POST';
@@ -7249,6 +7752,11 @@
         }
       } catch (e) {
         if (errEl) { errEl.textContent = String(e); errEl.style.display = 'block'; }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          if (origHtml) btn.innerHTML = origHtml;
+        }
       }
     }
 
@@ -7604,10 +8112,19 @@
 
     function renderAuditLogs(logs) {
       const tbody = document.getElementById('auditTableBody');
-      if (!logs.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No requests recorded</td></tr>';
+      if (!tbody) return;
+      if (!logs || !logs.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">' + (currentLang === 'ru' ? 'Запросов не зафиксировано' : 'No requests recorded') + '</td></tr>';
+        tbody.removeAttribute('data-rendered-sig');
         return;
       }
+      if (tbody.contains(document.activeElement)) return;
+      const sel = window.getSelection ? window.getSelection() : null;
+      if (sel && sel.toString() && tbody.contains(sel.anchorNode)) return;
+
+      const sig = logs.map(x => x.timestamp + ':' + x.ip + ':' + x.endpoint + ':' + x.status + ':' + x.result).join('|');
+      if (tbody.getAttribute('data-rendered-sig') === sig) return;
+
       tbody.innerHTML = logs.map(l => {
         let badge = 'badge-online';
         if (l.result === 'REJECTED_TOKEN' || l.result === 'STORE_ERROR') badge = 'badge-offline';
@@ -7622,6 +8139,7 @@
           <td style="color: var(--text-muted); font-size: 12px;">${esc(l.details || '-')}</td>
         </tr>`;
       }).join('');
+      tbody.setAttribute('data-rendered-sig', sig);
     }
 
     async function testCredsEndpoint() {
@@ -7787,10 +8305,14 @@ ${JSON.stringify(json, null, 2)}`;
     async function setActiveReleaseVersion(type, version) {
       const isRu = currentLang === 'ru';
       const label = type === 'extension' ? (isRu ? 'расширения' : 'extension') : (isRu ? 'десктоп-агента' : 'desktop app');
-      const confirmMsg = isRu
-        ? `Переключить активную версию ${label} на v${version} (откат)?`
-        : `Switch active ${label} version to v${version} (rollback)?`;
-      if (!await pecConfirm(confirmMsg)) return;
+      const audienceWarning = isRu
+        ? `Внимание: переключение активной версии затронет все рабочие станции флота при следующей синхронизации.\n\nПереключить активную версию ${label} на v${version} (откат)?`
+        : `Warning: switching active release will affect all fleet workstations on their next sync.\n\nSwitch active ${label} version to v${version} (rollback)?`;
+      if (!await pecConfirm({
+        title: isRu ? 'Смена активной версии' : 'Switch Active Version',
+        message: audienceWarning,
+        isDanger: true
+      })) return;
 
       try {
         const res = await adminFetch('/api/releases/set-active', {
@@ -7865,8 +8387,27 @@ ${JSON.stringify(json, null, 2)}`;
     window.setActiveReleaseVersion = setActiveReleaseVersion;
     window.deleteReleaseVersion = deleteReleaseVersion;
     window.downloadReleaseVersion = downloadReleaseVersion;
+    window.refreshAll = refreshAll;
+    window.bootDashboard = bootDashboard;
+    window.initHashRouting = initHashRouting;
+    window.initTabsAccessibility = initTabsAccessibility;
+    window.initModalBackdropHandlers = initModalBackdropHandlers;
 
-    function refreshAll() {
+    async function refreshAll() {
+      if (hasUnsavedRouting || (typeof isAppStudioDirty !== 'undefined' && isAppStudioDirty)) {
+        const isRu = currentLang === 'ru';
+        const ok = await pecConfirm({
+          title: isRu ? 'Несохраненные изменения' : 'Unsaved Changes',
+          message: isRu
+            ? 'У вас есть несохраненные изменения. Обновить данные с сервера и сбросить правки?'
+            : 'You have unsaved changes. Refresh from server and discard modifications?',
+          isDanger: true
+        });
+        if (!ok) return;
+        hasUnsavedRouting = false;
+        if (typeof isAppStudioDirty !== 'undefined') isAppStudioDirty = false;
+      }
+
       try {
         const savedLayout = localStorage.getItem('pec_server_layout') || 'console';
         setServerLayout(savedLayout);
@@ -7895,6 +8436,14 @@ ${JSON.stringify(json, null, 2)}`;
       load3xuiPanels();
       loadReleases();
     }
+
+    window.addEventListener('beforeunload', function (e) {
+      if (hasUnsavedRouting || (typeof isAppStudioDirty !== 'undefined' && isAppStudioDirty)) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    });
 
     (async function initAuth() {
       try {

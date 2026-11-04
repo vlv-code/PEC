@@ -10,7 +10,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
   const { isDefaultTokenInUse = false } = options;
   const currentVersion = getAppVersion();
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -244,19 +244,19 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
 
     <!-- Navigation Tabs -->
-    <div class="tabs-nav">
-      <button id="tabBtnRouting" class="tab-btn active" onclick="switchTab('routing')" data-i18n="tabBtnRouting"><img src="/icons/routing.png" class="icon-inline" alt="routing"> Маршрутизация и геобазы</button>
-      <button id="tabBtnProxySettings" class="tab-btn" onclick="switchTab('proxy-settings')" data-i18n="tabBtnProxySettings"><img src="/icons/server.png" class="icon-inline" alt="proxy"> Настройки прокси</button>
-      <button id="tabBtnBuilder" class="tab-btn" onclick="switchTab('builder')" data-i18n="tabBtnBuilder"><img src="/icons/palette.png" class="icon-inline" alt="builder"> Конструктор расширения</button>
-      <button id="tabBtnAppStudio" class="tab-btn" onclick="switchTab('app-studio')" data-i18n="tabBtnAppStudio"><img src="/icons/desktop.png" class="icon-inline" alt="app"> Конструктор приложения</button>
-      <button id="tabBtnInstances" class="tab-btn" onclick="switchTab('instances')" data-i18n="tabBtnInstances"><img src="/icons/devices.png" class="icon-inline" alt="fleet"> Флот</button>
-      <button id="tabBtnGpo" class="tab-btn" onclick="switchTab('gpo')" data-i18n="tabBtnGpo"><img src="/icons/building.png" class="icon-inline" alt="gpo"> Развертывание GPO</button>
-      <button id="tabBtnReleases" class="tab-btn" onclick="switchTab('releases')" data-i18n="tabBtnReleases"><img src="/icons/package.png" class="icon-inline" alt="releases"> Релизы и версионирование</button>
-      <button id="tabBtnLogs" class="tab-btn" onclick="switchTab('logs')" data-i18n="tabBtnLogs"><img src="/icons/logs.png" class="icon-inline" alt="logs"> Аудит и тестирование</button>
+    <div class="tabs-nav" role="tablist" aria-label="Панель навигации">
+      <button id="tabBtnRouting" class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab-routing" tabindex="0" onclick="switchTab('routing')" data-tab="routing" data-i18n="tabBtnRouting"><img src="/icons/routing.png" class="icon-inline" alt="routing"> Маршрутизация и геобазы</button>
+      <button id="tabBtnProxySettings" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-proxy-settings" tabindex="-1" onclick="switchTab('proxy-settings')" data-tab="proxy-settings" data-i18n="tabBtnProxySettings"><img src="/icons/server.png" class="icon-inline" alt="proxy"> Настройки прокси</button>
+      <button id="tabBtnBuilder" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-builder" tabindex="-1" onclick="switchTab('builder')" data-tab="builder" data-i18n="tabBtnBuilder"><img src="/icons/palette.png" class="icon-inline" alt="builder"> Конструктор расширения</button>
+      <button id="tabBtnAppStudio" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-app-studio" tabindex="-1" onclick="switchTab('app-studio')" data-tab="app-studio" data-i18n="tabBtnAppStudio"><img src="/icons/desktop.png" class="icon-inline" alt="app"> Конструктор приложения</button>
+      <button id="tabBtnInstances" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-instances" tabindex="-1" onclick="switchTab('instances')" data-tab="instances" data-i18n="tabBtnInstances"><img src="/icons/devices.png" class="icon-inline" alt="fleet"> Флот</button>
+      <button id="tabBtnGpo" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-gpo" tabindex="-1" onclick="switchTab('gpo')" data-tab="gpo" data-i18n="tabBtnGpo"><img src="/icons/building.png" class="icon-inline" alt="gpo"> Развертывание GPO</button>
+      <button id="tabBtnReleases" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-releases" tabindex="-1" onclick="switchTab('releases')" data-tab="releases" data-i18n="tabBtnReleases"><img src="/icons/package.png" class="icon-inline" alt="releases"> Релизы и версионирование</button>
+      <button id="tabBtnLogs" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="switchTab('logs')" data-tab="logs" data-i18n="tabBtnLogs"><img src="/icons/logs.png" class="icon-inline" alt="logs"> Аудит и тестирование</button>
     </div>
 
     <!-- ==================== TAB 1: ROUTING & GEOBASES ==================== -->
-    <div id="tab-routing" class="tab-pane active">
+    <div id="tab-routing" class="tab-pane active" role="tabpanel" tabindex="0" aria-labelledby="tabBtnRouting">
       <!-- Routing Switcher (Extensions vs Desktop App) -->
       <div style="display: flex; gap: 8px; margin-bottom: 16px; background: var(--bg-card-subtle, rgba(255,255,255,0.03)); padding: 6px; border-radius: 8px; border: 1px solid var(--border);">
         <button type="button" id="btnBranchExt" class="tab-btn active" onclick="switchRoutingBranch('ext')" style="flex: 1; justify-content: center; font-size: 13px; font-weight: 600; padding: 8px 16px;">
@@ -504,7 +504,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
 
     <!-- ==================== TAB 2: PROXY SETTINGS & 3X-UI ==================== -->
-    <div id="tab-proxy-settings" class="tab-pane">
+    <div id="tab-proxy-settings" class="tab-pane" role="tabpanel" tabindex="0" aria-labelledby="tabBtnProxySettings">
       <!-- 0. Warning Banner for placeholder 10.0.0.1 (shown when no proxy is active) -->
       <div id="noActiveProxyWarning" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.4); border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; display: none; align-items: flex-start; gap: 10px; font-size: 13px;">
         <img src="/icons/warning.png" class="icon-inline-lg" alt="warn">
@@ -680,7 +680,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
 
     <!-- ==================== TAB 3: EXTENSION CONSTRUCTOR STUDIO ==================== -->
-    <div id="tab-builder" class="tab-pane">
+    <div id="tab-builder" class="tab-pane" role="tabpanel" tabindex="0" aria-labelledby="tabBtnBuilder">
       <div class="grid-builder-columns">
         
         <!-- Left Column: Visual, Preset & Feature Customizer -->
@@ -997,7 +997,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
 
     <!-- ==================== TAB: APP CONSTRUCTOR STUDIO ==================== -->
-    <div id="tab-app-studio" class="tab-pane">
+    <div id="tab-app-studio" class="tab-pane" role="tabpanel" tabindex="0" aria-labelledby="tabBtnAppStudio">
       <div id="appBinariesStaleBanner" class="alert-banner alert-warning" style="display: none; margin-bottom: 12px;"></div>
       <div id="appToolchainDiagnostics" class="card toolchain-card" style="display: none; margin-bottom: 14px;"></div>
       <div id="viewAppStudio" class="app-studio-grid">
@@ -1240,7 +1240,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button type="button" id="btnAppSaveConfig" onclick="saveAppStudioConfigAction()" class="btn-secondary" style="font-size: 12px;">Сохранить настройки</button>
-                <button type="button" id="btnAppCleanBinaries" onclick="cleanAppBinariesAction()" class="btn-secondary" style="font-size: 12px; color: var(--danger, #ef4444);" title="Удалить скомпилированные бинарники для пересборки с нуля">🗑 Очистить бинарники</button>
+                <button type="button" id="btnAppCleanBinaries" onclick="cleanAppBinariesAction()" class="btn-danger" style="font-size: 12px;" title="Удалить скомпилированные бинарники для пересборки с нуля">🗑 Очистить бинарники</button>
                 <button type="button" id="btnAppBuildBinaries" onclick="buildAppBinariesAction()" class="btn-secondary" style="font-size: 12px;">Собрать бинарники (Build Binaries)</button>
                 <button type="button" id="btnAppBuild" onclick="buildAppPackageAction()" class="btn" style="font-size: 12px;">Собрать приложение (Build Package)</button>
                 <button type="button" id="btnAppViewBuildLog" onclick="openBuildLogModal('app')" class="btn-secondary" style="font-size: 11px; display: none;">📋 Лог сборки</button>
@@ -1385,11 +1385,12 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
 
     <!-- ==================== TAB 4: FLEET & TARGET ASSIGNMENT ==================== -->
-    <div id="tab-instances" class="tab-pane">
+    <div id="tab-instances" class="tab-pane" role="tabpanel" tabindex="0" aria-labelledby="tabBtnInstances">
       <div class="card">
         <h2>
           <span data-i18n="titleFleetInstances">Флот корпоративной сети</span>
           <span id="badgeFleetOnline" class="badge badge-online">0 online</span>
+          <span id="badgeFleetStale" class="badge badge-warning" style="display: none;" title="Данные флота не актуализированы из-за ошибки сети">Устарело</span>
         </h2>
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;" data-i18n="subFleetInstances">
           Централизованное управление инстансами расширения, профилями и прокси-нодами
@@ -1487,7 +1488,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
 
     <!-- ==================== TAB 4: GPO DEPLOYMENT ==================== -->
-    <div id="tab-gpo" class="tab-pane">
+    <div id="tab-gpo" class="tab-pane" role="tabpanel" tabindex="0" aria-labelledby="tabBtnGpo">
       <div class="card" style="margin-bottom: 20px; border-left: 4px solid var(--primary); background: var(--card-bg);">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
           <div>
@@ -1604,7 +1605,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
 
     <!-- ==================== TAB 6: AUDIT & TESTER ==================== -->
-    <div id="tab-logs" class="tab-pane">
+    <div id="tab-logs" class="tab-pane" role="tabpanel" tabindex="0" aria-labelledby="tabBtnLogs">
       <div class="grid-2">
         <div class="card">
           <h2 data-i18n="titleCredsTester">Interactive /creds Tester</h2>
@@ -1650,7 +1651,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
 
     <!-- ==================== TAB 8: RELEASES & ROLLBACK ==================== -->
-    <div id="tab-releases" class="tab-pane">
+    <div id="tab-releases" class="tab-pane" role="tabpanel" tabindex="0" aria-labelledby="tabBtnReleases">
       <div class="card" style="margin-bottom: 20px; border-left: 4px solid var(--primary); background: var(--card-bg);">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
           <div>
@@ -1855,7 +1856,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
   <!-- Modal: Add Manual or Edit Proxy Form -->
   <div id="modalProxyForm" class="modal-backdrop-theme">
     <div class="modal-card-theme" style="max-width: 480px; width: 90%; padding: 24px;">
-      <form id="proxyForm" onsubmit="return false;">
+      <form id="proxyForm" onsubmit="submitProxyForm(); return false;">
       <h2 id="proxyFormTitle" style="margin: 0 0 12px 0; font-size: 17px;" data-i18n="titleAddManualProxy">Add Manual Proxy Node</h2>
       <input type="hidden" id="proxyFormId" value="" />
 
