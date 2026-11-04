@@ -24,6 +24,7 @@
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <commctrl.h>
+#include <tlhelp32.h>
 
 #include <string>
 #include <vector>
@@ -72,6 +73,7 @@ extern "C" {
 #include "profile/profile.h"
 #include "api/pb_api.h"
 #include "api/pb_ipc.h"
+#include "ui/startup.h"
 }
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -100,10 +102,54 @@ extern "C" {
 }
 
 // -----------------------------------------------------------------------------
-// Forward declarations
+// Forward declarations & Startup Helpers
 // -----------------------------------------------------------------------------
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+static void UpdateTitle(HWND hWnd);
+
+static inline bool GetAutostartWithWindows() {
+    return StartupIsEnabled() != FALSE;
+}
+
+static inline void SetAutostartWithWindows(bool enable) {
+    StartupSet(enable ? TRUE : FALSE);
+}
+
+static void SaveWindowGeometry(HWND hWnd) {
+    RECT wr;
+    if (GetWindowRect(hWnd, &wr)) {
+        HKEY k;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\PEC-App", 0, NULL, 0, KEY_SET_VALUE, NULL, &k, NULL) == ERROR_SUCCESS) {
+            int x = wr.left, y = wr.top, w = wr.right - wr.left, h = wr.bottom - wr.top;
+            RegSetValueExW(k, L"WinX", 0, REG_DWORD, (const BYTE*)&x, sizeof(DWORD));
+            RegSetValueExW(k, L"WinY", 0, REG_DWORD, (const BYTE*)&y, sizeof(DWORD));
+            RegSetValueExW(k, L"WinW", 0, REG_DWORD, (const BYTE*)&w, sizeof(DWORD));
+            RegSetValueExW(k, L"WinH", 0, REG_DWORD, (const BYTE*)&h, sizeof(DWORD));
+            RegCloseKey(k);
+        }
+    }
+}
+
+static BOOL LoadWindowGeometry(int& x, int& y, int& w, int& h) {
+    HKEY k;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\PEC-App", 0, KEY_QUERY_VALUE, &k) == ERROR_SUCCESS) {
+        DWORD dwX = 0, dwY = 0, dwW = 0, dwH = 0, sz = sizeof(DWORD);
+        if (RegQueryValueExW(k, L"WinX", NULL, NULL, (BYTE*)&dwX, &sz) == ERROR_SUCCESS &&
+            RegQueryValueExW(k, L"WinY", NULL, NULL, (BYTE*)&dwY, &sz) == ERROR_SUCCESS &&
+            RegQueryValueExW(k, L"WinW", NULL, NULL, (BYTE*)&dwW, &sz) == ERROR_SUCCESS &&
+            RegQueryValueExW(k, L"WinH", NULL, NULL, (BYTE*)&dwH, &sz) == ERROR_SUCCESS)
+        {
+            if (dwW >= 400 && dwH >= 300) {
+                x = (int)dwX; y = (int)dwY; w = (int)dwW; h = (int)dwH;
+                RegCloseKey(k);
+                return TRUE;
+            }
+        }
+        RegCloseKey(k);
+    }
+    return FALSE;
+}
 
 // -----------------------------------------------------------------------------
 // DirectX 11 Data & Helpers
@@ -2217,7 +2263,7 @@ static void RenderSettingsTab()
     if (ImGui::Checkbox(T(S_SET_TRAFFIC_LOG), &g_connLogging)) {
         ProfileLock lock;
         g_profile.trafficLogging = g_connLogging ? 1 : 0;
-        if (g_api.SetTrafficLogging) g_api.SetTrafficLogging(g_connLogging ? TRUE : FALSE);
+        if (g_api.SetTrafficLoggingEnabled) g_api.SetTrafficLoggingEnabled(g_connLogging ? TRUE : FALSE);
         SaveProfile();
     }
 
