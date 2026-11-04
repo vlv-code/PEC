@@ -12,7 +12,7 @@ test("popupHtmlTemplate & popup.html: geometry, overflow and scrollbar-gutter", 
   const rawHtml = fs.readFileSync(path.resolve("extension/popup.html"), "utf8");
 
   for (const content of [html, rawHtml]) {
-    assert.ok(content.includes("scrollbar-gutter: stable"), "must include scrollbar-gutter: stable for html, body");
+    assert.ok(content.includes("scrollbar-gutter: auto"), "must include scrollbar-gutter: auto for html, body");
     assert.ok(content.includes("max-width: 130px"), "network parameters / exitIpVal must have max-width: 130px");
     assert.ok(content.includes("text-overflow: ellipsis"), "must have text-overflow: ellipsis");
     assert.ok(content.includes("white-space: nowrap"), "must have white-space: nowrap");
@@ -20,6 +20,8 @@ test("popupHtmlTemplate & popup.html: geometry, overflow and scrollbar-gutter", 
     assert.ok(content.includes("max-width: 80px"), "tabRulesDefaultPolicy must have max-width: 80px");
     assert.ok(content.includes("flex-shrink: 0"), "accordion chevron must have flex-shrink: 0");
     assert.ok(content.includes("flex: 1"), "rule-pattern must have flex: 1");
+    assert.ok(content.includes('data-layout="terminal"') && content.includes("border-radius: 0 !important"), "terminal layout must have 0px border-radius");
+    assert.ok(content.includes('data-layout="console"') && content.includes("border-radius: 12px"), "console layout must have 12px border-radius");
   }
 });
 

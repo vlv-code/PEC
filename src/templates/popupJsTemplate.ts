@@ -272,11 +272,13 @@ window.applyPopupState = function(response) {
     exitIpVal.textContent = response.exitIp;
     exitIpVal.title = response.exitIp;
   }
-  if (response.uiLayout && document.body) {
-    document.body.setAttribute("data-layout", response.uiLayout);
+  if (response.uiLayout) {
+    if (document.body) document.body.setAttribute("data-layout", response.uiLayout);
+    if (document.documentElement) document.documentElement.setAttribute("data-layout", response.uiLayout);
   }
-  if (response.colorPalette && document.body) {
-    document.body.setAttribute("data-palette", response.colorPalette);
+  if (response.colorPalette) {
+    if (document.body) document.body.setAttribute("data-palette", response.colorPalette);
+    if (document.documentElement) document.documentElement.setAttribute("data-palette", response.colorPalette);
   }
   if (response.serverBase) window.__pecServerBase = response.serverBase;
 
@@ -489,8 +491,14 @@ window.addEventListener("message", function(e) {
     window.applyPopupState(e.data.state);
   }
   if (e.data && e.data.type === "UPDATE_STUDIO_THEME") {
-    if (e.data.layout && document.body) document.body.setAttribute("data-layout", e.data.layout);
-    if (e.data.palette && document.body) document.body.setAttribute("data-palette", e.data.palette);
+    if (e.data.layout) {
+      if (document.body) document.body.setAttribute("data-layout", e.data.layout);
+      if (document.documentElement) document.documentElement.setAttribute("data-layout", e.data.layout);
+    }
+    if (e.data.palette) {
+      if (document.body) document.body.setAttribute("data-palette", e.data.palette);
+      if (document.documentElement) document.documentElement.setAttribute("data-palette", e.data.palette);
+    }
     if (e.data.themeMode) applyTheme(e.data.themeMode);
   }
 });
@@ -624,9 +632,15 @@ function initPopup() {
           if (stored.pecThemeMode) {
             applyTheme(stored.pecThemeMode);
           }
-          if (stored.pecLastConfig && document.body) {
-            if (stored.pecLastConfig.uiLayout) document.body.setAttribute("data-layout", stored.pecLastConfig.uiLayout);
-            if (stored.pecLastConfig.colorPalette) document.body.setAttribute("data-palette", stored.pecLastConfig.colorPalette);
+          if (stored.pecLastConfig) {
+            if (stored.pecLastConfig.uiLayout) {
+              if (document.body) document.body.setAttribute("data-layout", stored.pecLastConfig.uiLayout);
+              if (document.documentElement) document.documentElement.setAttribute("data-layout", stored.pecLastConfig.uiLayout);
+            }
+            if (stored.pecLastConfig.colorPalette) {
+              if (document.body) document.body.setAttribute("data-palette", stored.pecLastConfig.colorPalette);
+              if (document.documentElement) document.documentElement.setAttribute("data-palette", stored.pecLastConfig.colorPalette);
+            }
           }
         }
       } catch (e) {}

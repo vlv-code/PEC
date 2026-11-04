@@ -3244,6 +3244,12 @@
       if (btnConsole) btnConsole.classList.toggle('active', layout === 'console');
       if (btnTerminal) btnTerminal.classList.toggle('active', layout === 'terminal');
 
+      const previewBox = document.getElementById('popupFrameBox');
+      if (previewBox) {
+        previewBox.setAttribute('data-layout', layout);
+        previewBox.style.borderRadius = layout === 'terminal' ? '0px' : '12px';
+      }
+
       updateLivePreviewThemeAndLayout();
       updateLivePreview();
       if (!silent) onConfigChangeLive();

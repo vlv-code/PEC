@@ -61,7 +61,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   const support = sanitizeSupportUrl(safeCfg.supportUrl);
 
   return `<!DOCTYPE html>
-<html lang="${escapeHtml(safeCfg.locale || "ru")}">
+<html lang="${escapeHtml(safeCfg.locale || "ru")}" data-palette="${escapeHtml(palette)}" data-layout="${escapeHtml(layout)}" data-theme="${escapeHtml(themeMode)}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -189,6 +189,14 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
       border-radius: 0 !important;
     }
+    html[data-layout="terminal"],
+    body[data-layout="terminal"] {
+      border-radius: 0 !important;
+    }
+    body[data-layout="terminal"] {
+      border: 1px solid var(--primary) !important;
+      box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.25);
+    }
     [data-layout="terminal"] .card {
       border-radius: 0 !important;
       border-color: var(--primary) !important;
@@ -209,8 +217,20 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
 
     /* Layout 2. Console: rounded, soft modern UI */
-    [data-layout="console"] {
+    [data-layout="console"],
+    body[data-layout="console"] {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    html[data-layout="console"],
+    body[data-layout="console"],
+    html:not([data-layout="terminal"]),
+    body:not([data-layout="terminal"]) {
+      border-radius: 12px;
+    }
+    body[data-layout="console"],
+    body:not([data-layout="terminal"]) {
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
     }
     [data-layout="console"] .card {
       border-radius: 10px;
@@ -250,12 +270,23 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       overflow-x: hidden;
       scrollbar-width: thin;
       scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
-      scrollbar-gutter: stable;
+      scrollbar-gutter: auto;
+    }
+    html {
+      padding: 0;
+      background: transparent;
+    }
+    html[data-layout="console"],
+    body[data-layout="console"],
+    html:not([data-layout="terminal"]),
+    body:not([data-layout="terminal"]) {
+      border-radius: 12px;
+    }
+    html[data-layout="terminal"],
+    body[data-layout="terminal"] {
+      border-radius: 0 !important;
     }
     body {
-      width: 380px;
-      min-width: 380px;
-      max-width: 380px;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
@@ -267,6 +298,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       line-height: 1.4;
       user-select: none;
       transition: background 0.2s, color 0.2s;
+      border: 1px solid var(--border);
     }
 
     /* Custom slim scrollbar */

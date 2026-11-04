@@ -423,8 +423,8 @@
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     }
     body[data-layout="console"] .popup-frame-box {
-      border-radius: 8px;
-      box-shadow: none;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     }
     body[data-layout="console"] .badge {
       border-radius: 12px;
@@ -1725,12 +1725,23 @@
     .popup-frame-box {
       width: fit-content;
       max-width: 100%;
-      border-radius: 10px;
+      border-radius: 12px;
       border: 1px solid var(--border);
       background: #0b1120;
       overflow: hidden;
       box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7);
-      transition: width 0.2s ease, height 0.2s ease;
+      transition: width 0.2s ease, height 0.2s ease, border-radius 0.2s ease;
+    }
+    .popup-frame-box[data-layout="terminal"],
+    body[data-layout="terminal"] .popup-frame-box {
+      border-radius: 0 !important;
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+    }
+    .popup-frame-box[data-layout="console"],
+    body[data-layout="console"] .popup-frame-box {
+      border-radius: 12px;
+      border-color: var(--border);
     }
     .popup-frame-box iframe {
       width: 380px;
