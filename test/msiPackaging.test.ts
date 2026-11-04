@@ -157,3 +157,24 @@ test("MSI download routes: serve MSI from releases when present", async () => {
     }
   });
 });
+
+test("packageApp generates valid enterprise MSI package and downloads via API", async () => {
+  await withTestServer(async (baseUrl) => {
+    const { packageApp } = await import("../src/appPackager.js");
+    const pkg = packageApp(baseUrl);
+    assert.ok(pkg.windowsMsiUrl, "windowsMsiUrl must be populated");
+    assert.ok(typeof pkg.windowsMsiSize === "number" && pkg.windowsMsiSize > 50000, "MSI size must be > 50KB");
+    assert.ok(pkg.windowsMsiSha256 && pkg.windowsMsiSha256.length === 64, "MSI sha256 must be valid hex");
+
+    const res = await fetch(`${baseUrl}/api/app-builder/download/msi`, {
+      headers: { "x-admin-token": TEST_ADMIN_TOKEN },
+    });
+    assert.equal(res.status, 200, "Download MSI must return 200");
+    const buf = Buffer.from(await res.arrayBuffer());
+    assert.ok(buf.length > 50000, "Downloaded MSI must be complete binary");
+
+    // Standard MSI OLE compound document magic header: D0 CF 11 E0 A1 B1 1A E1
+    const msiMagic = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+    assert.deepEqual(buf.subarray(0, 8), msiMagic, "MSI must have valid Microsoft Compound Storage header");
+  });
+});

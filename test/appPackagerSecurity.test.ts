@@ -65,6 +65,8 @@ test("S-4: buildMsiPackage executes wixl via execFileSync with discrete array ar
     assert.equal(calls[1].file, "wixl");
     assert.deepEqual(calls[1].args, [
       "-v",
+      "-a",
+      "x64",
       "-o",
       outputMsi,
       path.join(stagedDir, "pec-app.wxs"),
@@ -111,13 +113,13 @@ test("S-4: buildMsiPackage falls back to WiX v3 (candle.exe + light.exe) via exe
       if (file === "wixl") {
         throw new Error("wixl not found");
       }
-      if (file === "candle.exe" && Array.isArray(args) && args.includes("/?")) {
+      if ((file === "candle.exe" || file.endsWith("candle.exe")) && Array.isArray(args) && args.includes("/?")) {
         return Buffer.from("WiX Compiler version 3.14");
       }
-      if (file === "candle.exe" && Array.isArray(args) && args.includes("-out")) {
+      if ((file === "candle.exe" || file.endsWith("candle.exe")) && Array.isArray(args) && args.includes("-out")) {
         return Buffer.from("");
       }
-      if (file === "light.exe" && Array.isArray(args) && args.includes("-out")) {
+      if ((file === "light.exe" || file.endsWith("light.exe")) && Array.isArray(args) && args.includes("-out")) {
         fs.writeFileSync(outputMsi, "dummy msi payload from light.exe");
         return Buffer.from("");
       }
@@ -132,13 +134,13 @@ test("S-4: buildMsiPackage falls back to WiX v3 (candle.exe + light.exe) via exe
     assert.equal(execSyncCalls.length, 0, "execSync must not be called");
 
     // Verify candle and light were called via execFileSync with discrete array arguments
-    const candleCall = calls.find((c) => c.file === "candle.exe" && c.args && c.args[0] === "-out");
+    const candleCall = calls.find((c) => (c.file === "candle.exe" || c.file.endsWith("candle.exe")) && c.args && c.args.includes("-out"));
     assert.ok(candleCall, "candle.exe must be invoked with -out");
-    assert.deepEqual(candleCall.args, ["-out", path.join(stagedDir, "pec-app.wixobj"), path.join(stagedDir, "pec-app.wxs")]);
+    assert.deepEqual(candleCall.args, ["-nologo", "-arch", "x64", "-out", path.join(stagedDir, "pec-app.wixobj"), path.join(stagedDir, "pec-app.wxs")]);
 
-    const lightCall = calls.find((c) => c.file === "light.exe" && c.args && c.args[0] === "-out");
+    const lightCall = calls.find((c) => (c.file === "light.exe" || c.file.endsWith("light.exe")) && c.args && c.args.includes("-out"));
     assert.ok(lightCall, "light.exe must be invoked with -out");
-    assert.deepEqual(lightCall.args, ["-out", outputMsi, path.join(stagedDir, "pec-app.wixobj")]);
+    assert.deepEqual(lightCall.args, ["-nologo", "-sval", "-out", outputMsi, path.join(stagedDir, "pec-app.wixobj")]);
 
     // Ensure raw quotes are absent
     for (const arg of [...candleCall.args!, ...lightCall.args!]) {

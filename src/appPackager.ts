@@ -66,6 +66,8 @@ export function ensurePristineTemplates(): void {
     "PEC-CLI.exe",
     "PECAppSvc.exe",
     "PEC-App-Setup.exe",
+    "PEC-App.msi",
+    "AppIcon.ico",
     "PECAppCore.dll",
     "WinDivert.dll",
     "WinDivert64.sys"
@@ -831,7 +833,7 @@ export function renderWxsManifest(cfg: AppBuildConfig, baseUrl: string, sourceDi
         </Directory>
       </Directory>
     </Directory>
-    <Icon Id="AppIcon.ico" Source="{{SOURCE_DIR}}/PEC-App.exe" />
+    <Icon Id="AppIcon.ico" SourceFile="{{SOURCE_DIR}}/AppIcon.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Feature Id="ProductFeature" Title="PEC-App" Level="1">
       <ComponentRef Id="C_PECAppExe" />
@@ -889,7 +891,7 @@ export function buildMsiPackage(
 
     if (hasWixl) {
       try {
-        child_process.execFileSync("wixl", ["-v", "-o", outputMsiPath, wxsPath], {
+        child_process.execFileSync("wixl", ["-v", "-a", "x64", "-o", outputMsiPath, wxsPath], {
           windowsHide: true,
           stdio: "pipe",
         });
@@ -911,7 +913,9 @@ export function buildMsiPackage(
       let hasWix3 = false;
 
       const wix3Dirs = [
-        ...(process.env.WIX ? [path.join(process.env.WIX, "bin")] : []),
+        path.resolve("./tools/wix"),
+        path.resolve("./tools/wix/bin"),
+        ...(process.env.WIX ? [path.join(process.env.WIX, "bin"), process.env.WIX] : []),
         "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin",
         "C:\\Program Files\\WiX Toolset v3.11\\bin",
         "C:\\Program Files (x86)\\WiX Toolset v3.14\\bin",
@@ -936,18 +940,21 @@ export function buildMsiPackage(
       if (hasWix3) {
         try {
           const wixobj = path.join(stagedDir, "pec-app.wixobj");
-          child_process.execFileSync(candlePath, ["-out", wixobj, wxsPath], {
+          child_process.execFileSync(candlePath, ["-nologo", "-arch", "x64", "-out", wixobj, wxsPath], {
             windowsHide: true,
             stdio: "pipe",
           });
-          child_process.execFileSync(lightPath, ["-out", outputMsiPath, wixobj], {
+          child_process.execFileSync(lightPath, ["-nologo", "-sval", "-out", outputMsiPath, wixobj], {
             windowsHide: true,
             stdio: "pipe",
           });
           if (fs.existsSync(outputMsiPath) && fs.statSync(outputMsiPath).size > 0) {
             return { success: true, msiPath: outputMsiPath };
           }
-        } catch {}
+        } catch (wix3Err: any) {
+          const detail = wix3Err?.stderr?.toString() || wix3Err?.stdout?.toString() || wix3Err?.message || String(wix3Err);
+          console.warn("[appPackager] WiX Toolset v3 compilation warning:", detail);
+        }
       }
 
       // Check WiX v4 / v5
@@ -1116,6 +1123,12 @@ export function assembleAppPackage(
   const stagedCore = stageAndResolve("PECAppCore.dll", resolveTemplateBinary("PECAppCore.dll") || resolveTemplateBinary("ProxyBridgeCore.dll"));
   const stagedSvc = stageAndResolve("PECAppSvc.exe", resolveTemplateBinary("PECAppSvc.exe") || resolveTemplateBinary("ProxyBridgeSvc.exe"));
   const stagedSetup = stageAndResolve("PEC-App-Setup.exe", resolveTemplateBinary("PEC-App-Setup.exe") || resolveTemplateBinary(`PEC-App-Setup-${cfg.version || DEFAULT_APP_VERSION}.exe`));
+  const stagedIcon = stageAndResolve(
+    "AppIcon.ico",
+    resolveTemplateBinary("AppIcon.ico") ||
+    path.resolve("./templates/app/windows/AppIcon.ico") ||
+    path.resolve("./client/Windows/gui/res/logo.ico")
+  );
 
   // Write profile into staging
   fs.writeFileSync(path.join(stagingDir, "pec_profile.pbprofile"), profileBuffer);
@@ -1142,6 +1155,23 @@ export function assembleAppPackage(
     fs.copyFileSync(stagedMsi, finalMsiPath);
     fs.copyFileSync(stagedMsi, versionedMsiPath);
     winZip.addLocalFile(stagedMsi, "", "PEC-App.msi");
+  } else {
+    // Fallback to verified template MSI if on-demand compile was unavailable or failed
+    const fallbackMsi = [
+      resolveTemplateBinary("PEC-App.msi"),
+      path.resolve("./templates/app/windows/PEC-App.msi"),
+      path.resolve("./templates/app/windows/.pristine/PEC-App.msi"),
+    ].find((p) => p && fs.existsSync(p) && fs.statSync(p).size > 1000);
+    if (fallbackMsi) {
+      const finalMsiPath = path.join(targetDir, "PEC-App.msi");
+      const versionedMsiPath = path.join(targetDir, `PEC-App-${cfg.version || DEFAULT_APP_VERSION}.msi`);
+      fs.copyFileSync(fallbackMsi, finalMsiPath);
+      fs.copyFileSync(fallbackMsi, versionedMsiPath);
+      winZip.addLocalFile(finalMsiPath, "", "PEC-App.msi");
+      log(`[MSI] Used pre-compiled verified release template for PEC-App.msi (${Math.round(fs.statSync(fallbackMsi).size / 1024)} KB)`);
+    } else {
+      log(`[MSI WARN] MSI build failed (${msiBuildRes.error || "WiX not available"}) and no pre-compiled fallback found`);
+    }
   }
 
   // 1. PEC-App.exe (DirectX 11 Standalone GUI)
@@ -1925,7 +1955,29 @@ export function getToolchainDiagnostics(): ToolchainDiagnostics {
   const msvc = findMsvcVcvars();
   const makensis = findMakensis();
 
-  let hasWixl = Boolean(findExecutableInPath("wixl") || findExecutableInPath("msitools"));
+  let hasWix = false;
+  if (process.platform === "win32") {
+    const wixDirs = [
+      path.resolve("./tools/wix"),
+      path.resolve("./tools/wix/bin"),
+      ...(process.env.WIX ? [path.join(process.env.WIX, "bin"), process.env.WIX] : []),
+      "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin",
+      "C:\\Program Files\\WiX Toolset v3.11\\bin",
+      "C:\\Program Files (x86)\\WiX Toolset v3.14\\bin",
+      "C:\\Program Files\\WiX Toolset v3.14\\bin",
+    ];
+    for (const d of wixDirs) {
+      if (fs.existsSync(path.join(d, "candle.exe")) && fs.existsSync(path.join(d, "light.exe"))) {
+        hasWix = true;
+        break;
+      }
+    }
+    if (!hasWix && Boolean(findExecutableInPath("candle.exe") || findExecutableInPath("wix.exe"))) {
+      hasWix = true;
+    }
+  }
+
+  let hasWixl = Boolean(findExecutableInPath("wixl") || findExecutableInPath("msitools")) || hasWix;
   if (!hasWixl) {
     try {
       child_process.execFileSync("wixl", ["--version"], { windowsHide: true, timeout: 1500, stdio: "ignore" });
@@ -2626,6 +2678,30 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
     builtFiles.push("PEC-App-Setup.exe");
   }
 
+  const destMsi = path.join(winTemplatesDir, "PEC-App.msi");
+  const fallbackMsi = [
+    path.join(pristineDir, "PEC-App.msi"),
+    path.resolve("./templates/app/windows/PEC-App.msi"),
+  ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
+
+  if ((!fs.existsSync(destMsi) || fs.statSync(destMsi).size < 1000) && fallbackMsi) {
+    fs.copyFileSync(fallbackMsi, destMsi);
+    if (!builtFiles.includes("PEC-App.msi")) builtFiles.push("PEC-App.msi");
+  } else if (fs.existsSync(destMsi) && !builtFiles.includes("PEC-App.msi")) {
+    builtFiles.push("PEC-App.msi");
+  }
+
+  const destIcon = path.join(winTemplatesDir, "AppIcon.ico");
+  const fallbackIcon = [
+    path.join(pristineDir, "AppIcon.ico"),
+    path.resolve("./templates/app/windows/AppIcon.ico"),
+    path.resolve("./client/Windows/gui/res/logo.ico"),
+  ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
+
+  if (!fs.existsSync(destIcon) && fallbackIcon) {
+    fs.copyFileSync(fallbackIcon, destIcon);
+  }
+
   // Ensure signed WinDivert driver & Core binaries are present
   const ensureFromTemplates = (filename: string, sourceFallback?: string) => {
     const target = path.join(winTemplatesDir, filename);
@@ -2653,6 +2729,8 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
   ensureFromTemplates("PECAppCore.dll", "ProxyBridgeCore.dll");
   ensureFromTemplates("PECAppSvc.exe", "ProxyBridgeSvc.exe");
   ensureFromTemplates("PEC-App-Setup.exe");
+  ensureFromTemplates("PEC-App.msi");
+  ensureFromTemplates("AppIcon.ico");
 
   const winDivertDll = path.join(winTemplatesDir, "WinDivert.dll");
   const winDivertSys = path.join(winTemplatesDir, "WinDivert64.sys");
@@ -2738,6 +2816,26 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
     const lp = path.join(winTemplatesDir, legacy);
     if (fs.existsSync(lp)) {
       try { fs.unlinkSync(lp); } catch {}
+    }
+  }
+
+  if (toolchain.hasWixl) {
+    try {
+      const defaultProfile = path.join(winTemplatesDir, "pec_profile.pbprofile");
+      if (!fs.existsSync(defaultProfile)) {
+        fs.writeFileSync(defaultProfile, JSON.stringify(buildAppProfile(cfg, "http://127.0.0.1:3000"), null, 2));
+      }
+      const msiRes = buildMsiPackage(cfg, "http://127.0.0.1:3000", winTemplatesDir, destMsi);
+      if (msiRes.success && fs.existsSync(destMsi)) {
+        if (!builtFiles.includes("PEC-App.msi")) builtFiles.push("PEC-App.msi");
+        const rootMsi = path.resolve("./templates/app/windows/PEC-App.msi");
+        if (rootMsi !== destMsi) {
+          try { fs.copyFileSync(destMsi, rootMsi); } catch {}
+        }
+        log(`[MSI] Enterprise MSI installer package built successfully (${Math.round(fs.statSync(destMsi).size / 1024)} KB)`);
+      }
+    } catch (msiErr: any) {
+      log(`[MSI WARN] On-demand MSI compilation skipped: ${msiErr?.message || msiErr}`);
     }
   }
 

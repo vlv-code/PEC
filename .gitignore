@@ -71,5 +71,8 @@ metadata.json
 coverage/
 *.corrupt-*
 
+# Local toolchains
+tools/
+
 # Media and screenshots
 client/img/

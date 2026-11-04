@@ -8,9 +8,9 @@ FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies for native modules and MinGW cross-compiler
+# Install build dependencies for native modules, MinGW cross-compiler, and msitools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ git mingw-w64 \
+    python3 make g++ git mingw-w64 msitools \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests (package-lock.json is committed - npm ci works)

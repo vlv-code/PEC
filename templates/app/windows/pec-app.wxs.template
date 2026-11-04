@@ -94,7 +94,7 @@
       </Directory>
     </Directory>
 
-    <Icon Id="AppIcon.ico" Source="{{SOURCE_DIR}}/PEC-App.exe" />
+    <Icon Id="AppIcon.ico" SourceFile="{{SOURCE_DIR}}/AppIcon.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
 
     <Feature Id="ProductFeature" Title="PEC-App" Level="1">
