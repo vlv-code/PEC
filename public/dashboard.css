@@ -657,6 +657,62 @@
       border-radius: 12px;
     }
 
+    /* Light Theme Mode Overrides for Auth Screen & Modals */
+    body[data-theme-mode="light"] .auth-card-modal {
+      background: var(--card-bg) !important;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.12);
+      color: var(--text);
+    }
+    body[data-theme-mode="light"] .modal-card-theme {
+      background: var(--card-bg) !important;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.12);
+      color: var(--text);
+    }
+    body[data-theme-mode="light"] .modal-backdrop-theme {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    body[data-theme-mode="light"] .auth-input {
+      background: #ffffff !important;
+      border: 1px solid var(--border) !important;
+      color: var(--text) !important;
+    }
+    body[data-theme-mode="light"] .auth-card-modal button:not(.btn-secondary) {
+      background: var(--primary) !important;
+      color: #ffffff !important;
+      border: 1px solid var(--primary) !important;
+    }
+    body[data-theme-mode="light"] .auth-card-modal button:not(.btn-secondary):hover {
+      background: var(--primary-hover) !important;
+      color: #ffffff !important;
+    }
+
+    body[data-theme-mode="light"][data-layout="terminal"] .auth-card-modal,
+    body[data-theme-mode="light"][data-layout="terminal"] .modal-card-theme {
+      border: 1px solid var(--primary) !important;
+      background: var(--card-bg) !important;
+      color: var(--text) !important;
+      box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.12) !important;
+      border-radius: 0px !important;
+    }
+    body[data-theme-mode="light"][data-layout="terminal"] dialog.pec-dialog {
+      border: 1px solid var(--primary) !important;
+      background: var(--card-bg) !important;
+      color: var(--text) !important;
+      box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.12) !important;
+      border-radius: 0px !important;
+    }
+    body[data-theme-mode="light"][data-layout="terminal"] .auth-card-modal button:not(.btn-secondary) {
+      background: var(--primary) !important;
+      color: #ffffff !important;
+      border: 1px solid var(--primary) !important;
+    }
+    body[data-theme-mode="light"][data-layout="terminal"] .auth-card-modal button:not(.btn-secondary):hover {
+      background: var(--primary-hover) !important;
+      color: #ffffff !important;
+    }
+
     /* Compact Icon Buttons & Unfolding Customization Popover */
     .btn-icon {
       background: var(--card-inner);

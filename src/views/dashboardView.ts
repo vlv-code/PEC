@@ -1709,7 +1709,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
   <div id="authScreen" class="auth-screen-backdrop">
     <div class="auth-card-modal">
       <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px;">
-        <img src="/icons/lock.png" style="width: 32px; height: 32px;" alt="PEC Auth">
+        <img src="/icons/lock.png" class="icon-inline" style="width: 32px; height: 32px;" alt="PEC Auth">
         <span style="font-size: 19px; font-weight: 700; color: var(--text); letter-spacing: -0.3px;">PEC Management</span>
       </div>
 
