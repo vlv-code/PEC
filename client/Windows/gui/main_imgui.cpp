@@ -2791,8 +2791,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
             if (!appdataExists || (g_profile.cfgCount == 0 && g_profile.ruleCount == 0)) {
                 shouldLoadCand = true;
             } else {
-                // Compare write times: if cand is newer than appdata, the admin repackaged or deployed an updated config!
-                if (CompareFileTime(&candAttr.ftLastWriteTime, &appdataAttr.ftLastWriteTime) > 0) {
+                // If candidate profile sitting next to binary has different theme, server, or newer timestamp, adopt it
+                PBProfile candProf;
+                memset(&candProf, 0, sizeof(candProf));
+                PB_ProfileLoad(cand, &candProf);
+                if ((candProf.theme.hasTheme && (
+                        !g_profile.theme.hasTheme ||
+                        wcscmp(candProf.theme.preset, g_profile.theme.preset) != 0 ||
+                        wcscmp(candProf.theme.mode, g_profile.theme.mode) != 0 ||
+                        candProf.theme.primary != g_profile.theme.primary ||
+                        candProf.theme.background != g_profile.theme.background)) ||
+                    (candProf.pecSync.serverUrl[0] != 0 && wcscmp(candProf.pecSync.serverUrl, g_profile.pecSync.serverUrl) != 0) ||
+                    (CompareFileTime(&candAttr.ftLastWriteTime, &appdataAttr.ftLastWriteTime) > 0)) {
                     shouldLoadCand = true;
                 }
             }

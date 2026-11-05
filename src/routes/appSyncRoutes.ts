@@ -331,13 +331,27 @@ export function createAppSyncRouter(
         }
       }
 
+      const effectivePreset = assignedProfile?.colorPalette || appBldCfg.presetStyle || "cyber-blue";
+      const effectiveMode = assignedProfile?.defaultThemeMode || appBldCfg.defaultThemeMode || (effectivePreset === "enterprise-light" || effectivePreset === "minimal-light" ? "light" : "dark");
+      const isLightMode = effectiveMode === "light" || effectivePreset === "enterprise-light" || effectivePreset === "minimal-light" || (effectivePreset as string) === "light";
+      let syncBg = assignedProfile?.themeBackground || appBldCfg.themeBackground || (isLightMode ? "#f1f5f9" : "#0b1120");
+      let syncCard = assignedProfile?.themeCard || appBldCfg.themeCard || (isLightMode ? "#ffffff" : "#131d36");
+      if (isLightMode) {
+        if (/^#0[0-9a-f]{5}$/i.test(syncBg) || /^#1[0-9a-f]{5}$/i.test(syncBg) || /^#2[0-4][0-9a-f]{4}$/i.test(syncBg)) {
+          syncBg = effectivePreset === "dark-obsidian" ? "#faf5ff" : (effectivePreset === "emerald-secops" ? "#f0fdf4" : "#f1f5f9");
+        }
+        if (/^#0[0-9a-f]{5}$/i.test(syncCard) || /^#1[0-9a-f]{5}$/i.test(syncCard) || /^#2[0-4][0-9a-f]{4}$/i.test(syncCard)) {
+          syncCard = "#ffffff";
+        }
+      }
+
       const theme = {
-        preset: assignedProfile?.colorPalette || appBldCfg.presetStyle || "cyber-blue",
+        preset: effectivePreset,
         layout: assignedProfile?.uiLayout || appBldCfg.uiLayout || "console",
-        mode: assignedProfile?.defaultThemeMode || appBldCfg.defaultThemeMode || "dark",
-        primary: assignedProfile?.themeColor || appBldCfg.themeColor || "#38bdf8",
-        background: assignedProfile?.themeBackground || appBldCfg.themeBackground || "#0b1120",
-        card: assignedProfile?.themeCard || appBldCfg.themeCard || "#131d36",
+        mode: effectiveMode,
+        primary: assignedProfile?.themeColor || appBldCfg.themeColor || (isLightMode ? "#2563eb" : "#38bdf8"),
+        background: syncBg,
+        card: syncCard,
       };
 
       res.json({

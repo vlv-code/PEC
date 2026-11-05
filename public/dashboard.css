@@ -2366,6 +2366,71 @@
       border-radius: 8px;
     }
 
+    /* App Studio Light Theme Preview Styling */
+    .desktop-mockup-window[data-app-theme-mode="light"] {
+      background: var(--app-bg, #f1f5f9) !important;
+      color: #0f172a !important;
+      border-color: #cbd5e1;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-titlebar {
+      background: var(--app-card, #ffffff);
+      border-bottom-color: #e2e8f0;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-window-title {
+      color: #0f172a;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-control-btn {
+      color: #64748b;
+      background: rgba(0, 0, 0, 0.05);
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-control-btn:hover {
+      background: rgba(0, 0, 0, 0.1);
+      color: #0f172a;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-status-strip {
+      background: var(--app-card, #ffffff);
+      border-color: #e2e8f0;
+      color: #0f172a;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tabs {
+      border-bottom-color: #e2e8f0;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-btn {
+      color: #64748b;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-btn:hover {
+      color: #0f172a;
+      background: rgba(0, 0, 0, 0.05);
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-btn.active {
+      color: #ffffff;
+      background: var(--app-accent, #2563eb);
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-content > div {
+      background: var(--app-card, #ffffff) !important;
+      border-color: #e2e8f0 !important;
+      color: #0f172a;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-content span,
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-content strong,
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-content div {
+      color: #0f172a;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-content span[style*="text-muted"],
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-tab-content div[style*="text-muted"] {
+      color: #64748b !important;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .mockup-rule-item {
+      background: var(--app-card, #ffffff);
+      border-color: #e2e8f0;
+      color: #0f172a;
+    }
+    .desktop-mockup-window[data-app-theme-mode="light"] .grid-preview-traffic-row {
+      border-bottom-color: #f1f5f9 !important;
+      color: #0f172a;
+    }
+
     #modalBuildLog.modal-backdrop-theme {
       position: fixed;
       inset: 0;

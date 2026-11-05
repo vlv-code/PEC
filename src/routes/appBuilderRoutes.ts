@@ -540,15 +540,21 @@ export function createAppBuilderRouter(
           path.join(releasesDir, `PEC-App-${ver}.msi`),
           path.join(releasesDir, "PEC-App.msi"),
           path.join(updatesDir, `PEC-App-${ver}.msi`),
-          path.join(updatesDir, "PEC-App.msi"),
           path.join(getTemplatesAppDir(), "windows", `PEC-App-${ver}.msi`),
-          path.join(getTemplatesAppDir(), "windows", "PEC-App.msi"),
-        ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 10);
+        ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
         let msiPath = findMsi();
         if (!msiPath) {
           packageApp(getBaseUrl(req));
           msiPath = findMsi();
+        }
+
+        // Fallback to unversioned templates only if packaging did not produce a versioned file
+        if (!msiPath) {
+          msiPath = [
+            path.join(updatesDir, "PEC-App.msi"),
+            path.join(getTemplatesAppDir(), "windows", "PEC-App.msi"),
+          ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
         }
 
         if (msiPath) {
@@ -561,18 +567,24 @@ export function createAppBuilderRouter(
 
       if (platform === "windows") {
         const findZip = () => [
+          path.join(releasesDir, `PEC-App-${ver}-windows-x64.zip`),
           path.join(releasesDir, "PEC-App-windows-x64.zip"),
           path.join(releasesDir, "pec-client-windows-x64.zip"),
-          path.join(updatesDir, "PEC-App-windows-x64.zip"),
-          path.join(updatesDir, "pec-client-windows-x64.zip"),
-        ].find((p) => fs.existsSync(p));
+          path.join(updatesDir, `PEC-App-${ver}-windows-x64.zip`),
+        ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
         let zipPath = findZip();
         if (!zipPath) {
           packageApp(getBaseUrl(req));
           zipPath = findZip();
         }
-        return res.download(zipPath || path.join(releasesDir, "PEC-App-windows-x64.zip"), "pec-client-windows-x64.zip");
+        if (!zipPath) {
+          zipPath = [
+            path.join(updatesDir, "PEC-App-windows-x64.zip"),
+            path.join(updatesDir, "pec-client-windows-x64.zip"),
+          ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
+        }
+        return res.download(zipPath || path.join(releasesDir, "PEC-App-windows-x64.zip"), `pec-client-windows-x64-${ver}.zip`);
       }
 
       if (platform === "installer" || platform === "setup" || platform === "exe" || platform === "windows-installer") {
@@ -580,11 +592,7 @@ export function createAppBuilderRouter(
           path.join(releasesDir, `PEC-App-Setup-${ver}.exe`),
           path.join(releasesDir, "PEC-App-Setup.exe"),
           path.join(updatesDir, `PEC-App-Setup-${ver}.exe`),
-          path.join(updatesDir, "PEC-App-Setup.exe"),
           path.join(getTemplatesAppDir(), "windows", `PEC-App-Setup-${ver}.exe`),
-          path.join(getTemplatesAppDir(), "windows", "PEC-App-Setup.exe"),
-          path.resolve("./client/Windows/installer", `PEC-App-Setup-${ver}.exe`),
-          path.resolve("./client/Windows/installer", "PEC-App-Setup.exe"),
         ].find((p) => fs.existsSync(p) && fs.statSync(p).size > 1000);
 
         let setupPath = findSetup();

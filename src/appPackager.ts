@@ -431,14 +431,28 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
       fleetToken: cfg.defaultToken || process.env.EXT_SHARED_TOKEN || "corp-proxy-secret-token-change-me",
       intervalMinutes: cfg.syncIntervalMinutes || 15,
     },
-    Theme: {
-      preset: cfg.presetStyle || "cyber-blue",
-      layout: cfg.uiLayout || "console",
-      mode: cfg.defaultThemeMode || "dark",
-      primary: cfg.themeColor || "#38bdf8",
-      background: cfg.themeBackground || "#0b1120",
-      card: cfg.themeCard || "#131d36",
-    },
+    Theme: (() => {
+      const mode = cfg.defaultThemeMode || (cfg.presetStyle === "enterprise-light" || cfg.presetStyle === "minimal-light" ? "light" : "dark");
+      const isLightMode = mode === "light" || cfg.presetStyle === "enterprise-light" || cfg.presetStyle === "minimal-light" || (cfg.presetStyle as string) === "light";
+      let bg = cfg.themeBackground || (isLightMode ? "#f1f5f9" : "#0b1120");
+      let card = cfg.themeCard || (isLightMode ? "#ffffff" : "#131d36");
+      if (isLightMode) {
+        if (/^#0[0-9a-f]{5}$/i.test(bg) || /^#1[0-9a-f]{5}$/i.test(bg) || /^#2[0-4][0-9a-f]{4}$/i.test(bg)) {
+          bg = cfg.presetStyle === "dark-obsidian" ? "#faf5ff" : (cfg.presetStyle === "emerald-secops" ? "#f0fdf4" : "#f1f5f9");
+        }
+        if (/^#0[0-9a-f]{5}$/i.test(card) || /^#1[0-9a-f]{5}$/i.test(card) || /^#2[0-4][0-9a-f]{4}$/i.test(card)) {
+          card = "#ffffff";
+        }
+      }
+      return {
+        preset: cfg.presetStyle || (isLightMode ? "enterprise-light" : "cyber-blue"),
+        layout: cfg.uiLayout || "console",
+        mode,
+        primary: cfg.themeColor || (isLightMode ? "#2563eb" : "#38bdf8"),
+        background: bg,
+        card,
+      };
+    })(),
     Icon: {
       type: cfg.iconType || "shield",
       customDataUrl: cfg.customIconDataUrl || "",
@@ -1265,6 +1279,9 @@ export function assembleAppPackage(
   const pecAppZipPath = path.join(targetDir, "PEC-App-windows-x64.zip");
   fs.writeFileSync(pecAppZipPath, winZipBuffer);
 
+  const versionedZipPath = path.join(targetDir, `PEC-App-${cfg.version || DEFAULT_APP_VERSION}-windows-x64.zip`);
+  fs.writeFileSync(versionedZipPath, winZipBuffer);
+
   const legacyZipPath = path.join(targetDir, "pec-client-windows-x64.zip");
   fs.writeFileSync(legacyZipPath, winZipBuffer);
 
@@ -1304,13 +1321,37 @@ export function packageApp(baseUrl: string): AppBuildInfo {
   const profileJson = JSON.stringify(profileObj, null, 2);
   const profileBuffer = Buffer.from(profileJson, "utf-8");
 
+  // Auto-compile fresh binaries if current template binaries are stale and compiler toolchain is available
+  const winTemplatesDir = path.join(getTemplatesAppDir(), "windows");
+  const candidateExe = path.join(winTemplatesDir, "PEC-App.exe");
+  let currentPeVer = "";
+  if (fs.existsSync(candidateExe)) {
+    try {
+      const pe = extractPeVersion(fs.readFileSync(candidateExe));
+      if (pe) currentPeVer = pe.productVersion || pe.fileVersion;
+    } catch {}
+  }
+  const toolchainDiag = getToolchainDiagnostics();
+  if (currentPeVer && currentPeVer !== appVersion && (toolchainDiag.available || findMingwW64() || findMsvcVcvars())) {
+    log(`[AutoBuild] Embedded template binary is v${currentPeVer}, requested package is v${appVersion}. Triggering fresh compilation...`);
+    try {
+      const bRes = buildAppBinaries(appVersion);
+      if (bRes.ok) {
+        log(`[AutoBuild] Binaries compiled successfully for v${appVersion}`);
+      } else {
+        log(`[AutoBuild WARN] Compilation returned: ${bRes.message || "compiler error"}`);
+      }
+    } catch (cbErr: any) {
+      log(`[AutoBuild WARN] Compilation exception: ${cbErr?.message || cbErr}`);
+    }
+  }
+
   // 1. Windows Package (DirectX 11 ImGui Standalone, no web server or ui/ directory)
   const winPackage = assembleAppPackage(effectiveBaseUrl, cfg, targetReleasesDir, log);
   const winZipBuffer = fs.readFileSync(winPackage.zipPath);
   const winSha256 = winPackage.sha256;
 
   // Standalone Setup Installer artifact check
-  const winTemplatesDir = path.join(getTemplatesAppDir(), "windows");
   const resolveTemplateBinary = (name: string): string | null => {
     const isProtected = name === "WinDivert64.sys" || name === "PECAppCore.dll";
     const candidates: string[] = [];

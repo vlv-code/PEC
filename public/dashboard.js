@@ -1009,7 +1009,9 @@
         }
 
         // Persist synchronized theme immediately to server configurations
-        if (typeof saveAppStudioConfig === 'function') {
+        if (typeof saveAppStudioConfigAction === 'function') {
+          try { saveAppStudioConfigAction(true); } catch (_) {}
+        } else if (typeof saveAppStudioConfig === 'function') {
           try { saveAppStudioConfig(true); } catch (_) {}
         }
         if (typeof saveBuilderConfigOnly === 'function') {
@@ -4269,10 +4271,10 @@
       },
       'enterprise-light': {
         primary: '#2563eb',
-        background: '#0f172a',
-        card: '#1e293b',
+        background: '#f1f5f9',
+        card: '#ffffff',
         text: '#0f172a',
-        lightBackground: '#f8fafc',
+        lightBackground: '#f1f5f9',
         lightCard: '#ffffff'
       },
       'emerald-sentinel': {
@@ -5116,7 +5118,12 @@
           return;
         }
 
-        const res = await adminFetch('/api/app-builder/build', { method: 'POST' });
+        const currentFormConfig = collectAppConfigFromForm();
+        const res = await adminFetch('/api/app-builder/build', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentFormConfig)
+        });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
           const info = data.info || data.result || {};
@@ -5417,8 +5424,11 @@
 
     function updateAppLivePreview() {
       const previewWin = document.getElementById('appPreviewWindow');
-      if (!previewWin) return;
-      if (typeof previewWin.setAttribute === 'function') previewWin.setAttribute('data-app-layout', currentAppLayout || 'console');
+      const isLight = currentAppThemeMode === 'light';
+      if (typeof previewWin.setAttribute === 'function') {
+        previewWin.setAttribute('data-app-layout', currentAppLayout || 'console');
+        previewWin.setAttribute('data-app-theme-mode', isLight ? 'light' : 'dark');
+      }
 
       const nameEl = document.getElementById('appBuildName');
       const titleEl = document.getElementById('appPreviewTitle');
@@ -5447,10 +5457,17 @@
       const bgEl = document.getElementById('appThemeBackground');
       const cardEl = document.getElementById('appThemeCard');
 
-      const accent = (colorEl && colorEl.value) || '#0284c7';
-      const bg = (bgEl && bgEl.value) || '#0b1120';
-      const card = (cardEl && cardEl.value) || '#131d36';
-      const isLight = currentAppThemeMode === 'light';
+      let accent = (colorEl && colorEl.value) || (isLight ? '#2563eb' : '#0284c7');
+      let bg = (bgEl && bgEl.value) || (isLight ? '#f1f5f9' : '#0b1120');
+      let card = (cardEl && cardEl.value) || (isLight ? '#ffffff' : '#131d36');
+      if (isLight) {
+        if (/^#0[0-9a-f]{5}$/i.test(bg) || /^#1[0-9a-f]{5}$/i.test(bg) || /^#2[0-4][0-9a-f]{4}$/i.test(bg)) {
+          bg = '#f1f5f9';
+        }
+        if (/^#0[0-9a-f]{5}$/i.test(card) || /^#1[0-9a-f]{5}$/i.test(card) || /^#2[0-4][0-9a-f]{4}$/i.test(card)) {
+          card = '#ffffff';
+        }
+      }
 
       previewWin.style.setProperty('--app-accent', accent);
       previewWin.style.setProperty('--app-bg', bg);
@@ -5519,6 +5536,9 @@
     }
 
     async function downloadAppPackageAction(platform) {
+      if (typeof saveAppStudioConfigAction === 'function') {
+        try { await saveAppStudioConfigAction(true); } catch (_) {}
+      }
       toast((currentLang === 'ru' ? 'Скачивание пакета ' : 'Downloading package ') + platform + '...', 'info');
       try {
         const res = await adminFetch('/api/app-builder/download/' + platform);
@@ -5529,14 +5549,23 @@
           return;
         }
         const blob = await res.blob();
-        let filename = 'pec-client-windows-x64.zip';
+        const verEl = document.getElementById('appBuildVersion');
+        const curVer = (verEl && verEl.value.trim()) || '1.0.0';
+        let filename = 'pec-client-windows-x64-' + curVer + '.zip';
         if (platform === 'linux') {
-          filename = 'pec-client-linux-x64.tar.gz';
+          filename = 'pec-client-linux-x64-' + curVer + '.tar.gz';
         } else if (platform === 'installer' || platform === 'setup' || platform === 'exe') {
-          filename = 'PEC-App-Setup-2.2.0.exe';
+          filename = 'PEC-App-Setup-' + curVer + '.exe';
         } else if (platform === 'msi') {
-          filename = 'PEC-App.msi';
+          filename = 'PEC-App-' + curVer + '.msi';
         }
+
+        const cdHeader = res.headers ? res.headers.get('content-disposition') : null;
+        if (cdHeader) {
+          const match = cdHeader.match(/filename=["']?([^"';]+)["']?/i);
+          if (match && match[1]) filename = match[1].trim();
+        }
+
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
@@ -5841,6 +5870,8 @@
       obsidian: { accent: '#c084fc', bg: '#0d1117', card: '#161b22', lightBg: '#faf5ff', lightCard: '#ffffff', style: 'dark-obsidian' },
       nord: { accent: '#88c0d0', bg: '#242933', card: '#2e3440', lightBg: '#f8fafc', lightCard: '#ffffff', style: 'nordic-arctic' },
       emerald: { accent: '#34d399', bg: '#06130d', card: '#0b1f16', lightBg: '#f0fdf4', lightCard: '#ffffff', style: 'emerald-secops' },
+      amber: { accent: '#f59e0b', bg: '#1c1307', card: '#261805', lightBg: '#fffbeb', lightCard: '#ffffff', style: 'sunset-amber' },
+      sunset: { accent: '#f59e0b', bg: '#1c1307', card: '#261805', lightBg: '#fffbeb', lightCard: '#ffffff', style: 'sunset-amber' },
       light: { accent: '#2563eb', bg: '#f1f5f9', card: '#ffffff', lightBg: '#f1f5f9', lightCard: '#ffffff', style: 'enterprise-light' }
     };
 
@@ -5849,6 +5880,14 @@
       if (!p) return;
       if (isUserAction) isAppStudioDirty = true;
 
+      if (paletteKey === 'light') {
+        currentAppThemeMode = 'light';
+        const btnDark = document.getElementById('btnAppModeDark');
+        const btnLight = document.getElementById('btnAppModeLight');
+        if (btnDark) btnDark.classList.remove('active');
+        if (btnLight) btnLight.classList.add('active');
+      }
+
       const colorEl = document.getElementById('appThemeColor');
       const bgEl = document.getElementById('appThemeBackground');
       const cardEl = document.getElementById('appThemeCard');
@@ -5856,9 +5895,21 @@
       const isLight = currentAppThemeMode === 'light';
 
       if (colorEl) colorEl.value = p.accent;
-      if (bgEl) bgEl.value = isLight ? (p.lightBg || '#f8fafc') : p.bg;
+      if (bgEl) bgEl.value = isLight ? (p.lightBg || '#f1f5f9') : p.bg;
       if (cardEl) cardEl.value = isLight ? (p.lightCard || '#ffffff') : p.card;
       if (styleEl) styleEl.value = p.style;
+
+      const presetTitles = {
+        cyber: 'Cyber Blue',
+        obsidian: 'Dark Obsidian',
+        nord: 'Nordic Arctic',
+        emerald: 'Emerald SecOps',
+        amber: 'Sunset Amber',
+        sunset: 'Sunset Amber',
+        light: 'Enterprise Light',
+      };
+      const badgeEl = document.getElementById('appPresetBadge');
+      if (badgeEl && presetTitles[paletteKey]) badgeEl.textContent = presetTitles[paletteKey];
 
       ['Cyber', 'Obsidian', 'Nord', 'Emerald', 'Light'].forEach(name => {
         const chip = document.getElementById('chipAppPalette' + name);
