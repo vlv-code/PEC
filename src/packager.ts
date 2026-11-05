@@ -101,6 +101,9 @@ export function saveBuildConfig(cfg: Partial<ExtensionBuildConfig>): ExtensionBu
     }
     cfg.version = rawVersion;
   }
+  if (cfg.colorPalette === "light" && !cfg.defaultThemeMode) {
+    cfg.defaultThemeMode = "light";
+  }
   currentBuildConfig = { ...currentBuildConfig, ...cfg };
   try {
     writeJsonAtomic(BUILD_CONFIG_PATH, currentBuildConfig);

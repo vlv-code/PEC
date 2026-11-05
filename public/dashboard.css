@@ -1730,7 +1730,13 @@
       background: #0b1120;
       overflow: hidden;
       box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7);
-      transition: width 0.2s ease, height 0.2s ease, border-radius 0.2s ease;
+      transition: width 0.2s ease, height 0.2s ease, border-radius 0.2s ease, background 0.2s ease;
+    }
+    .popup-frame-box[data-theme="light"],
+    .popup-frame-box.theme-light {
+      background: #f8fafc !important;
+      border-color: #cbd5e1 !important;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12) !important;
     }
     .popup-frame-box[data-layout="terminal"],
     body[data-layout="terminal"] .popup-frame-box {

@@ -49,7 +49,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   const t = getPopupTranslations(safeCfg);
   const palette = (safeCfg as any).colorPalette || "cyber";
   const layout = (safeCfg as any).uiLayout || "console";
-  const themeMode = (safeCfg as any).defaultThemeMode || "dark";
+  const themeMode = (safeCfg as any).defaultThemeMode || (palette === "light" ? "light" : "dark");
   const effectiveColors = {
     primary: sanitizeCssColor(colors?.primary || safeCfg.themeColor, "#38bdf8"),
     bg: sanitizeCssColor(colors?.bg || safeCfg.themeBackground, "#0b1120"),
@@ -174,10 +174,13 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
 
     ${safeCfg.themeColor || safeCfg.themeBackground || safeCfg.themeCard ? `
     /* Custom User Theme Overrides */
-    body[data-palette], body[data-theme] {
+    body[data-palette]:not([data-theme="light"]), body[data-theme="dark"] {
       ${safeCfg.themeColor ? `--primary: ${effectiveColors.primary} !important; --primary-rgb: ${primaryRgb} !important; --accent-color: var(--primary) !important;` : ""}
       ${safeCfg.themeBackground ? `--bg: ${effectiveColors.bg} !important;` : ""}
       ${safeCfg.themeCard ? `--card: ${effectiveColors.card} !important;` : ""}
+    }
+    body[data-theme="light"] {
+      ${safeCfg.themeColor ? `--primary: ${effectiveColors.primary} !important; --primary-rgb: ${primaryRgb} !important; --accent-color: var(--primary) !important;` : ""}
     }
     ` : ""}
 
@@ -681,7 +684,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       font-weight: 600;
       color: var(--text);
       min-width: 0;
-      max-width: 130px;
+      max-width: 210px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
