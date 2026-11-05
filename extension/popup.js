@@ -767,7 +767,8 @@ function initPopup() {
               currentDomain = u.hostname;
               const btnAddCurrentSite = document.getElementById("btnAddCurrentSite");
               if (btnAddCurrentSite) {
-                btnAddCurrentSite.textContent = "+ Добавить сайт: " + currentDomain;
+                currentDomain = u.hostname;
+                updateQuickAddButtonState();
                 btnAddCurrentSite.style.display = "block";
               }
             }
@@ -780,10 +781,25 @@ function initPopup() {
   // User rules CRUD
   let userRules = [];
 
+  function updateQuickAddButtonState() {
+    const btn = document.getElementById("btnAddCurrentSite");
+    if (!btn || !currentDomain) return;
+    const existing = userRules.find(r => r && r.pattern && r.pattern.toLowerCase() === currentDomain.toLowerCase());
+    if (existing) {
+      const act = (existing.action || "DIRECT").toUpperCase();
+      btn.textContent = "✓ В исключениях (" + act + "): " + currentDomain;
+      btn.classList.add("added");
+    } else {
+      btn.textContent = "+ Добавить сайт: " + currentDomain;
+      btn.classList.remove("added");
+    }
+  }
+
   function renderUserRules(rules) {
     const listEl = document.getElementById("userRulesList");
     if (!listEl) return;
     const safeRules = (rules || []).filter(r => r && typeof r.pattern === "string");
+    updateQuickAddButtonState();
     if (safeRules.length === 0) {
       listEl.innerHTML = '<div class="empty-rules">Нет пользовательских правил</div>';
       return;
@@ -803,7 +819,7 @@ function initPopup() {
 
       const badge = document.createElement("span");
       const act = (rule.action || "PROXY").toUpperCase();
-      badge.className = "rule-badge " + (act === "PROXY" ? "proxy" : "direct");
+      badge.className = "rule-badge " + (act === "PROXY" ? "proxy" : (act === "BLOCK" ? "block" : "direct"));
       badge.textContent = act;
 
       const delBtn = document.createElement("button");
@@ -847,7 +863,7 @@ function initPopup() {
       chrome.storage.local.set({ pecUserRules: userRules });
     }
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ action: "SAVE_USER_RULES", userRules: userRules });
+      chrome.runtime.sendMessage({ action: "SAVE_USER_RULES", userRules: userRules, rules: userRules });
     }
   }
 
@@ -864,6 +880,7 @@ function initPopup() {
     if (!p || typeof p !== "string") return false;
     const str = p.trim();
     if (!str) return false;
+    if (str === "*") return true;
     let clean = str;
     if (clean.startsWith("*.")) clean = clean.substring(2);
     else if (clean.startsWith(".")) clean = clean.substring(1);
@@ -880,7 +897,7 @@ function initPopup() {
     const isIpv6 = /^[a-fA-F0-9:]{2,39}$/.test(hostPart) && hostPart.includes(":");
     if (isIpv6) return true;
     const labels = hostPart.split(".");
-    if (labels.length === 0 || labels.some(l => !l || l.length > 63 || !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(l))) {
+    if (labels.length === 0 || labels.some(l => !l || l.length > 63 || !/^[a-zA-Z0-9_](?:[a-zA-Z0-9_-]*[a-zA-Z0-9_])?$/.test(l))) {
       return false;
     }
     return true;

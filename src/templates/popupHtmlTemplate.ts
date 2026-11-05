@@ -762,10 +762,10 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
     .btn-quick-add {
       width: 100%;
-      background: var(--card-inner);
-      border: 1px dashed var(--border);
+      background: rgba(var(--primary-rgb), 0.14);
+      border: 1px dashed var(--primary);
       border-radius: 6px;
-      color: var(--primary);
+      color: var(--text);
       padding: 6px 10px;
       min-height: 28px;
       font-size: 11px;
@@ -774,10 +774,24 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       text-align: center;
       margin-bottom: 8px;
       transition: all 0.15s;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+      box-sizing: border-box;
     }
     .btn-quick-add:hover {
       border-color: var(--primary);
-      background: rgba(var(--primary-rgb), 0.08);
+      background: rgba(var(--primary-rgb), 0.24);
+      color: var(--text);
+    }
+    .btn-quick-add.added {
+      background: rgba(var(--success-rgb), 0.14);
+      border-color: var(--success);
+      color: var(--text);
+    }
+    .btn-quick-add.added:hover {
+      background: rgba(var(--success-rgb), 0.24);
     }
     .rule-form {
       display: flex;
@@ -817,7 +831,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
     .btn-primary-sm {
       background: var(--primary);
-      color: #0b1120;
+      color: #ffffff !important;
       border: none;
       border-radius: 6px;
       padding: 6px 12px;
@@ -830,7 +844,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     }
     .btn-primary-sm:hover { opacity: 0.9; }
     [data-theme="light"] .btn-primary-sm {
-      color: #ffffff;
+      color: #ffffff !important;
     }
     /* WCAG AA contrast for buttons in light theme across cyber, nord, emerald palettes */
     [data-theme="light"][data-palette="cyber"] .btn-primary-sm,
@@ -842,7 +856,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
     [data-theme="light"] [data-palette="cyber"] .btn-primary-sm,
     [data-theme="light"] [data-palette="nord"] .btn-primary-sm,
     [data-theme="light"] [data-palette="emerald"] .btn-primary-sm {
-      color: #0f172a !important;
+      color: #ffffff !important;
     }
 
     .user-rules-list {
@@ -852,6 +866,9 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       border-top: 1px solid var(--border);
       padding-top: 6px;
       margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
     }
     .empty-rules {
       font-size: 11px;
@@ -863,9 +880,14 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 4px 0;
+      padding: 4px 6px;
       font-size: 11px;
       border-bottom: 1px dashed var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 4px;
+    }
+    [data-theme="light"] .user-rule-item {
+      background: rgba(0, 0, 0, 0.02);
     }
     .user-rule-item:last-child { border-bottom: none; }
     .rule-pattern {
@@ -875,25 +897,32 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      color: var(--text);
     }
     .rule-meta {
       display: flex;
       align-items: center;
       gap: 6px;
+      flex-shrink: 0;
     }
     .rule-badge {
       font-size: 10px;
       font-weight: 700;
-      padding: 1px 4px;
+      padding: 1px 5px;
       border-radius: 3px;
+      line-height: 1.3;
     }
     .rule-badge.proxy {
-      background: rgba(var(--success-rgb), 0.15);
+      background: rgba(var(--success-rgb), 0.18);
       color: var(--success);
     }
     .rule-badge.direct {
-      background: rgba(var(--warning-rgb), 0.15);
+      background: rgba(var(--warning-rgb), 0.18);
       color: var(--warning);
+    }
+    .rule-badge.block {
+      background: rgba(var(--danger-rgb), 0.18);
+      color: var(--danger);
     }
     .rule-del-btn {
       background: transparent;
@@ -908,9 +937,11 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       align-items: center;
       justify-content: center;
       font-size: 12px;
+      transition: color 0.15s, background 0.15s;
     }
     .rule-del-btn:hover {
       color: var(--danger);
+      background: rgba(var(--danger-rgb), 0.15);
     }
 
     /* Diagnostics & Terminal */

@@ -1549,7 +1549,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     if (action === "SAVE_USER_RULES") {
-      const rules = Array.isArray(msg.rules) ? msg.rules : [];
+      const incomingRules = Array.isArray(msg.userRules) ? msg.userRules : (Array.isArray(msg.rules) ? msg.rules : []);
+      const rules = incomingRules;
       (async () => {
         try {
           cachedUserRules = rules;

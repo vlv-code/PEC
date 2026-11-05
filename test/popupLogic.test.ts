@@ -193,3 +193,31 @@ test("btnCheckIp in popup.js and renderPopupJs queries public IP services first 
   assert.ok(generatedJs.includes("icanhazip.com"), "renderPopupJs must have icanhazip.com fallback");
 });
 
+test("SAVE_USER_RULES supports both userRules and rules payload", () => {
+  const bgJs = fs.readFileSync("extension/background.js", "utf8");
+  assert.ok(bgJs.includes("msg.userRules"), "background.js must accept msg.userRules");
+  assert.ok(bgJs.includes("msg.rules"), "background.js must accept msg.rules");
+
+  const popupJs = fs.readFileSync("extension/popup.js", "utf8");
+  assert.ok(popupJs.includes("userRules: userRules"), "popup.js must pass userRules");
+  assert.ok(popupJs.includes("rules: userRules"), "popup.js must pass rules as alias");
+});
+
+test("validateRulePattern accepts internal .local domains, underscores, and wildcard", () => {
+  const popupJs = fs.readFileSync("extension/popup.js", "utf8");
+  const vmContext = vm.createContext({});
+  // Extract and evaluate validateRulePattern
+  const match = popupJs.match(/function validateRulePattern\([\s\S]*?\n  \}/);
+  assert.ok(match, "validateRulePattern function must exist in popup.js");
+  vm.runInContext(match[0], vmContext);
+  const validate = (vmContext as any).validateRulePattern;
+
+  assert.equal(validate("sr-01-vc-01.ic.local"), true, "Must accept internal .local domain");
+  assert.equal(validate("app_server.corp.local"), true, "Must accept hostname with underscore");
+  assert.equal(validate("*.ic.local"), true, "Must accept wildcard domain");
+  assert.equal(validate("*"), true, "Must accept all wildcard");
+  assert.equal(validate("192.168.1.100"), true, "Must accept IPv4");
+  assert.equal(validate("10.0.0.0/24"), true, "Must accept CIDR");
+  assert.equal(validate("invalid..domain"), false, "Must reject invalid domain with consecutive dots");
+});
+
