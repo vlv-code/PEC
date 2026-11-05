@@ -93,7 +93,13 @@ inline void ApplyProfileTheme(const PBProfile* prof, ImGuiStyle* dst = nullptr)
         if (lBuf[0]) layout = lBuf;
     }
 
-    PecTheme::IsLightMode = (mode == "light" || preset == "enterprise-light" || preset == "minimal-light" || preset == "light");
+    if (mode == "dark") {
+        PecTheme::IsLightMode = false;
+    } else if (mode == "light") {
+        PecTheme::IsLightMode = true;
+    } else {
+        PecTheme::IsLightMode = (preset == "enterprise-light" || preset == "minimal-light" || preset == "light");
+    }
 
     if (PecTheme::IsLightMode) {
         // Light Mode Base Canvas & Panels

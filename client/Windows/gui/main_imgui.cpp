@@ -7,6 +7,12 @@
 #endif
 
 #define _CRT_SECURE_NO_WARNINGS
+#ifndef _TRUNCATE
+#define _TRUNCATE ((size_t)-1)
+#endif
+#ifndef ARRAYSIZE
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
+#endif
 #ifndef UNICODE
 #define UNICODE
 #endif

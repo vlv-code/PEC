@@ -433,7 +433,7 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
     },
     Theme: (() => {
       const mode = cfg.defaultThemeMode || (cfg.presetStyle === "enterprise-light" || cfg.presetStyle === "minimal-light" ? "light" : "dark");
-      const isLightMode = mode === "light" || cfg.presetStyle === "enterprise-light" || cfg.presetStyle === "minimal-light" || (cfg.presetStyle as string) === "light";
+      const isLightMode = mode === "light" || (mode !== "dark" && (cfg.presetStyle === "enterprise-light" || cfg.presetStyle === "minimal-light" || (cfg.presetStyle as string) === "light"));
       let bg = cfg.themeBackground || (isLightMode ? "#f1f5f9" : "#0b1120");
       let card = cfg.themeCard || (isLightMode ? "#ffffff" : "#131d36");
       if (isLightMode) {
@@ -442,6 +442,13 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
         }
         if (/^#0[0-9a-f]{5}$/i.test(card) || /^#1[0-9a-f]{5}$/i.test(card) || /^#2[0-4][0-9a-f]{4}$/i.test(card)) {
           card = "#ffffff";
+        }
+      } else {
+        if (/^#f[0-9a-f]{5}$/i.test(bg) || /^#e[0-9a-f]{5}$/i.test(bg)) {
+          bg = "#0b1120";
+        }
+        if (/^#f[0-9a-f]{5}$/i.test(card) || /^#e[0-9a-f]{5}$/i.test(card) || card.toLowerCase() === "#ffffff") {
+          card = "#131d36";
         }
       }
       return {
@@ -1770,6 +1777,10 @@ export function writeVersionGenHeaders(
 #define APP_VERSION L"${appVer.version}"
 #endif
 
+#ifndef PEC_APP_VERSION
+#define PEC_APP_VERSION L"${appVer.version}"
+#endif
+
 #ifndef PEC_DEFAULT_SERVER_URL
 #define PEC_DEFAULT_SERVER_URL "${defaultServerUrl}"
 #define PEC_DEFAULT_SERVER_URL_W L"${defaultServerUrl}"
@@ -2254,18 +2265,26 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
             mingwGuiCmd = mingwGuiCmd.replace("imgui/imgui*.cpp", imguiFiles);
           }
         }
+        let guiErrorDetails = "";
         try {
-          const mingwGuiCmdD3d47 = mingwGuiCmd.replace("-ld3dcompiler", "-ld3dcompiler_47 -ld3dcompiler");
-          child_process.execSync(mingwGuiCmdD3d47, { cwd: guiDir, stdio: "pipe" });
+          const mingwGuiCmdDirect = mingwGuiCmd.replace("-ld3dcompiler", "-ld3dcompiler_47");
+          child_process.execSync(mingwGuiCmdDirect, { cwd: guiDir, stdio: "pipe" });
           compiledModern = true;
         } catch (guiErr: any) {
           try {
-            const mingwGuiCmdDirect = mingwGuiCmd.replace("-ld3dcompiler", "-ld3dcompiler_47");
-            child_process.execSync(mingwGuiCmdDirect, { cwd: guiDir, stdio: "pipe" });
+            const mingwGuiCmdLegacy = mingwGuiCmd.replace("-ld3dcompiler", "-ld3dcompiler");
+            child_process.execSync(mingwGuiCmdLegacy, { cwd: guiDir, stdio: "pipe" });
             compiledModern = true;
           } catch (guiErr2: any) {
-            const guiDetails = (guiErr2?.stderr?.toString() || "") + " " + (guiErr2?.stdout?.toString() || "");
-            log(`[GUI] DirectX 11 ImGui build note: ${guiDetails.trim()}. Preserving verified modern DirectX 11 ImGui template.`);
+            try {
+              const mingwGuiCmdBoth = mingwGuiCmd.replace("-ld3dcompiler", "-ld3dcompiler_47 -ld3dcompiler");
+              child_process.execSync(mingwGuiCmdBoth, { cwd: guiDir, stdio: "pipe" });
+              compiledModern = true;
+            } catch (guiErr3: any) {
+              guiErrorDetails = (guiErr?.stderr?.toString() || "") + " " + (guiErr?.stdout?.toString() || "") + " " +
+                                (guiErr2?.stderr?.toString() || "") + " " + (guiErr3?.stderr?.toString() || "");
+              log(`[GUI ERROR] DirectX 11 ImGui build failed: ${guiErrorDetails.trim()}`);
+            }
           }
         }
       }
@@ -2276,27 +2295,22 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
         builtFiles.push("PEC-App.exe");
         log(`[GUI] Successfully compiled modern PEC-App.exe via MinGW (${Math.round(fs.statSync(builtGui).size / 1024)} KB)`);
       } else {
-        const pristineDir = path.join(path.resolve("./templates/app/windows"), ".pristine");
-        const modernTemplates = [
-          path.join(winTemplatesDir, "PEC-App.exe"),
-          path.join(pristineDir, "PEC-App.exe"),
-          path.resolve("./templates/app/windows/PEC-App.exe"),
-          path.resolve("./client/Windows/PEC-App.exe"),
-        ];
-        const validModern = modernTemplates.find(p => fs.existsSync(p) && fs.statSync(p).size > 500000);
-        if (validModern) {
-          const target = path.join(winTemplatesDir, "PEC-App.exe");
-          if (!fs.existsSync(target) || fs.statSync(target).size < 500000) {
-            fs.copyFileSync(validModern, target);
-          }
-          patchPeBinaryVersionInFile(target, appVer.version);
-          const pristineTarget = path.join(pristineDir, "PEC-App.exe");
-          if (fs.existsSync(pristineTarget)) {
-            patchPeBinaryVersionInFile(pristineTarget, appVer.version);
-          }
-          if (!builtFiles.includes("PEC-App.exe")) builtFiles.push("PEC-App.exe");
-          log(`[GUI] Verified modern DirectX 11 ImGui template in place (${Math.round(fs.statSync(validModern).size / 1024)} KB)`);
-        }
+        const errMsg = guiErrorDetails.trim() || "MinGW failed to compile PEC-App.exe from source";
+        log(`[GUI ERROR] Compilation failure: ${errMsg}`);
+        return {
+          ok: false,
+          compiled: false,
+          compiler: compilerName,
+          compilerStatus: {
+            compiled: false,
+            compilerName,
+            error: errMsg,
+          },
+          toolchain,
+          builtFiles,
+          message: `MinGW GUI compilation failed: ${errMsg}`,
+          buildLog,
+        };
       }
     }
 

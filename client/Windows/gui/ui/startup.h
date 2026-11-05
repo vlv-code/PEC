@@ -4,6 +4,13 @@
 #ifndef PB_UI_STARTUP_H
 #define PB_UI_STARTUP_H
 
+#ifndef _TRUNCATE
+#define _TRUNCATE ((size_t)-1)
+#endif
+#ifndef ARRAYSIZE
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
+#endif
+
 // TRUE if another PEC-App GUI or CLI process (not us) is already running in the CURRENT user session.
 // In terminal server / RDS multi-user environments, each user session runs its own isolated instance.
 static BOOL AnotherInstanceRunning(void)
