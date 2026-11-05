@@ -534,7 +534,8 @@ test("UI-06: switchTab('app-studio') preserves modified state when isAppStudioDi
   let loadCount = 0;
   const env = setupDashboardDom({
     customResponses: {
-      "/api/app-builder/config": () => {
+      "/api/app-builder/config": (init?: any) => {
+        if (init && init.method === "POST") return { ok: true };
         loadCount++;
         return { name: "Loaded App Config " + loadCount };
       },

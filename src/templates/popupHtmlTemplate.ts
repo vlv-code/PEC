@@ -49,7 +49,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   const t = getPopupTranslations(safeCfg);
   const palette = (safeCfg as any).colorPalette || "cyber";
   const layout = (safeCfg as any).uiLayout || "console";
-  const themeMode = (safeCfg as any).defaultThemeMode || (palette === "light" ? "light" : "dark");
+  const themeMode = (safeCfg as any).defaultThemeMode || "dark";
   const effectiveColors = {
     primary: sanitizeCssColor(colors?.primary || safeCfg.themeColor, "#38bdf8"),
     bg: sanitizeCssColor(colors?.bg || safeCfg.themeBackground, "#0b1120"),
@@ -61,7 +61,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
   const support = sanitizeSupportUrl(safeCfg.supportUrl);
 
   return `<!DOCTYPE html>
-<html lang="${escapeHtml(safeCfg.locale || "ru")}" data-palette="${escapeHtml(palette)}" data-layout="${escapeHtml(layout)}" data-theme="${escapeHtml(themeMode)}">
+<html lang="${escapeHtml(safeCfg.locale || "ru")}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -174,13 +174,10 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
 
     ${safeCfg.themeColor || safeCfg.themeBackground || safeCfg.themeCard ? `
     /* Custom User Theme Overrides */
-    body[data-palette]:not([data-theme="light"]), body[data-theme="dark"] {
+    body[data-palette], body[data-theme] {
       ${safeCfg.themeColor ? `--primary: ${effectiveColors.primary} !important; --primary-rgb: ${primaryRgb} !important; --accent-color: var(--primary) !important;` : ""}
       ${safeCfg.themeBackground ? `--bg: ${effectiveColors.bg} !important;` : ""}
       ${safeCfg.themeCard ? `--card: ${effectiveColors.card} !important;` : ""}
-    }
-    body[data-theme="light"] {
-      ${safeCfg.themeColor ? `--primary: ${effectiveColors.primary} !important; --primary-rgb: ${primaryRgb} !important; --accent-color: var(--primary) !important;` : ""}
     }
     ` : ""}
 
@@ -684,7 +681,7 @@ export function renderPopupHtml(cfg?: Partial<ExtensionBuildConfig>, colors?: Re
       font-weight: 600;
       color: var(--text);
       min-width: 0;
-      max-width: 210px;
+      max-width: 130px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;

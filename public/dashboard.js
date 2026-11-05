@@ -3281,22 +3281,6 @@
         brandColorInput.value = paletteToBrandColor[palette];
       }
 
-      if (palette === 'light') {
-        setStudioThemeMode('light', silent);
-      } else if (activeStudioThemeMode === 'light') {
-        setStudioThemeMode('dark', silent);
-      }
-
-      if (!silent) {
-        localStorage.setItem('pec_sync_theme_apps', 'false');
-        const chk = document.getElementById('chkSyncThemeWithApps');
-        if (chk) chk.checked = false;
-        const builderThemeCard = document.getElementById('builderThemeCardContainer');
-        const builderLockedNotice = document.getElementById('builderThemeLockedNotice');
-        if (builderThemeCard) builderThemeCard.classList.remove('locked-by-sync');
-        if (builderLockedNotice) builderLockedNotice.style.display = 'none';
-      }
-
       updateLivePreviewThemeAndLayout();
       updateLivePreview();
       if (!silent) onConfigChangeLive();
@@ -3312,24 +3296,6 @@
       const btnLight = document.getElementById('btnStudioModeLight');
       if (btnDark) btnDark.classList.toggle('active', mode === 'dark');
       if (btnLight) btnLight.classList.toggle('active', mode === 'light');
-
-      if (!silent) {
-        localStorage.setItem('pec_sync_theme_apps', 'false');
-        const chk = document.getElementById('chkSyncThemeWithApps');
-        if (chk) chk.checked = false;
-        const builderThemeCard = document.getElementById('builderThemeCardContainer');
-        const builderLockedNotice = document.getElementById('builderThemeLockedNotice');
-        if (builderThemeCard) builderThemeCard.classList.remove('locked-by-sync');
-        if (builderLockedNotice) builderLockedNotice.style.display = 'none';
-      }
-
-      const previewBox = document.getElementById('popupFrameBox');
-      if (previewBox) {
-        previewBox.setAttribute('data-theme', mode);
-        previewBox.classList.toggle('theme-light', mode === 'light');
-        previewBox.style.background = mode === 'light' ? '#f8fafc' : '#0b1120';
-        previewBox.style.borderColor = mode === 'light' ? '#cbd5e1' : 'var(--border)';
-      }
 
       updateLivePreviewThemeAndLayout();
       updateLivePreview();
@@ -3559,8 +3525,6 @@
         }
         if (cfg.defaultThemeMode) {
           setStudioThemeMode(cfg.defaultThemeMode, true);
-        } else if (cfg.colorPalette === 'light' || cfg.presetStyle === 'minimal-light') {
-          setStudioThemeMode('light', true);
         } else {
           setStudioThemeMode('dark', true);
         }

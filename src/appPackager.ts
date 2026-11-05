@@ -1921,10 +1921,10 @@ export function findMsvcVcvars(): string | null {
 }
 
 export const MINGW_GUI_CMD =
-  "x86_64-w64-mingw32-g++ -O2 -std=c++17 -s -mwindows -static -static-libgcc -static-libstdc++ -DUNICODE -D_UNICODE -DNDEBUG -D_WIN32_WINNT=0x0601 main_imgui.cpp imgui/imgui*.cpp imgui/backends/imgui_impl_win32.cpp imgui/backends/imgui_impl_dx11.cpp profile/profile.c profile/json.c res.res -o PEC-App.exe -ld3d11 -ldxgi -ld3dcompiler -ldwmapi -lshlwapi -lshell32 -ladvapi32 -lole32 -luser32 -lgdi32 -lws2_32 -lwinhttp -lcomctl32 -lcrypt32 -luxtheme -lwintrust";
+  "x86_64-w64-mingw32-g++ -O2 -std=c++17 -s -mwindows -static -static-libgcc -static-libstdc++ -Wl,--stack,8388608 -DUNICODE -D_UNICODE -DNDEBUG -D_WIN32_WINNT=0x0601 main_imgui.cpp imgui/imgui*.cpp imgui/backends/imgui_impl_win32.cpp imgui/backends/imgui_impl_dx11.cpp profile/profile.c profile/json.c res.res -o PEC-App.exe -ld3d11 -ldxgi -ld3dcompiler -ldwmapi -lshlwapi -lshell32 -ladvapi32 -lole32 -luser32 -lgdi32 -lws2_32 -lwinhttp -lcomctl32 -lcrypt32 -luxtheme -lwintrust";
 
 export const MSVC_GUI_CMD =
-  "cl.exe /O2 /std:c++17 /EHsc /DUNICODE /D_UNICODE /DNDEBUG /D_WIN32_WINNT=0x0601 /utf-8 main_imgui.cpp imgui\\imgui*.cpp imgui\\backends\\imgui_impl_win32.cpp imgui\\backends\\imgui_impl_dx11.cpp profile\\profile.c profile\\json.c res\\app.res /Fe:PEC-App.exe /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib shlwapi.lib shell32.lib advapi32.lib ole32.lib user32.lib gdi32.lib ws2_32.lib winhttp.lib comctl32.lib";
+  "cl.exe /O2 /std:c++17 /EHsc /DUNICODE /D_UNICODE /DNDEBUG /D_WIN32_WINNT=0x0601 /utf-8 main_imgui.cpp imgui\\imgui*.cpp imgui\\backends\\imgui_impl_win32.cpp imgui\\backends\\imgui_impl_dx11.cpp profile\\profile.c profile\\json.c res\\app.res /Fe:PEC-App.exe /link /SUBSYSTEM:WINDOWS /STACK:8388608 /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% d3d11.lib dxgi.lib d3dcompiler.lib dwmapi.lib shlwapi.lib shell32.lib advapi32.lib ole32.lib user32.lib gdi32.lib ws2_32.lib winhttp.lib comctl32.lib";
 
 function findExecutableInPath(name: string): string | null {
   const isWin = process.platform === "win32";
@@ -2167,6 +2167,10 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
       const rootWin = path.resolve("./templates/app/windows");
       if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
         try { fs.copyFileSync(sourcePath, path.join(rootWin, name)); } catch {}
+      }
+      const pristineP = path.join(rootWin, ".pristine", name);
+      if (fs.existsSync(path.dirname(pristineP))) {
+        try { fs.copyFileSync(sourcePath, pristineP); } catch {}
       }
     }
   };
@@ -2534,6 +2538,10 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
       const rootWin = path.resolve("./templates/app/windows");
       if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
         try { fs.copyFileSync(sourcePath, path.join(rootWin, name)); } catch {}
+      }
+      const pristineP = path.join(rootWin, ".pristine", name);
+      if (fs.existsSync(path.dirname(pristineP))) {
+        try { fs.copyFileSync(sourcePath, pristineP); } catch {}
       }
     }
   };

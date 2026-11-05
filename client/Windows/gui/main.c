@@ -1921,15 +1921,67 @@ static BOOL ConnectEngine(void)
     // No service: portable mode.
     if (!IsElevated())
     {
+        if (wcsstr(GetCommandLineW(), L"--elevated-child") != NULL) {
+            PB_WriteAppLog("[ERROR] ConnectEngine: Process was spawned as --elevated-child, but still lacks elevated administrator token.");
+            MessageBoxW(NULL,
+                L"Не удалось получить права администратора для автономного режима маршрутизации.\nЗапустите PEC-App от имени администратора вручную или установите системную службу.",
+                APP_TITLE, MB_OK | MB_ICONERROR);
+            return FALSE;
+        }
+
+        PB_WriteAppLog("ConnectEngine: Unprivileged classic GUI instance. Initiating UAC self-elevation...");
         wchar_t exe[MAX_PATH]; GetModuleFileNameW(NULL, exe, MAX_PATH);
+
+        const wchar_t* cmdLine = GetCommandLineW();
+        const wchar_t* args = cmdLine;
+        if (args && *args == L'\"') {
+            args++;
+            while (*args && *args != L'\"') args++;
+            if (*args == L'\"') args++;
+        } else if (args) {
+            while (*args && *args != L' ') args++;
+        }
+        while (args && (*args == L' ' || *args == L'\t')) args++;
+
+        wchar_t childParams[1024];
+        if (args && args[0]) {
+            _snwprintf_s(childParams, 1024, _TRUNCATE, L"--elevated-child %s", args);
+        } else {
+            _snwprintf_s(childParams, 1024, _TRUNCATE, L"--elevated-child");
+        }
+
         SHELLEXECUTEINFOW sei; ZeroMemory(&sei, sizeof(sei));
-        sei.cbSize = sizeof(sei); sei.lpVerb = L"runas"; sei.lpFile = exe; sei.nShow = SW_SHOWNORMAL;
-        ShellExecuteExW(&sei);   // on UAC cancel just exit
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+        sei.lpVerb = L"runas";
+        sei.lpFile = exe;
+        sei.lpParameters = childParams;
+        sei.nShow = SW_SHOWNORMAL;
+        if (ShellExecuteExW(&sei)) {
+            PB_WriteAppLog("ConnectEngine: Elevated child process successfully spawned. Exiting parent.");
+            return FALSE;
+        }
+
+        DWORD err = GetLastError();
+        PB_WriteAppLog("ConnectEngine: ShellExecuteExW(runas) failed (error %lu).", err);
+        if (err == ERROR_CANCELLED) {
+            MessageBoxW(NULL,
+                L"Для работы маршрутизации в автономном (портативном) режиме требуются права администратора.\n\nЗапустите PEC-App от имени администратора или установите службу через PEC-App-Setup.exe.",
+                APP_TITLE, MB_OK | MB_ICONWARNING);
+        } else {
+            wchar_t errMsg[512];
+            _snwprintf_s(errMsg, 512, _TRUNCATE,
+                L"Не удалось запустить процесс с правами администратора (код ошибки: %lu).\nПопробуйте запустить программу через 'Запуск от имени администратора'.",
+                err);
+            MessageBoxW(NULL, errMsg, APP_TITLE, MB_OK | MB_ICONERROR);
+        }
         return FALSE;
     }
+    PB_WriteAppLog("ConnectEngine: Elevated mode. Calling PB_LoadDirect...");
     if (!PB_LoadDirect(&g_api))
     {
         const wchar_t* detail = PB_GetLastErrorMsg();
+        PB_WriteAppLog("[FATAL] ConnectEngine: PB_LoadDirect failed: %ls", detail ? detail : L"");
         wchar_t msg[1024];
         if (detail && detail[0]) {
             StringCchPrintfW(msg, sizeof(msg) / sizeof(msg[0]), L"%ls", detail);
@@ -1939,6 +1991,7 @@ static BOOL ConnectEngine(void)
         MessageBoxW(NULL, msg, APP_TITLE, MB_OK | MB_ICONERROR);
         return FALSE;
     }
+    PB_WriteAppLog("ConnectEngine: PB_LoadDirect succeeded.");
     return TRUE;
 }
 
@@ -1947,6 +2000,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show)
 {
     (void)hPrev;
     g_hInst = hInst;
+
+    PB_WriteAppLog("=== PEC-App Classic GUI starting (PID: %lu, Elevated: %s, CmdLine: %ls) ===",
+        GetCurrentProcessId(), IsElevated() ? "YES" : "NO", GetCommandLineW());
+
     BOOL startMinimized = (cmd && wcsstr(cmd, L"--minimized") != NULL);
 
     {

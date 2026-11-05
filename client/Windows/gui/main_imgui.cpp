@@ -2640,17 +2640,23 @@ static BOOL IsElevated(void)
 }
 
 static BOOL g_isAutostart = FALSE;
+static HANDLE g_hSingleInstanceMutex = nullptr;
 
 static BOOL ConnectEngine(void)
 {
+    PB_WriteAppLog("ConnectEngine: Attempting IPC connection to PECAppSvc service...");
     int rc = PB_LoadService(&g_api);
     if (rc == PB_IPC_OK) {
+        PB_WriteAppLog("ConnectEngine: Connected to PECAppSvc service.");
         LogAdd("Подключено к системной службе PECAppSvc.");
         return TRUE;
     }
 
+    PB_WriteAppLog("ConnectEngine: Service IPC returned code %d.", rc);
+
     if (rc == PB_IPC_BUSY)
     {
+        PB_WriteAppLog("ConnectEngine: Service is busy with another client.");
         if (g_isAutostart) {
             LogAdd("PECAppSvc занят при автозапуске, тихий выход.");
             return FALSE;
@@ -2662,6 +2668,7 @@ static BOOL ConnectEngine(void)
     }
     if (rc == PB_IPC_BAD_VERSION)
     {
+        PB_WriteAppLog("[ERROR] ConnectEngine: Service version mismatch.");
         MessageBoxW(NULL,
             L"Установленная служба PEC-App не совпадает по версии с данной программой.\nЗапустите установщик PEC-App заново.",
             APP_TITLE_W, MB_OK | MB_ICONERROR);
@@ -2670,6 +2677,7 @@ static BOOL ConnectEngine(void)
 
     if (rc == PB_IPC_DENIED)
     {
+        PB_WriteAppLog("[WARN] ConnectEngine: Access to PECAppSvc denied for current account.");
         if (MessageBoxW(NULL,
             L"Данная учетная запись не имеет доступа к службе PEC-App.\nЗапустить от имени администратора?",
             APP_TITLE_W, MB_YESNO | MB_ICONWARNING) != IDYES)
@@ -2679,28 +2687,78 @@ static BOOL ConnectEngine(void)
     // No service running: portable standalone mode
     if (!IsElevated())
     {
+        if (wcsstr(GetCommandLineW(), L"--elevated-child") != nullptr) {
+            PB_WriteAppLog("[ERROR] ConnectEngine: Process was spawned as --elevated-child, but still lacks elevated administrator token.");
+            MessageBoxW(NULL,
+                L"Не удалось получить права администратора для автономного режима маршрутизации.\nЗапустите PEC-App от имени администратора вручную или установите системную службу.",
+                APP_TITLE_W, MB_OK | MB_ICONERROR);
+            return FALSE;
+        }
+
+        PB_WriteAppLog("ConnectEngine: Unprivileged standalone instance. Initiating UAC self-elevation...");
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(NULL, exe, MAX_PATH);
+
+        // Crucial fix: release single-instance mutex so elevated child process does not collide
+        if (g_hSingleInstanceMutex) {
+            CloseHandle(g_hSingleInstanceMutex);
+            g_hSingleInstanceMutex = nullptr;
+            PB_WriteAppLog("ConnectEngine: Released single-instance mutex prior to spawning elevated child.");
+        }
+
+        // Pass --elevated-child and any other parameters
+        const wchar_t* cmdLine = GetCommandLineW();
+        const wchar_t* args = cmdLine;
+        if (args && *args == L'\"') {
+            args++;
+            while (*args && *args != L'\"') args++;
+            if (*args == L'\"') args++;
+        } else if (args) {
+            while (*args && *args != L' ') args++;
+        }
+        while (args && (*args == L' ' || *args == L'\t')) args++;
+
+        wchar_t childParams[1024];
+        if (args && args[0]) {
+            _snwprintf_s(childParams, 1024, _TRUNCATE, L"--elevated-child %s", args);
+        } else {
+            _snwprintf_s(childParams, 1024, _TRUNCATE, L"--elevated-child");
+        }
+
         SHELLEXECUTEINFOW sei;
         ZeroMemory(&sei, sizeof(sei));
         sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
         sei.lpVerb = L"runas";
         sei.lpFile = exe;
+        sei.lpParameters = childParams;
         sei.nShow = SW_SHOWNORMAL;
         if (ShellExecuteExW(&sei)) {
-            // Elevated copy started; exit this unprivileged process
+            PB_WriteAppLog("ConnectEngine: Elevated child process successfully spawned (PID in child). Terminating unprivileged parent.");
             return FALSE;
         }
-        // UAC canceled by user
-        MessageBoxW(NULL,
-            L"Для работы маршрутизации в автономном (портативном) режиме требуются права администратора.",
-            APP_TITLE_W, MB_OK | MB_ICONWARNING);
+
+        DWORD err = GetLastError();
+        PB_WriteAppLog("ConnectEngine: ShellExecuteExW(runas) failed (error %lu).", err);
+        if (err == ERROR_CANCELLED) {
+            MessageBoxW(NULL,
+                L"Для работы маршрутизации в автономном (портативном) режиме требуются права администратора.\n\nЗапустите PEC-App от имени администратора или установите службу через PEC-App-Setup.exe.",
+                APP_TITLE_W, MB_OK | MB_ICONWARNING);
+        } else {
+            wchar_t errMsg[512];
+            _snwprintf_s(errMsg, 512, _TRUNCATE,
+                L"Не удалось запустить процесс с правами администратора (код ошибки: %lu).\nПопробуйте запустить программу через 'Запуск от имени администратора'.",
+                err);
+            MessageBoxW(NULL, errMsg, APP_TITLE_W, MB_OK | MB_ICONERROR);
+        }
         return FALSE;
     }
 
+    PB_WriteAppLog("ConnectEngine: Elevated standalone mode. Calling PB_LoadDirect...");
     if (!PB_LoadDirect(&g_api))
     {
         const wchar_t* detail = PB_GetLastErrorMsg();
+        PB_WriteAppLog("[FATAL] ConnectEngine: PB_LoadDirect failed: %ls", detail ? detail : L"");
         wchar_t msg[1024];
         if (detail && detail[0]) {
             _snwprintf_s(msg, 1024, _TRUNCATE,
@@ -2714,6 +2772,7 @@ static BOOL ConnectEngine(void)
         return FALSE;
     }
 
+    PB_WriteAppLog("ConnectEngine: PB_LoadDirect loaded PECAppCore successfully.");
     LogAdd("Маршрутизатор PECAppCore загружен (автономный режим администратора).");
     return TRUE;
 }
@@ -2726,19 +2785,51 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     (void)hPrevInstance;
     (void)lpCmdLine;
 
+    // Early diagnostics logging
+    CheckAndRotateAppLog();
+    PB_WriteAppLog("=== PEC-App ImGui GUI starting (PID: %lu, Elevated: %s, CmdLine: %ls) ===",
+        GetCurrentProcessId(), IsElevated() ? "YES" : "NO", GetCommandLineW());
+
+    bool isElevatedChild = (wcsstr(GetCommandLineW(), L"--elevated-child") != nullptr);
+
     // Single instance named mutex check (WIN-20)
-    HANDLE hMutex = CreateMutexW(nullptr, FALSE, L"Local\\PECApp_SingleInstance_Mutex");
+    g_hSingleInstanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\PECApp_SingleInstance_Mutex");
+    if (GetLastError() == ERROR_ALREADY_EXISTS && isElevatedChild) {
+        PB_WriteAppLog("Elevated child detected; waiting for unprivileged parent to exit and release mutex...");
+        for (int retry = 0; retry < 60; retry++) {
+            Sleep(50);
+            if (g_hSingleInstanceMutex) CloseHandle(g_hSingleInstanceMutex);
+            g_hSingleInstanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\PECApp_SingleInstance_Mutex");
+            if (GetLastError() != ERROR_ALREADY_EXISTS) {
+                PB_WriteAppLog("Acquired single-instance mutex after %d ms.", (retry + 1) * 50);
+                break;
+            }
+        }
+    }
+
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        HWND existing = FindWindowW(L"PECAppImGuiMainWnd", nullptr);
-        if (!existing) {
-            existing = FindWindowW(L"PECAppNativeMainWnd", nullptr);
+        HWND existing = nullptr;
+        for (int r = 0; r < 10; r++) {
+            existing = FindWindowW(L"PECAppImGuiMainWnd", nullptr);
+            if (!existing) existing = FindWindowW(L"PECAppNativeMainWnd", nullptr);
+            if (existing) break;
+            Sleep(50);
         }
         if (existing) {
+            PB_WriteAppLog("Single instance: existing window %p found. Bringing to foreground and exiting.", existing);
             ShowWindow(existing, SW_RESTORE);
             SetForegroundWindow(existing);
+            if (g_hSingleInstanceMutex) { CloseHandle(g_hSingleInstanceMutex); g_hSingleInstanceMutex = nullptr; }
+            return 0;
         }
-        if (hMutex) CloseHandle(hMutex);
-        return 0;
+        PB_WriteAppLog("[WARN] Single instance mutex held, but no active window found.");
+        if (!isElevatedChild) {
+            MessageBoxW(NULL,
+                L"Другой экземпляр PEC-App уже запущен или завершает работу.\nЕсли окно программы не отображается, проверьте Диспетчер задач.",
+                APP_TITLE_W, MB_OK | MB_ICONWARNING);
+            if (g_hSingleInstanceMutex) { CloseHandle(g_hSingleInstanceMutex); g_hSingleInstanceMutex = nullptr; }
+            return 0;
+        }
     }
 
     // Check for --minimized or -autostart switch in command line
@@ -2792,18 +2883,20 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
                 shouldLoadCand = true;
             } else {
                 // If candidate profile sitting next to binary has different theme, server, or newer timestamp, adopt it
-                PBProfile candProf;
-                memset(&candProf, 0, sizeof(candProf));
-                PB_ProfileLoad(cand, &candProf);
-                if ((candProf.theme.hasTheme && (
-                        !g_profile.theme.hasTheme ||
-                        wcscmp(candProf.theme.preset, g_profile.theme.preset) != 0 ||
-                        wcscmp(candProf.theme.mode, g_profile.theme.mode) != 0 ||
-                        candProf.theme.primary != g_profile.theme.primary ||
-                        candProf.theme.background != g_profile.theme.background)) ||
-                    (candProf.pecSync.serverUrl[0] != 0 && wcscmp(candProf.pecSync.serverUrl, g_profile.pecSync.serverUrl) != 0) ||
-                    (CompareFileTime(&candAttr.ftLastWriteTime, &appdataAttr.ftLastWriteTime) > 0)) {
-                    shouldLoadCand = true;
+                PBProfile* pCandProf = (PBProfile*)calloc(1, sizeof(PBProfile));
+                if (pCandProf) {
+                    PB_ProfileLoad(cand, pCandProf);
+                    if ((pCandProf->theme.hasTheme && (
+                            !g_profile.theme.hasTheme ||
+                            wcscmp(pCandProf->theme.preset, g_profile.theme.preset) != 0 ||
+                            wcscmp(pCandProf->theme.mode, g_profile.theme.mode) != 0 ||
+                            pCandProf->theme.primary != g_profile.theme.primary ||
+                            pCandProf->theme.background != g_profile.theme.background)) ||
+                        (pCandProf->pecSync.serverUrl[0] != 0 && wcscmp(pCandProf->pecSync.serverUrl, g_profile.pecSync.serverUrl) != 0) ||
+                        (CompareFileTime(&candAttr.ftLastWriteTime, &appdataAttr.ftLastWriteTime) > 0)) {
+                        shouldLoadCand = true;
+                    }
+                    free(pCandProf);
                 }
             }
         }
@@ -2928,7 +3021,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         DeleteCriticalSection(&g_profileCs);
         DeleteCriticalSection(&g_latencyCs);
         WSACleanup();
-        if (hMutex) CloseHandle(hMutex);
+        if (g_hSingleInstanceMutex) { CloseHandle(g_hSingleInstanceMutex); g_hSingleInstanceMutex = nullptr; }
         return 0;
     }
 
@@ -2951,8 +3044,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         LogAdd("Не удалось запустить службу маршрутизации PECAppCore.", 2);
     }
 
-    CheckAndRotateAppLog();
-    PB_WriteAppLog("=== PEC-App ImGui GUI started (ActiveProfile: %ls) ===", g_activeProfile);
+    PB_WriteAppLog("=== PEC-App ImGui GUI engine initialized (ActiveProfile: %ls) ===", g_activeProfile);
 
     // Register Win32 Window Class
     WNDCLASSEXW wc;
@@ -3001,7 +3093,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         DeleteCriticalSection(&g_logCs);
         DeleteCriticalSection(&g_profileCs);
         WSACleanup();
-        if (hMutex) CloseHandle(hMutex);
+        if (g_hSingleInstanceMutex) { CloseHandle(g_hSingleInstanceMutex); g_hSingleInstanceMutex = nullptr; }
         return 1;
     }
 
@@ -3026,7 +3118,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         DeleteCriticalSection(&g_profileCs);
         DeleteCriticalSection(&g_latencyCs);
         WSACleanup();
-        if (hMutex) CloseHandle(hMutex);
+        if (g_hSingleInstanceMutex) { CloseHandle(g_hSingleInstanceMutex); g_hSingleInstanceMutex = nullptr; }
         return 1;
     }
 
@@ -3229,7 +3321,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     DeleteCriticalSection(&g_profileCs);
     DeleteCriticalSection(&g_latencyCs);
     WSACleanup();
-    if (hMutex) CloseHandle(hMutex);
+    if (g_hSingleInstanceMutex) { CloseHandle(g_hSingleInstanceMutex); g_hSingleInstanceMutex = nullptr; }
 
     return 0;
 }

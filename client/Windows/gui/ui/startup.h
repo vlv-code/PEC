@@ -12,34 +12,43 @@ static BOOL AnotherInstanceRunning(void)
     DWORD mySession = 0;
     ProcessIdToSessionId(self, &mySession);
 
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) return FALSE;
-    PROCESSENTRY32W pe; pe.dwSize = sizeof(pe);
-    BOOL found = FALSE;
-    if (Process32FirstW(snap, &pe))
+    BOOL isElevatedChild = (wcsstr(GetCommandLineW(), L"--elevated-child") != NULL);
+    int maxAttempts = isElevatedChild ? 30 : 1;
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++)
     {
-        do {
-            if (pe.th32ProcessID == self) continue;
-            if (_wcsicmp(pe.szExeFile, L"PEC-App.exe") == 0 ||
-                _wcsicmp(pe.szExeFile, L"PEC-CLI.exe") == 0 ||
-                _wcsicmp(pe.szExeFile, L"pbcli.exe") == 0 ||
-                _wcsicmp(pe.szExeFile, L"ProxyBridge.exe") == 0 ||
-                _wcsicmp(pe.szExeFile, L"ProxyBridge_CLI.exe") == 0)
-            {
-                DWORD otherSession = 0;
-                if (ProcessIdToSessionId(pe.th32ProcessID, &otherSession))
+        if (attempt > 0) Sleep(50);
+
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap == INVALID_HANDLE_VALUE) return FALSE;
+        PROCESSENTRY32W pe; pe.dwSize = sizeof(pe);
+        BOOL found = FALSE;
+        if (Process32FirstW(snap, &pe))
+        {
+            do {
+                if (pe.th32ProcessID == self) continue;
+                if (_wcsicmp(pe.szExeFile, L"PEC-App.exe") == 0 ||
+                    _wcsicmp(pe.szExeFile, L"PEC-CLI.exe") == 0 ||
+                    _wcsicmp(pe.szExeFile, L"pbcli.exe") == 0 ||
+                    _wcsicmp(pe.szExeFile, L"ProxyBridge.exe") == 0 ||
+                    _wcsicmp(pe.szExeFile, L"ProxyBridge_CLI.exe") == 0)
                 {
-                    if (otherSession == mySession)
+                    DWORD otherSession = 0;
+                    if (ProcessIdToSessionId(pe.th32ProcessID, &otherSession))
                     {
-                        found = TRUE;
-                        break;
+                        if (otherSession == mySession)
+                        {
+                            found = TRUE;
+                            break;
+                        }
                     }
                 }
-            }
-        } while (Process32NextW(snap, &pe));
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+        if (!found) return FALSE;
     }
-    CloseHandle(snap);
-    return found;
+    return TRUE;
 }
 
 // Run at Startup: HKCU\...\Run value. Per-user, so it needs no elevation (the engine lives in
