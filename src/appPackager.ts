@@ -1572,6 +1572,36 @@ export function extractPeVersion(buffer: Buffer): { fileVersion: string; product
   return { fileVersion: fv, productVersion: pv };
 }
 
+export function patchPeBinaryVersion(buffer: Buffer, newVersion: string): boolean {
+  const appVer = parseAppVersion(newVersion);
+  const sig = Buffer.from([0xbd, 0x04, 0xef, 0xfe]); // 0xFEEF04BD VS_FIXEDFILEINFO
+  const idx = buffer.indexOf(sig);
+  if (idx === -1 || idx + 24 > buffer.length) return false;
+
+  const ms = ((appVer.major & 0xffff) << 16) | (appVer.minor & 0xffff);
+  const ls = ((appVer.patch & 0xffff) << 16) | (appVer.build & 0xffff);
+
+  buffer.writeUInt32LE(ms, idx + 8);
+  buffer.writeUInt32LE(ls, idx + 12);
+  buffer.writeUInt32LE(ms, idx + 16);
+  buffer.writeUInt32LE(ls, idx + 20);
+  return true;
+}
+
+export function patchPeBinaryVersionInFile(filePath: string, newVersion: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  try {
+    const buf = fs.readFileSync(filePath);
+    if (patchPeBinaryVersion(buf, newVersion)) {
+      fs.writeFileSync(filePath, buf);
+      return true;
+    }
+  } catch (err) {
+    console.warn(`[appPackager] Failed patching PE version in ${filePath}:`, err);
+  }
+  return false;
+}
+
 export function getEmbeddedVersion(customWinDir?: string): string {
   const winDir = customWinDir || path.join(getTemplatesAppDir(), "windows");
   const candidates = [
@@ -2259,6 +2289,11 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
           if (!fs.existsSync(target) || fs.statSync(target).size < 500000) {
             fs.copyFileSync(validModern, target);
           }
+          patchPeBinaryVersionInFile(target, appVer.version);
+          const pristineTarget = path.join(pristineDir, "PEC-App.exe");
+          if (fs.existsSync(pristineTarget)) {
+            patchPeBinaryVersionInFile(pristineTarget, appVer.version);
+          }
           if (!builtFiles.includes("PEC-App.exe")) builtFiles.push("PEC-App.exe");
           log(`[GUI] Verified modern DirectX 11 ImGui template in place (${Math.round(fs.statSync(validModern).size / 1024)} KB)`);
         }
@@ -2935,8 +2970,16 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
       }
       try {
         const peBuf = fs.readFileSync(exePath);
-        const peVer = extractPeVersion(peBuf);
-        const peVerStr = peVer?.productVersion || peVer?.fileVersion;
+        let peVer = extractPeVersion(peBuf);
+        let peVerStr = peVer?.productVersion || peVer?.fileVersion;
+        if (!peVer || (!peVerStr?.startsWith(appVer.version) && peVerStr !== appVer.quad)) {
+          if (patchPeBinaryVersionInFile(exePath, appVer.version)) {
+            const recheckBuf = fs.readFileSync(exePath);
+            peVer = extractPeVersion(recheckBuf);
+            peVerStr = peVer?.productVersion || peVer?.fileVersion;
+            log(`[PE Integrity] ${exeName} PE version synchronized to ${peVerStr}`);
+          }
+        }
         if (!peVer || (!peVerStr?.startsWith(appVer.version) && peVerStr !== appVer.quad)) {
           integrityIssues.push(`${exeName} version mismatch (got ${peVerStr || "none"}, expected ${appVer.version})`);
         } else {
