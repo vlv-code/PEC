@@ -1262,6 +1262,28 @@ static bool RenderSyncButton(const char* id, const char* tooltip)
     return clicked;
 }
 
+// Dynamic toolbar button flow helpers (wrap to next row if window is narrow)
+static void FlowSameLine(float nextItemWidth, float spacing = -1.0f)
+{
+    float sp = (spacing >= 0.0f) ? spacing : ImGui::GetStyle().ItemSpacing.x;
+    if (ImGui::GetContentRegionAvail().x >= nextItemWidth + sp) {
+        if (spacing >= 0.0f) ImGui::SameLine(0, spacing);
+        else ImGui::SameLine();
+    }
+}
+
+static void FlowButtonSameLine(const char* label, float spacing = -1.0f)
+{
+    float w = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    FlowSameLine(w, spacing);
+}
+
+static void FlowCheckboxSameLine(const char* label, float spacing = -1.0f)
+{
+    float w = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label).x;
+    FlowSameLine(w, spacing);
+}
+
 static void RenderHeader()
 {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 6.0f));
@@ -1328,8 +1350,17 @@ static void RenderHeader()
         }
     }
 
-    // Language Selector with country flags (RU & EN only)
-    ImGui::SameLine(0, 12.0f);
+    // Right group: [RU] [EN] [Sync Button] [Status Toggle Button]
+    float btnWidth = 180.0f;
+    float syncBtnWidth = 28.0f;
+    float flagBtnWidth = 28.0f;
+    float gap = 8.0f;
+    float totalRightWidth = (flagBtnWidth * 2.0f + 4.0f) + gap + syncBtnWidth + gap + btnWidth;
+    float rightOffset = ImGui::GetWindowWidth() - totalRightWidth - 16.0f;
+    if (rightOffset > ImGui::GetCursorPosX()) ImGui::SameLine(rightOffset);
+    else ImGui::SameLine(0, 10.0f);
+
+    // Language Selector with country flags (RU & EN only) placed immediately to the left of sync button
     if (RenderFlagButton("##btnLangRU", 0, g_lang == 0)) {
         g_lang = 0;
         ProfileLock lk;
@@ -1346,13 +1377,7 @@ static void RenderHeader()
         UpdateTitle(g_hWnd);
     }
 
-    // Right group: Vector Sync Button + Status Toggle Button
-    float btnWidth = 180.0f;
-    float syncBtnWidth = 28.0f;
-    float gap = 8.0f;
-    float rightOffset = ImGui::GetWindowWidth() - btnWidth - syncBtnWidth - gap - 16.0f;
-    if (rightOffset > ImGui::GetCursorPosX()) ImGui::SameLine(rightOffset);
-    else ImGui::SameLine(0, 10.0f);
+    ImGui::SameLine(0, gap);
 
     if (RenderSyncButton("##forcesyncheader", T(S_TOOLTIP_SYNC_BTN))) {
         PecSyncTriggerNow();
@@ -1401,8 +1426,10 @@ static char g_ruleSearch[128] = "";
 static void RenderRulesTab()
 {
     ProfileLock lock;
+    const float SEARCH_INPUT_WIDTH = 200.0f;
+
     // Search input & match counter
-    ImGui::PushItemWidth(320.0f);
+    ImGui::PushItemWidth(SEARCH_INPUT_WIDTH);
     if (g_focusSearch) {
         ImGui::SetKeyboardFocusHere();
         g_focusSearch = false;
@@ -1410,7 +1437,7 @@ static void RenderRulesTab()
     ImGui::InputTextWithHint("##rulesearch", T(S_RULES_SEARCH), g_ruleSearch, sizeof(g_ruleSearch));
     ImGui::PopItemWidth();
 
-    ImGui::SameLine();
+    FlowButtonSameLine(T(S_BTN_CLEARSEARCH));
     if (ImGui::Button(T(S_BTN_CLEARSEARCH))) {
         g_ruleSearch[0] = 0;
     }
@@ -1432,20 +1459,22 @@ static void RenderRulesTab()
         }
     }
 
-    ImGui::SameLine(0, 16.0f);
+    FlowSameLine(60.0f, 16.0f);
+    ImGui::AlignTextToFramePadding();
     ImGui::TextColored(PecTheme::TextMuted, "%d / %d", matchCount, g_profile.ruleCount);
 
     ImGui::Spacing();
 
-    // Toolbar Buttons
+    // Toolbar Buttons (dynamic flow: wraps to second row when window is narrow)
     char addRuleBtn[64];
     snprintf(addRuleBtn, sizeof(addRuleBtn), "+ %s", T(S_BTN_ADDRULE));
     if (ImGui::Button(addRuleBtn)) {
         OpenRuleModal(-1);
     }
-    ImGui::SameLine();
+
     // Disable ▲/▼ when search filter is active (WIN-14)
     bool searchActive = (g_ruleSearch[0] != 0);
+    FlowButtonSameLine(u8"▲");
     ImGui::BeginDisabled(searchActive || g_selectedRuleIdx <= 0 || g_selectedRuleIdx >= g_profile.ruleCount);
     if (ImGui::Button(u8"▲") && g_selectedRuleIdx > 0 && g_selectedRuleIdx < g_profile.ruleCount) {
         PBRule temp = g_profile.rule[g_selectedRuleIdx];
@@ -1458,7 +1487,7 @@ static void RenderRulesTab()
     }
     ImGui::EndDisabled();
 
-    ImGui::SameLine();
+    FlowButtonSameLine(u8"▼");
     ImGui::BeginDisabled(searchActive || g_selectedRuleIdx < 0 || g_selectedRuleIdx >= g_profile.ruleCount - 1);
     if (ImGui::Button(u8"▼") && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount - 1) {
         PBRule temp = g_profile.rule[g_selectedRuleIdx];
@@ -1471,14 +1500,15 @@ static void RenderRulesTab()
     }
     ImGui::EndDisabled();
 
-    ImGui::SameLine();
     // Delete rule with confirmation (WIN-03)
+    FlowButtonSameLine(T(S_BTN_REMOVE));
     ImGui::BeginDisabled(g_selectedRuleIdx < 0 || g_selectedRuleIdx >= g_profile.ruleCount);
     if (ImGui::Button(T(S_BTN_REMOVE))) {
         ImGui::OpenPopup("DeleteRuleConfirm");
     }
     ImGui::EndDisabled();
-    ImGui::SameLine();
+
+    FlowButtonSameLine(T(S_BTN_CLONE));
     if (ImGui::Button(T(S_BTN_CLONE)) && g_selectedRuleIdx >= 0 && g_selectedRuleIdx < g_profile.ruleCount && g_profile.ruleCount < PB_MAX_RULE) {
         PBRule clone = g_profile.rule[g_selectedRuleIdx];
         clone.nativeId = 0;
@@ -1518,6 +1548,7 @@ static void RenderRulesTab()
             }
 
             ImGui::TableNextRow();
+            float rowCtrlH = ImGui::GetFrameHeight();
 
             // Column 0: Row number + Checkbox toggle + Pencil edit icon in a single aligned column
             ImGui::TableSetColumnIndex(0);
@@ -1546,7 +1577,7 @@ static void RenderRulesTab()
             ImGui::SameLine(0, 6.0f);
             char editBtn[32];
             snprintf(editBtn, sizeof(editBtn), u8"✎##editrule%d", i);
-            if (ImGui::Button(editBtn, ImVec2(26.0f, 22.0f))) {
+            if (ImGui::Button(editBtn, ImVec2(rowCtrlH, rowCtrlH))) {
                 g_selectedRuleIdx = i;
                 OpenRuleModal(i);
             }
@@ -1787,7 +1818,8 @@ static bool g_connAutoScroll = true;
 static void RenderConnectionsTab()
 {
     // Search input
-    ImGui::PushItemWidth(300.0f);
+    const float SEARCH_INPUT_WIDTH = 200.0f;
+    ImGui::PushItemWidth(SEARCH_INPUT_WIDTH);
     if (g_focusSearch) {
         ImGui::SetKeyboardFocusHere();
         g_focusSearch = false;
@@ -1795,18 +1827,18 @@ static void RenderConnectionsTab()
     ImGui::InputTextWithHint("##connsearch", T(S_SEARCH_CUE), g_connSearch, sizeof(g_connSearch));
     ImGui::PopItemWidth();
 
-    ImGui::SameLine();
+    FlowButtonSameLine(T(S_BTN_CLEARSEARCH));
     if (ImGui::Button(T(S_BTN_CLEARSEARCH))) {
         g_connSearch[0] = 0;
     }
 
-    ImGui::SameLine(0, 16.0f);
+    FlowCheckboxSameLine(T(S_CHK_AUTOSCROLL), 16.0f);
     ImGui::Checkbox(T(S_CHK_AUTOSCROLL), &g_connAutoScroll);
 
-    ImGui::SameLine();
+    FlowCheckboxSameLine(T(S_M_PROXIED_ONLY));
     ImGui::Checkbox(T(S_M_PROXIED_ONLY), &g_proxiedOnly);
 
-    ImGui::SameLine();
+    FlowButtonSameLine(T(S_BTN_CLEARLOGS));
     if (ImGui::Button(T(S_BTN_CLEARLOGS))) {
         g_connBuffer.Clear();
         if (g_api.ClearConnectionLogs) g_api.ClearConnectionLogs();
@@ -1841,7 +1873,8 @@ static void RenderConnectionsTab()
         visibleIndices.push_back(i);
     }
 
-    ImGui::SameLine(0, 16.0f);
+    FlowSameLine(60.0f, 16.0f);
+    ImGui::AlignTextToFramePadding();
     ImGui::TextColored(PecTheme::TextMuted, "%zu / %zu", visibleIndices.size(), snapshot.size());
 
     ImGui::Spacing();
@@ -1921,9 +1954,7 @@ static void RenderConnectionsTab()
         }
 
         if (g_connAutoScroll) {
-            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 30.0f) {
-                ImGui::SetScrollHereY(1.0f);
-            }
+            ImGui::SetScrollHereY(1.0f);
         }
 
         ImGui::EndTable();
@@ -1939,7 +1970,8 @@ static bool g_logAutoScroll = true;
 static void RenderEngineLogsTab()
 {
     // Search input
-    ImGui::PushItemWidth(260.0f);
+    const float SEARCH_INPUT_WIDTH = 200.0f;
+    ImGui::PushItemWidth(SEARCH_INPUT_WIDTH);
     if (g_focusSearch) {
         ImGui::SetKeyboardFocusHere();
         g_focusSearch = false;
@@ -1947,30 +1979,30 @@ static void RenderEngineLogsTab()
     ImGui::InputTextWithHint("##englogsearch", T(S_SEARCH_CUE), g_logSearch, sizeof(g_logSearch));
     ImGui::PopItemWidth();
 
-    ImGui::SameLine();
+    FlowButtonSameLine(T(S_BTN_CLEARSEARCH));
     if (ImGui::Button(T(S_BTN_CLEARSEARCH))) {
         g_logSearch[0] = 0;
     }
 
-    ImGui::SameLine();
+    FlowCheckboxSameLine(T(S_CHK_AUTOSCROLL));
     ImGui::Checkbox(T(S_CHK_AUTOSCROLL), &g_logAutoScroll);
 
-    ImGui::SameLine();
+    FlowButtonSameLine(T(S_BTN_CLEARLOGS));
     if (ImGui::Button(T(S_BTN_CLEARLOGS))) {
         EnterCriticalSection(&g_logCs);
         g_logEntries.clear();
         LeaveCriticalSection(&g_logCs);
     }
 
-    ImGui::SameLine();
+    FlowButtonSameLine(T(S_LOG_FOLDER));
     if (ImGui::Button(T(S_LOG_FOLDER))) {
         OpenLogsFolder();
     }
 
-    ImGui::SameLine();
     char copyAllBtnLabel[128];
     // Button label: Скопировать лог##copylogall
     snprintf(copyAllBtnLabel, sizeof(copyAllBtnLabel), "%s##copylogall", T(S_LOG_COPY_ALL));
+    FlowButtonSameLine(copyAllBtnLabel);
     if (ImGui::Button(copyAllBtnLabel)) {
         EnterCriticalSection(&g_logCs);
         std::string allLogs;
@@ -2053,9 +2085,7 @@ static void RenderEngineLogsTab()
     LeaveCriticalSection(&g_logCs);
 
     if (g_logAutoScroll) {
-        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 30.0f) {
-            ImGui::SetScrollHereY(1.0f);
-        }
+        ImGui::SetScrollHereY(1.0f);
     }
 
     ImGui::EndChild();
@@ -2078,7 +2108,7 @@ static void RenderProxiesTab()
     if (ImGui::Button(addPrx)) {
         OpenProxyModal(-1);
     }
-    ImGui::SameLine();
+    FlowButtonSameLine(delPrx);
     bool canDeleteProxy = (g_profile.cfgCount > 1);
     ImGui::BeginDisabled(!canDeleteProxy || g_selectedProxyIdx < 0 || g_selectedProxyIdx >= g_profile.cfgCount);
     if (ImGui::Button(delPrx)) {
@@ -2089,18 +2119,11 @@ static void RenderProxiesTab()
         ImGui::SetTooltip("%s", T(S_ERR_LAST_PROXY));
     }
 
-    ImGui::SameLine();
+    FlowButtonSameLine(testPrx);
     if (ImGui::Button(testPrx)) {
         for (int i = 0; i < g_profile.cfgCount; i++) {
             TestProxyLatencyAsync(i);
         }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button(T(S_BTN_SYNC_SERVER))) { // Синхронизировать с сервером
-        PecSyncTriggerNow();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", T(S_TOOLTIP_SYNC_BTN));
     }
 
     ImGui::Spacing();
@@ -2123,6 +2146,7 @@ static void RenderProxiesTab()
         for (int i = 0; i < g_profile.cfgCount; i++) {
             PBConfig* c = &g_profile.cfg[i];
             ImGui::TableNextRow();
+            float rowCtrlH = ImGui::GetFrameHeight();
 
             // Column 0: Row index + Default proxy toggle + Pencil edit icon in a single aligned column
             ImGui::TableSetColumnIndex(0);
@@ -2146,7 +2170,7 @@ static void RenderProxiesTab()
             ImGui::SameLine(0, 6.0f);
             char editBtn[32];
             snprintf(editBtn, sizeof(editBtn), u8"✎##editproxy%d", i);
-            if (ImGui::Button(editBtn, ImVec2(26.0f, 22.0f))) {
+            if (ImGui::Button(editBtn, ImVec2(rowCtrlH, rowCtrlH))) {
                 g_selectedProxyIdx = i;
                 OpenProxyModal(i);
             }
@@ -2867,16 +2891,22 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 
         wchar_t appdata[MAX_PATH];
         wchar_t appdataPath[MAX_PATH];
+        wchar_t appdataProfile[MAX_PATH];
+        appdataPath[0] = 0;
+        appdataProfile[0] = 0;
         if (GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH)) {
             _snwprintf_s(appdataPath, MAX_PATH, _TRUNCATE, L"%s\\PEC-App\\profiles\\Default.pbprofile", appdata);
-        } else {
-            appdataPath[0] = 0;
+            _snwprintf_s(appdataProfile, MAX_PATH, _TRUNCATE, L"%s\\PEC-App\\profiles\\pec_profile.pbprofile", appdata);
         }
 
         bool shouldLoadCand = false;
         WIN32_FILE_ATTRIBUTE_DATA candAttr, appdataAttr;
         bool candExists = (GetFileAttributesExW(cand, GetFileExInfoStandard, &candAttr) != 0);
         bool appdataExists = (appdataPath[0] && GetFileAttributesExW(appdataPath, GetFileExInfoStandard, &appdataAttr) != 0);
+        if (!appdataExists && appdataProfile[0] && GetFileAttributesExW(appdataProfile, GetFileExInfoStandard, &appdataAttr) != 0) {
+            appdataExists = true;
+            lstrcpyW(appdataPath, appdataProfile);
+        }
 
         if (candExists) {
             if (!appdataExists || (g_profile.cfgCount == 0 && g_profile.ruleCount == 0)) {
@@ -2906,6 +2936,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
             lstrcpynW(g_activeProfile, L"Default", PB_NAME_MAX);
             PB_SetActiveProfile(g_activeProfile);
             PB_ProfileSave(g_activeProfile, &g_profile);
+            PB_ProfileSave(L"pec_profile", &g_profile);
         } else if (!appdataExists) {
             PB_ProfileDefaults(&g_profile, g_activeProfile);
         }

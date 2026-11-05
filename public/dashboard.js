@@ -5346,19 +5346,22 @@
       const cardEl = document.getElementById('appThemeCard');
 
       if (colorEl) colorEl.value = palette.primary;
-      if (currentAppThemeMode === 'light' || presetKey === 'minimal-light' || presetKey === 'enterprise-light') {
-        if ((presetKey === 'minimal-light' || presetKey === 'enterprise-light') && currentAppThemeMode !== 'light') {
-          currentAppThemeMode = 'light';
-          const btnDark = document.getElementById('btnAppModeDark');
-          const btnLight = document.getElementById('btnAppModeLight');
-          if (btnDark) btnDark.classList.remove('active');
-          if (btnLight) btnLight.classList.add('active');
-        }
+      if (presetKey === 'minimal-light' || presetKey === 'enterprise-light') {
+        currentAppThemeMode = 'light';
+        const btnDark = document.getElementById('btnAppModeDark');
+        const btnLight = document.getElementById('btnAppModeLight');
+        if (btnDark) btnDark.classList.remove('active');
+        if (btnLight) btnLight.classList.add('active');
         if (bgEl) bgEl.value = palette.lightBackground || '#f8fafc';
         if (cardEl) cardEl.value = palette.lightCard || '#ffffff';
       } else {
-        if (bgEl) bgEl.value = palette.background;
-        if (cardEl) cardEl.value = palette.card;
+        currentAppThemeMode = 'dark';
+        const btnDark = document.getElementById('btnAppModeDark');
+        const btnLight = document.getElementById('btnAppModeLight');
+        if (btnDark) btnDark.classList.add('active');
+        if (btnLight) btnLight.classList.remove('active');
+        if (bgEl) bgEl.value = palette.background || '#0b1120';
+        if (cardEl) cardEl.value = palette.card || '#131d36';
       }
 
       updateAppLivePreview();
