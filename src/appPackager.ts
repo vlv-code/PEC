@@ -432,8 +432,8 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
       intervalMinutes: cfg.syncIntervalMinutes || 15,
     },
     Theme: (() => {
-      const mode = cfg.defaultThemeMode || (cfg.presetStyle === "enterprise-light" || cfg.presetStyle === "minimal-light" ? "light" : "dark");
-      const isLightMode = mode === "light" || (mode !== "dark" && (cfg.presetStyle === "enterprise-light" || cfg.presetStyle === "minimal-light" || (cfg.presetStyle as string) === "light"));
+      const mode = cfg.defaultThemeMode || "dark";
+      const isLightMode = mode === "light";
       let bg = cfg.themeBackground || (isLightMode ? "#f1f5f9" : "#0b1120");
       let card = cfg.themeCard || (isLightMode ? "#ffffff" : "#131d36");
       if (isLightMode) {
@@ -452,7 +452,7 @@ export function buildAppProfile(cfg: AppBuildConfig, baseUrl: string): object {
         }
       }
       return {
-        preset: cfg.presetStyle || (isLightMode ? "enterprise-light" : "cyber-blue"),
+        preset: cfg.presetStyle || "cyber-blue",
         layout: cfg.uiLayout || "console",
         mode,
         primary: cfg.themeColor || (isLightMode ? "#2563eb" : "#38bdf8"),

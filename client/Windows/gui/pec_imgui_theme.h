@@ -102,12 +102,12 @@ inline void ApplyProfileTheme(const PBProfile* prof, ImGuiStyle* dst = nullptr)
         }
     }
 
-    if (mode == "light" || hasLightBg) {
-        PecTheme::IsLightMode = true;
-    } else if (mode == "dark") {
+    if (mode == "dark") {
         PecTheme::IsLightMode = false;
+    } else if (mode == "light" || hasLightBg) {
+        PecTheme::IsLightMode = true;
     } else {
-        PecTheme::IsLightMode = (preset == "enterprise-light" || preset == "minimal-light" || preset == "light");
+        PecTheme::IsLightMode = false;
     }
 
     if (PecTheme::IsLightMode) {

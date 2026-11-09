@@ -33,18 +33,15 @@ static void ApplyProfileTheme(const PBTheme* t, HWND hwnd)
 {
     if (!t || !t->hasTheme) return;
 
-    // Detect light mode: explicit mode string, preset name, or background luminance > 180
+    // Detect light mode: explicit mode string or background luminance > 180
     if (_wcsicmp(t->mode, L"dark") == 0) {
         g_isLightMode = FALSE;
     } else if (_wcsicmp(t->mode, L"light") == 0) {
         g_isLightMode = TRUE;
     } else {
-        g_isLightMode = (_wcsicmp(t->preset, L"enterprise-light") == 0 ||
-                         _wcsicmp(t->preset, L"minimal-light") == 0 ||
-                         _wcsicmp(t->preset, L"light") == 0 ||
-                         (GetRValue(t->background) > 180 &&
-                          GetGValue(t->background) > 180 &&
-                          GetBValue(t->background) > 180));
+        g_isLightMode = (GetRValue(t->background) > 180 &&
+                         GetGValue(t->background) > 180 &&
+                         GetBValue(t->background) > 180);
     }
 
     g_colAccent = t->primary;

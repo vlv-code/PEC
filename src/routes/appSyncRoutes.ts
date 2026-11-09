@@ -332,8 +332,8 @@ export function createAppSyncRouter(
       }
 
       const effectivePreset = assignedProfile?.colorPalette || appBldCfg.presetStyle || "cyber-blue";
-      const effectiveMode = assignedProfile?.defaultThemeMode || appBldCfg.defaultThemeMode || (effectivePreset === "enterprise-light" || effectivePreset === "minimal-light" ? "light" : "dark");
-      const isLightMode = effectiveMode === "light" || effectivePreset === "enterprise-light" || effectivePreset === "minimal-light" || (effectivePreset as string) === "light";
+      const effectiveMode = assignedProfile?.defaultThemeMode || appBldCfg.defaultThemeMode || "dark";
+      const isLightMode = effectiveMode === "light";
       let syncBg = assignedProfile?.themeBackground || appBldCfg.themeBackground || (isLightMode ? "#f1f5f9" : "#0b1120");
       let syncCard = assignedProfile?.themeCard || appBldCfg.themeCard || (isLightMode ? "#ffffff" : "#131d36");
       if (isLightMode) {
@@ -342,6 +342,13 @@ export function createAppSyncRouter(
         }
         if (/^#0[0-9a-f]{5}$/i.test(syncCard) || /^#1[0-9a-f]{5}$/i.test(syncCard) || /^#2[0-4][0-9a-f]{4}$/i.test(syncCard)) {
           syncCard = "#ffffff";
+        }
+      } else {
+        if (/^#f[0-9a-f]{5}$/i.test(syncBg) || /^#e[0-9a-f]{5}$/i.test(syncBg)) {
+          syncBg = "#0b1120";
+        }
+        if (/^#f[0-9a-f]{5}$/i.test(syncCard) || /^#e[0-9a-f]{5}$/i.test(syncCard) || syncCard.toLowerCase() === "#ffffff") {
+          syncCard = "#131d36";
         }
       }
 
