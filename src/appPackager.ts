@@ -2251,6 +2251,7 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
     } else {
       const mainImgui = path.join(guiDir, "main_imgui.cpp");
       let compiledModern = false;
+      let guiErrorDetails = "";
       if (fs.existsSync(mainImgui)) {
         log("[GUI] Compiling PEC-App DirectX 11 ImGui GUI with x86_64-w64-mingw32-g++...");
         let mingwGuiCmd = MINGW_GUI_CMD.replace(/^x86_64-w64-mingw32-g\+\+/, `"${gxxBin}"`);
@@ -2265,7 +2266,6 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
             mingwGuiCmd = mingwGuiCmd.replace("imgui/imgui*.cpp", imguiFiles);
           }
         }
-        let guiErrorDetails = "";
         try {
           const mingwGuiCmdDirect = mingwGuiCmd.replace("-ld3dcompiler", "-ld3dcompiler_47");
           child_process.execSync(mingwGuiCmdDirect, { cwd: guiDir, stdio: "pipe" });

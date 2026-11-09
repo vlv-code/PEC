@@ -2131,6 +2131,13 @@ static void RenderProxiesTab()
             TestProxyLatencyAsync(i);
         }
     }
+    FlowButtonSameLine(T(S_BTN_SYNC_SERVER));
+    if (ImGui::Button(T(S_BTN_SYNC_SERVER))) { // Синхронизировать с сервером
+        PecSyncTriggerNow();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", T(S_TOOLTIP_SYNC_BTN));
+    }
 
     ImGui::Spacing();
 
@@ -2911,7 +2918,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         bool appdataExists = (appdataPath[0] && GetFileAttributesExW(appdataPath, GetFileExInfoStandard, &appdataAttr) != 0);
         if (!appdataExists && appdataProfile[0] && GetFileAttributesExW(appdataProfile, GetFileExInfoStandard, &appdataAttr) != 0) {
             appdataExists = true;
-            lstrcpyW(appdataPath, appdataProfile);
+            StringCchCopyW(appdataPath, MAX_PATH, appdataProfile);
         }
 
         if (candExists) {
