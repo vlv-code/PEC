@@ -4920,7 +4920,7 @@
           body: JSON.stringify(config)
         });
         const data = await res.json().catch(() => ({}));
-        if (res.ok && (data.ok || data.name || data.version)) {
+        if (res.ok && (data.ok || data.name || data.version || (data.ok !== false && !data.error))) {
           isAppStudioDirty = false;
           if (!silent) {
             toast(currentLang === 'ru' ? 'Настройки приложения успешно сохранены!' : 'App Studio settings saved successfully!', 'success');
@@ -5003,6 +5003,12 @@
       toast(currentLang === 'ru' ? 'Запуск сборки бинарников PEC-App...' : 'Starting binary build...', 'info');
 
       try {
+        const saved = await saveAppStudioConfigAction(true);
+        if (!saved) {
+          if (btn) btn.disabled = false;
+          return;
+        }
+
         const startTime = Date.now();
         const verEl = document.getElementById('appBuildVersion');
         const targetVer = verEl ? verEl.value.trim() : '';
@@ -5368,12 +5374,14 @@
     }
 
     function onAppPresetChange(val) {
+      isAppStudioDirty = true;
       setAppPresetTheme(val);
     }
 
     function setAppThemeMode(mode) {
       if (mode !== 'light' && mode !== 'dark') mode = 'dark';
       currentAppThemeMode = mode;
+      isAppStudioDirty = true;
 
       const btnDark = document.getElementById('btnAppModeDark');
       const btnLight = document.getElementById('btnAppModeLight');
@@ -5397,6 +5405,7 @@
     }
 
     function onAppCustomColorChange() {
+      isAppStudioDirty = true;
       updateAppLivePreview();
     }
 

@@ -2620,6 +2620,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             ProfileLock lock;
             PB_ProfileLoad(g_activeProfile, &g_profile);
             ApplyProfileTheme(&g_profile);
+            BOOL dm = !PecTheme::IsLightMode;
+            DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dm, sizeof(dm));
+            DwmSetWindowAttribute(hWnd, 19, &dm, sizeof(dm));
         }
         UnapplyProfile();
         ApplyConfigs();
@@ -3176,6 +3179,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     {
         ProfileLock lock;
         ApplyProfileTheme(&g_profile);
+        BOOL darkMode = !PecTheme::IsLightMode;
+        DwmSetWindowAttribute(g_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
+        DwmSetWindowAttribute(g_hWnd, 19, &darkMode, sizeof(darkMode));
     }
 
     // Query DPI and apply High-DPI style and font scaling

@@ -93,10 +93,19 @@ inline void ApplyProfileTheme(const PBProfile* prof, ImGuiStyle* dst = nullptr)
         if (lBuf[0]) layout = lBuf;
     }
 
-    if (mode == "dark") {
-        PecTheme::IsLightMode = false;
-    } else if (mode == "light") {
+    bool hasLightBg = false;
+    if (prof && prof->theme.hasTheme && prof->theme.background) {
+        COLORREF bg = prof->theme.background;
+        float lum = (GetRValue(bg) * 0.299f + GetGValue(bg) * 0.587f + GetBValue(bg) * 0.114f);
+        if (lum > 175.0f || (GetRValue(bg) > 180 && GetGValue(bg) > 180 && GetBValue(bg) > 180)) {
+            hasLightBg = true;
+        }
+    }
+
+    if (mode == "light" || hasLightBg) {
         PecTheme::IsLightMode = true;
+    } else if (mode == "dark") {
+        PecTheme::IsLightMode = false;
     } else {
         PecTheme::IsLightMode = (preset == "enterprise-light" || preset == "minimal-light" || preset == "light");
     }

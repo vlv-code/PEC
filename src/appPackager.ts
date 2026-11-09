@@ -2306,7 +2306,7 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
             compilerName,
             error: errMsg,
           },
-          toolchain,
+          toolchain: getToolchainDiagnostics(),
           builtFiles,
           message: `MinGW GUI compilation failed: ${errMsg}`,
           buildLog,
@@ -2939,12 +2939,13 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
     }
   }
 
+  const defaultProfile = path.join(winTemplatesDir, "pec_profile.pbprofile");
+  try {
+    fs.writeFileSync(defaultProfile, JSON.stringify(buildAppProfile(cfg, "http://127.0.0.1:3000"), null, 2));
+  } catch {}
+
   if (toolchain.hasWixl) {
     try {
-      const defaultProfile = path.join(winTemplatesDir, "pec_profile.pbprofile");
-      if (!fs.existsSync(defaultProfile)) {
-        fs.writeFileSync(defaultProfile, JSON.stringify(buildAppProfile(cfg, "http://127.0.0.1:3000"), null, 2));
-      }
       const msiRes = buildMsiPackage(cfg, "http://127.0.0.1:3000", winTemplatesDir, destMsi);
       if (msiRes.success && fs.existsSync(destMsi)) {
         if (!builtFiles.includes("PEC-App.msi")) builtFiles.push("PEC-App.msi");

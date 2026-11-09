@@ -288,9 +288,20 @@ static void ensure_per_user_copy(const wchar_t* src, wchar_t* out, int cch)
 
     wchar_t userCopy[MAX_PATH];
     _snwprintf_s(userCopy, MAX_PATH, _TRUNCATE, L"%s\\%s", d, fn);
-    if (GetFileAttributesW(userCopy) == INVALID_FILE_ATTRIBUTES)
+
+    WIN32_FILE_ATTRIBUTE_DATA srcAttr, dstAttr;
+    BOOL shouldCopy = (GetFileAttributesW(userCopy) == INVALID_FILE_ATTRIBUTES);
+    if (!shouldCopy && GetFileAttributesExW(src, GetFileExInfoStandard, &srcAttr) &&
+        GetFileAttributesExW(userCopy, GetFileExInfoStandard, &dstAttr))
     {
-        CopyFileW(src, userCopy, TRUE);
+        if (CompareFileTime(&srcAttr.ftLastWriteTime, &dstAttr.ftLastWriteTime) > 0)
+        {
+            shouldCopy = TRUE;
+        }
+    }
+    if (shouldCopy)
+    {
+        CopyFileW(src, userCopy, FALSE);
     }
     _snwprintf_s(out, cch, _TRUNCATE, L"%s", userCopy);
 }
@@ -301,7 +312,7 @@ static void profile_path(const wchar_t* name, wchar_t* out, int cch)
     {
         if (GetFileAttributesW(name) != INVALID_FILE_ATTRIBUTES)
         {
-            ensure_per_user_copy(name, out, cch);
+            _snwprintf_s(out, cch, _TRUNCATE, L"%s", name);
             return;
         }
     }
