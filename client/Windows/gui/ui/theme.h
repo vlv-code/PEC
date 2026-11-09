@@ -70,11 +70,17 @@ static void ApplyProfileTheme(const PBTheme* t, HWND hwnd)
     }
     else
     {
+        // Guard against stale light background/card in dark mode
+        if (GetRValue(t->background) > 180 && GetGValue(t->background) > 180 && GetBValue(t->background) > 180)
+            g_colBg = RGB(0x0B, 0x11, 0x20);
+        if (GetRValue(t->card) > 180 && GetGValue(t->card) > 180 && GetBValue(t->card) > 180)
+            g_colPanel = RGB(0x13, 0x1D, 0x36);
+
         g_colText    = RGB(0xD4, 0xD4, 0xD4);
         g_colDim     = RGB(0x8A, 0x8A, 0x8A);
-        g_colTabSel  = t->background;
-        g_colTab     = t->card;
-        g_colMenu    = t->card;
+        g_colTabSel  = g_colBg;
+        g_colTab     = g_colPanel;
+        g_colMenu    = g_colPanel;
 
         BYTE r = (BYTE)min(255, (int)GetRValue(t->card) + 20);
         BYTE g = (BYTE)min(255, (int)GetGValue(t->card) + 20);

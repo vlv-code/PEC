@@ -4271,9 +4271,9 @@
       },
       'enterprise-light': {
         primary: '#2563eb',
-        background: '#f1f5f9',
-        card: '#ffffff',
-        text: '#0f172a',
+        background: '#0b1120',
+        card: '#131d36',
+        text: '#f8fafc',
         lightBackground: '#f1f5f9',
         lightCard: '#ffffff'
       },
@@ -5884,21 +5884,13 @@
       emerald: { accent: '#34d399', bg: '#06130d', card: '#0b1f16', lightBg: '#f0fdf4', lightCard: '#ffffff', style: 'emerald-secops' },
       amber: { accent: '#f59e0b', bg: '#1c1307', card: '#261805', lightBg: '#fffbeb', lightCard: '#ffffff', style: 'sunset-amber' },
       sunset: { accent: '#f59e0b', bg: '#1c1307', card: '#261805', lightBg: '#fffbeb', lightCard: '#ffffff', style: 'sunset-amber' },
-      light: { accent: '#2563eb', bg: '#f1f5f9', card: '#ffffff', lightBg: '#f1f5f9', lightCard: '#ffffff', style: 'enterprise-light' }
+      light: { accent: '#2563eb', bg: '#0b1120', card: '#131d36', lightBg: '#f1f5f9', lightCard: '#ffffff', style: 'enterprise-light' }
     };
 
     function setAppPalette(paletteKey, isUserAction = true) {
       const p = APP_PALETTES[paletteKey];
       if (!p) return;
       if (isUserAction) isAppStudioDirty = true;
-
-      if (paletteKey === 'light') {
-        currentAppThemeMode = 'light';
-        const btnDark = document.getElementById('btnAppModeDark');
-        const btnLight = document.getElementById('btnAppModeLight');
-        if (btnDark) btnDark.classList.remove('active');
-        if (btnLight) btnLight.classList.add('active');
-      }
 
       const colorEl = document.getElementById('appThemeColor');
       const bgEl = document.getElementById('appThemeBackground');

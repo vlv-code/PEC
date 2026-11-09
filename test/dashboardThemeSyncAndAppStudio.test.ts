@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { renderDashboardHtml } from "../src/views/dashboardView.js";
 import { createAppBuilderRouter } from "../src/routes/appBuilderRoutes.js";
 import { createTokenAuthMiddleware } from "../src/middleware/security.js";
-import { getAppBuildConfig } from "../src/appPackager.js";
+import { getAppBuildConfig, buildAppProfile } from "../src/appPackager.js";
 import { TEST_TOKEN, TEST_ADMIN_TOKEN } from "./helpers/setup.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -165,4 +165,57 @@ test("appBuilderRoutes: validates and persists syncIntervalMinutes", async () =>
     assert.equal(cfg.syncIntervalMinutes, 30);
     assert.equal(cfg.customIconDataUrl, samplePng);
   });
+});
+
+test("Theme synchronization and profile builder: handles all preset and mode combinations cleanly", () => {
+  const js = fs.readFileSync(path.join(__dirname, "../public/dashboard.js"), "utf-8");
+
+  // Verify APP_THEME_PRESETS enterprise-light has dark fallback
+  assert.ok(js.includes("'enterprise-light': {"), "enterprise-light must be defined in APP_THEME_PRESETS");
+  assert.ok(js.includes("background: '#0b1120'"), "enterprise-light must have dark background");
+  assert.ok(js.includes("card: '#131d36'"), "enterprise-light must have dark card");
+
+  // Verify APP_PALETTES light has dark fallback
+  assert.ok(
+    /light:\s*\{\s*accent:\s*'#2563eb',\s*bg:\s*'#0b1120',\s*card:\s*'#131d36'/.test(js),
+    "APP_PALETTES.light must have dark bg and card"
+  );
+
+  // Test combinations with buildAppProfile
+  const presets = [
+    "cyber-blue",
+    "dark-obsidian",
+    "nordic-arctic",
+    "emerald-secops",
+    "enterprise-light",
+    "sunset-amber"
+  ] as const;
+
+  for (const preset of presets) {
+    // 1. Dark mode
+    const darkCfg = {
+      ...getAppBuildConfig(),
+      presetStyle: preset,
+      defaultThemeMode: "dark" as const,
+      themeBackground: "#0b1120",
+      themeCard: "#131d36"
+    };
+    const darkProf: any = buildAppProfile(darkCfg, "http://127.0.0.1:3000");
+    assert.equal(darkProf.Theme.mode, "dark", `Preset ${preset} in dark mode must produce mode 'dark'`);
+    assert.ok(darkProf.Theme.background.toLowerCase() !== "#ffffff", `Preset ${preset} in dark mode must not have white bg`);
+    assert.ok(darkProf.Theme.card.toLowerCase() !== "#ffffff", `Preset ${preset} in dark mode must not have white card`);
+
+    // 2. Light mode
+    const lightCfg = {
+      ...getAppBuildConfig(),
+      presetStyle: preset,
+      defaultThemeMode: "light" as const,
+      themeBackground: "#f1f5f9",
+      themeCard: "#ffffff"
+    };
+    const lightProf: any = buildAppProfile(lightCfg, "http://127.0.0.1:3000");
+    assert.equal(lightProf.Theme.mode, "light", `Preset ${preset} in light mode must produce mode 'light'`);
+    assert.ok(lightProf.Theme.background.startsWith("#f") || lightProf.Theme.background.startsWith("#e"), `Preset ${preset} in light mode must have light bg`);
+    assert.equal(lightProf.Theme.card.toLowerCase(), "#ffffff", `Preset ${preset} in light mode must have light card`);
+  }
 });
