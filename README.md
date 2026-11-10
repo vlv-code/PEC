@@ -74,7 +74,13 @@ The repository provides a unified full-stack ecosystem:
 ├── client/                    # Native Desktop Client (PEC-App)
 │   ├── Windows/               # DirectX 11 / Dear ImGui GUI, service, CLI, and NSIS installer
 │   └── Linux/                 # Linux CLI, daemon, and systemd deployment scripts
+├── docs/
+│   └── openapi.yaml           # OpenAPI 3.1 specification (Two-Token Security Model)
+├── public/
+│   ├── dashboard.css          # Management console styling
+│   └── dashboard.min.js       # Compiled modular UI bundle (esbuild)
 ├── src/
+│   ├── client/                # Modular TypeScript UI source (core, tabs)
 │   ├── middleware/
 │   │   └── security.ts        # Security headers, segmented CORS, sliding-window rate limiters
 │   ├── routes/
@@ -86,12 +92,15 @@ The repository provides a unified full-stack ecosystem:
 │   │   ├── instancesRoutes.ts # /api/instances/*, /api/config
 │   │   ├── builderRoutes.ts   # /api/builder/*, /api/extension/*
 │   │   ├── rotationRoutes.ts  # /api/rotation/*, /api/3xui/test (SSRF-protected)
+│   │   ├── metricsRoutes.ts   # /metrics, /api/metrics (Prometheus exposition)
 │   │   └── systemRoutes.ts    # /healthz, /api/status, /api/github/releases
 │   ├── views/
 │   │   └── dashboardView.ts   # Management console HTML template & styling
 │   ├── appPackager.ts         # Desktop installer packaging, profile and PowerShell script builder
 │   ├── releases.ts            # Release manager, rollback engine, and hash verifier
 │   ├── instances.ts           # Active fleet instance registry with LRU capacity protection
+│   ├── logger.ts              # Structured JSON/development logger with secret masking
+│   ├── metrics.ts             # Prometheus metrics registry (fleet sync, 3x-ui, rate limits)
 │   ├── packager.ts            # Chrome CRX packager, RSA signer, and GPO generator
 │   ├── rotate.ts              # Atomic credential storage, 3x-ui integration, SSRF validator
 │   ├── routing.ts             # Smart PAC generator, presets, geodata parser
@@ -164,6 +173,10 @@ cp .env.example .env
 | `CODE_SIGN_SUBJECT` | `"Corporate Proxy Code Signing"` | Subject name used during certificate generation or display |
 | `CODE_SIGN_ISSUER` | `"Corporate CA"` | Certificate issuer organization name |
 | `CODE_SIGN_TIMESTAMP_URL` | `http://timestamp.digicert.com` | RFC 3161 Authenticode timestamp server URL |
+| `LOG_LEVEL` | `info` | Server logging verbosity level (`debug`, `info`, `warn`, `error`) |
+| `METRICS_PORT` | `3000` | Dedicated Prometheus metrics exposition port (falls back to main `PORT`) |
+| `METRICS_AUTH` | `true` | Enforce admin token authentication on `/metrics` endpoint (set `false` for public scraper access) |
+| `PEC_METRICS_PUBLIC` | `false` | Allow public access to `/metrics` without `ADMIN_TOKEN` authentication |
 
 > ⚠️ **Security Notice:** Always change `EXT_SHARED_TOKEN` and set a distinct `ADMIN_TOKEN` before deploying to a production or public environment! The dashboard login password and the management APIs authenticate with `ADMIN_TOKEN`, not with the fleet token.
 >
@@ -200,7 +213,8 @@ nano .env   # set your EXT_SHARED_TOKEN and ADMIN_TOKEN
 npm run dev
 
 # Or build and run production bundle
-npm run build            # Builds server bundle (alias for build:server)
+npm run build            # Build UI and server bundles (build:ui && build:server)
+npm run build:ui         # Build modular frontend dashboard bundle (public/dashboard.min.js)
 npm run build:server     # Build production server bundle (dist/server.cjs)
 npm run build:extension  # Build and package Chrome extension (e.g. npm run build:extension -- https://proxy.corp.example)
 npm start

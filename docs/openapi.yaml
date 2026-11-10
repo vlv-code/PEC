@@ -1,0 +1,1029 @@
+openapi: 3.1.0
+info:
+  title: PEC - Proxy Extension Corp Fleet & Management API
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    Enterprise API for managing selective routing, GeoBases, extension constructor studio,
+    Windows Active Directory GPO distribution, native desktop clients (PEC-App), and automated
+    3x-ui / Xray proxy rotation.
+
+    ### Two-Token Security Model
+    - **Administrative Access (`AdminBearer` / `AdminHeader` / `AdminCookie`):**
+      Full management authority over routing, proxy nodes, builder studios, rotation, and telemetry.
+      Passed via `Authorization: Bearer <ADMIN_TOKEN>`, `X-Admin-Token: <ADMIN_TOKEN>`, or session cookie.
+    - **Fleet Access (`FleetHeaderToken` / `ExtHeaderToken` / `InstanceHeaderToken`):**
+      Restricted low-privilege token embedded into client artifacts (CRX, MSI, GPO) for telemetry
+      heartbeats and dynamic configuration retrieval. Passed via `X-Fleet-Token` or `X-Ext-Token`.
+
+servers:
+  - url: https://pec.internal.corp
+    description: Production enterprise fleet server
+  - url: /
+    description: Relative server root
+
+security:
+  - AdminBearer: []
+  - AdminHeader: []
+  - AdminCookie: []
+
+paths:
+  /api/sync:
+    post:
+      summary: Browser Extension Fleet Synchronization & Heartbeat
+      description: |
+        Low-privilege fleet endpoint called by Chrome MV3 extension instances to register
+        heartbeats, report active status, and receive current proxy credentials and routing policies.
+      operationId: syncExtensionFleet
+      security:
+        - FleetHeaderToken: []
+        - ExtHeaderToken: []
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtensionSyncRequest'
+      responses:
+        '200':
+          description: Dynamic extension configuration delivered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionSyncResponse'
+        '400':
+          description: Invalid instance identifier or malformed payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - missing or invalid fleet token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/app/sync:
+    post:
+      summary: Desktop Client (PEC-App) Fleet Synchronization & Heartbeat
+      description: |
+        Low-privilege fleet endpoint called by native Windows (DirectX 11 / Dear ImGui) and
+        Linux desktop clients to register heartbeat, check updates, sync profiles, and receive theming.
+      operationId: syncDesktopApp
+      security:
+        - FleetHeaderToken: []
+        - ExtHeaderToken: []
+        - InstanceHeaderToken: []
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopAppSyncRequest'
+      responses:
+        '200':
+          description: Desktop sync configuration delivered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopAppSyncResponse'
+        '400':
+          description: Invalid appInstanceId or payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - invalid fleet token or unauthenticated client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/app/instances:
+    get:
+      summary: List Connected Desktop Instances
+      description: Returns active desktop client instances, paired browser extensions, and telemetry.
+      operationId: listDesktopInstances
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: List of active desktop instances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DesktopInstanceMeta'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/app/instances/{id}:
+    delete:
+      summary: Remove Desktop Instance
+      description: Unregisters a desktop instance and unpairs linked extension sessions.
+      operationId: deleteDesktopInstance
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: App instance identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instance deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/routing/profiles:
+    get:
+      summary: List Routing Profiles
+      description: Retrieves all configured selective routing profiles and rule definitions.
+      operationId: listRoutingProfiles
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: List of routing profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoutingProfile'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create or Update Routing Profile
+      description: Saves routing profile rules, domain patterns, CIDR entries, and fallback proxy bindings.
+      operationId: saveRoutingProfile
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutingProfileInput'
+      responses:
+        '200':
+          description: Routing profile saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutingProfile'
+        '400':
+          description: Validation error in rules or syntax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/routing/profiles/{id}:
+    delete:
+      summary: Delete Routing Profile
+      description: Deletes a selective routing profile. Default profiles cannot be deleted.
+      operationId: deleteRoutingProfile
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Routing profile ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Profile successfully removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Cannot delete default profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/routing/presets:
+    get:
+      summary: List Routing Presets
+      description: Returns built-in and user-uploaded GeoData / category presets (GeoSite / GeoIP).
+      operationId: listRoutingPresets
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: Array of routing presets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoutingPreset'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Save Routing Preset
+      description: Creates or updates a custom routing preset.
+      operationId: saveRoutingPreset
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutingPresetInput'
+      responses:
+        '200':
+          description: Preset saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutingPreset'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/proxies:
+    get:
+      summary: List Proxy Nodes
+      description: Returns all configured upstream proxy nodes with masked credentials.
+      operationId: listProxies
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: Array of configured proxy nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProxyNode'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Add or Update Proxy Node
+      description: Adds a manual proxy node or imports credentials from a 3x-ui / Xray panel inbound.
+      operationId: createOrUpdateProxy
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyNodeInput'
+      responses:
+        '200':
+          description: Proxy node created or updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProxyNode'
+        '400':
+          description: Invalid proxy parameters or unreachable endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/proxies/{id}:
+    delete:
+      summary: Delete Proxy Node
+      description: Removes a proxy node from active fleet distribution.
+      operationId: deleteProxy
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Proxy node ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proxy node deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/proxies/probe:
+    post:
+      summary: Probe Proxy Connectivity
+      description: Tests egress connectivity and latency through a specific proxy node or all nodes.
+      operationId: probeProxies
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: Optional proxy node ID to probe individually
+      responses:
+        '200':
+          description: Probe results including latency and reachable status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  latencyMs:
+                    type: number
+                  ip:
+                    type: string
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/builder/config:
+    get:
+      summary: Get Extension Builder Studio Configuration
+      description: Returns configuration for packaging the Chrome Extension CRX artifact.
+      operationId: getBuilderConfig
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: Current extension builder configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionBuildConfig'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Save Extension Builder Configuration
+      description: Updates styling, tokens, branding, and permissions for the extension package.
+      operationId: saveBuilderConfig
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtensionBuildConfig'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionBuildConfig'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/builder/build:
+    post:
+      summary: Build and Sign Chrome Extension (CRX)
+      description: Compiles unpacked extension sources, signs with RSA private key, and emits CRX + updates.xml.
+      operationId: buildExtension
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: Extension package successfully generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  crxPath:
+                    type: string
+                  version:
+                    type: string
+                  extensionId:
+                    type: string
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/builder/files:
+    get:
+      summary: List Built Release Files
+      description: Lists generated CRX files, updates.xml manifests, and GPO distribution packages.
+      operationId: listBuilderFiles
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: Files listing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  files:
+                    type: array
+                    items:
+                      type: string
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/rotation/status:
+    get:
+      summary: Proxy Credential Rotation Status
+      description: Returns scheduler telemetry, next rotation countdown, and inbound target information.
+      operationId: getRotationStatus
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: Current rotation status and timer state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotationStatus'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/rotation/rotate:
+    post:
+      summary: Trigger Manual Credential Rotation
+      description: Connects to 3x-ui / Xray panel, generates new credentials, and updates current_creds.json atomically.
+      operationId: triggerRotation
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: Credentials rotated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  message:
+                    type: string
+                  user:
+                    type: string
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Rotation error or panel connection failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/rotation/history:
+    get:
+      summary: Rotation Event History Audit Log
+      description: Retrieves historical credential rotation records and status entries.
+      operationId: getRotationHistory
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - AdminCookie: []
+      responses:
+        '200':
+          description: History entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RotationHistoryEntry'
+        '401':
+          description: Unauthorized admin access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /metrics:
+    get:
+      summary: Prometheus Fleet Telemetry Metrics
+      description: |
+        Exposes system, process, HTTP, rate limiting, and fleet connection metrics in standard
+        Prometheus text exposition format.
+        Protected by Admin auth by default; made public when `PEC_METRICS_PUBLIC=true`.
+      operationId: getPrometheusMetrics
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - {}
+      responses:
+        '200':
+          description: Prometheus formatted metrics payload
+          content:
+            text/plain; version=0.0.4; charset=utf-8:
+              schema:
+                type: string
+                example: |
+                  # HELP pec_http_requests_total Total HTTP requests handled
+                  # TYPE pec_http_requests_total counter
+                  pec_http_requests_total{method="POST",route="/api/sync",status="200"} 142
+        '401':
+          description: Unauthorized admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/metrics:
+    get:
+      summary: Prometheus Metrics (API Alias)
+      description: Alias for `/metrics`.
+      operationId: getPrometheusMetricsAlias
+      security:
+        - AdminBearer: []
+        - AdminHeader: []
+        - {}
+      responses:
+        '200':
+          description: Prometheus formatted metrics payload
+          content:
+            text/plain; version=0.0.4; charset=utf-8:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    AdminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: Administrative Bearer token matching ADMIN_TOKEN
+    AdminHeader:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
+      description: Administrative API key matching ADMIN_TOKEN
+    AdminCookie:
+      type: apiKey
+      in: cookie
+      name: pec_session
+      description: Management dashboard session cookie (after username/password login)
+    FleetHeaderToken:
+      type: apiKey
+      in: header
+      name: X-Fleet-Token
+      description: Low-privilege token matching EXT_SHARED_TOKEN used by fleet clients
+    ExtHeaderToken:
+      type: apiKey
+      in: header
+      name: X-Ext-Token
+      description: Low-privilege extension token matching EXT_SHARED_TOKEN
+    InstanceHeaderToken:
+      type: apiKey
+      in: header
+      name: X-Instance-Token
+      description: Ephemeral enrolled per-instance token issued during initial sync handshake
+
+  schemas:
+    SuccessResponse:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation completed successfully
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Invalid parameters or unauthorized access
+
+    ExtensionSyncRequest:
+      type: object
+      properties:
+        instanceId:
+          type: string
+          example: ext-inst-4921-9310
+        version:
+          type: string
+          example: 1.0.8
+        browser:
+          type: string
+          example: chrome
+        selectedProxyId:
+          type: string
+          example: node_stockholm_01
+
+    ExtensionSyncResponse:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+          example: true
+        profileDefaultPolicy:
+          type: string
+          enum: [direct, proxy]
+          example: direct
+        routing:
+          type: object
+        proxies:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProxyNode'
+        currentProxy:
+          type: object
+        credentials:
+          type: object
+          properties:
+            user:
+              type: string
+            pass:
+              type: string
+        hasUpdate:
+          type: boolean
+          example: false
+
+    DesktopAppSyncRequest:
+      type: object
+      properties:
+        appInstanceId:
+          type: string
+          example: desk-inst-9012
+        hostname:
+          type: string
+          example: WS-CORP-042
+        username:
+          type: string
+          example: alice
+        clientVersion:
+          type: string
+          example: 2.2.0
+        osVersion:
+          type: string
+          example: Windows 11 23H2
+        pairedExtension:
+          type: string
+          example: ext-inst-4921-9310
+        selectedProxyId:
+          type: string
+          example: node_stockholm_01
+
+    DesktopAppSyncResponse:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+          example: true
+        hasUpdate:
+          type: boolean
+          example: false
+        activeRelease:
+          type: object
+          properties:
+            version:
+              type: string
+            downloadUrl:
+              type: string
+        theme:
+          type: object
+          properties:
+            mode:
+              type: string
+              enum: [light, dark]
+            primary:
+              type: string
+            background:
+              type: string
+            card:
+              type: string
+        availableProxies:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProxyNode'
+
+    DesktopInstanceMeta:
+      type: object
+      properties:
+        appInstanceId:
+          type: string
+        hostname:
+          type: string
+        username:
+          type: string
+        clientVersion:
+          type: string
+        lastSeen:
+          type: string
+          format: date-time
+        assignedProxyId:
+          type: string
+        pairedExtension:
+          type: string
+
+    RoutingProfile:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          example: profile_finance_corp
+        name:
+          type: string
+          example: Corporate Financial Systems
+        description:
+          type: string
+        mode:
+          type: string
+          enum: [direct, proxy]
+        rules:
+          type: array
+          items:
+            type: object
+        isDefault:
+          type: boolean
+
+    RoutingProfileInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        mode:
+          type: string
+          enum: [direct, proxy]
+        proxyId:
+          type: string
+        rules:
+          type: array
+          items:
+            type: object
+
+    RoutingPreset:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        count:
+          type: integer
+        rules:
+          type: array
+          items:
+            type: string
+
+    RoutingPresetInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        rules:
+          type: array
+          items:
+            type: string
+
+    ProxyNode:
+      type: object
+      required:
+        - id
+        - name
+        - host
+        - port
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [manual, 3x-ui]
+        name:
+          type: string
+        protocol:
+          type: string
+          enum: [http, https, socks5]
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        isActive:
+          type: boolean
+
+    ProxyNodeInput:
+      type: object
+      required:
+        - name
+        - host
+        - port
+      properties:
+        type:
+          type: string
+          enum: [manual, 3x-ui]
+        name:
+          type: string
+        protocol:
+          type: string
+          enum: [http, https, socks5]
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+        tag:
+          type: string
+        panelId:
+          type: string
+
+    ExtensionBuildConfig:
+      type: object
+      properties:
+        name:
+          type: string
+        shortName:
+          type: string
+        version:
+          type: string
+        serverUrl:
+          type: string
+        defaultThemeMode:
+          type: string
+          enum: [light, dark]
+        presetStyle:
+          type: string
+        colorPalette:
+          type: string
+
+    RotationStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        intervalMinutes:
+          type: integer
+        lastRotation:
+          type: string
+          format: date-time
+        nextRotation:
+          type: string
+          format: date-time
+        inboundTag:
+          type: string
+
+    RotationHistoryEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        action:
+          type: string
+        status:
+          type: string
+        details:
+          type: string

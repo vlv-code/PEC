@@ -1842,6 +1842,7 @@ export function cleanAppBinaries(): CleanAppBinariesResult {
     "pec-app.wxs.template",
     "readme.txt",
     "pecappcore.dll",
+    "pec-app-setup-1.0.8.exe",
     ".gitkeep",
     ".pristine",
   ]);

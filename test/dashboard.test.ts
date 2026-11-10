@@ -35,7 +35,7 @@ function render(isDefaultTokenInUse: boolean): string {
 test("dashboard render: references the static assets, no inline code blocks", () => {
   const html = render(false);
   assert.match(html, /<link rel="stylesheet" href="\/dashboard.css">/);
-  assert.match(html, /<script src="\/dashboard.js"><\/script>/);
+  assert.match(html, /<script src="\/dashboard(\.min)?\.js"><\/script>/);
   assert.ok(!html.includes("<style>"), "CSS must ship as the external asset");
   assert.ok(!/<script>[\s\S]/.test(html), "client JS must ship as the external asset");
 });

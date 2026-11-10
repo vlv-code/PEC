@@ -8485,6 +8485,7 @@ ${JSON.stringify(json, null, 2)}`;
     window.initHashRouting = initHashRouting;
     window.initTabsAccessibility = initTabsAccessibility;
     window.initModalBackdropHandlers = initModalBackdropHandlers;
+    window.switchTab = switchTab;
 
     async function refreshAll(isInitialBoot = false) {
       if (!isInitialBoot && (hasUnsavedRouting || (typeof isAppStudioDirty !== 'undefined' && isAppStudioDirty))) {

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.6/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "src/**",
+      "server.ts",
+      "scripts/**",
+      "extension/*.js",
+      "public/dashboard.js",
+      "test/**"
+    ]
+  },
+  "formatter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noAssignInExpressions": "off",
+        "noDoubleEquals": "off",
+        "noGlobalIsNan": "off",
+        "noControlCharactersInRegex": "off",
+        "noUselessEscapeInString": "off",
+        "noTemplateCurlyInString": "off",
+        "noProto": "off",
+        "noImplicitAnyLet": "off",
+        "noPrototypeBuiltins": "off"
+      },
+      "style": {
+        "useImportType": "off",
+        "useTemplate": "off",
+        "noNonNullAssertion": "off",
+        "useNodejsImportProtocol": "off",
+        "useConst": "off",
+        "useExponentiationOperator": "off"
+      },
+      "complexity": {
+        "recommended": false
+      },
+      "correctness": {
+        "noUnusedVariables": "off",
+        "noUnusedImports": "off",
+        "noUnusedFunctionParameters": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["public/dashboard.js", "extension/*.js"],
+      "linter": {
+        "rules": {
+          "recommended": false,
+          "correctness": {
+            "noInnerDeclarations": "off"
+          }
+        }
+      }
+    }
+  ]
+}

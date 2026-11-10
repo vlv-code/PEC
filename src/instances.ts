@@ -5,6 +5,7 @@ import { resolveProfileForInstance, getProfileById } from "./routing.js";
 import { writeJsonAtomic } from "./jsonStore.js";
 import { getProxyConfigPath, getInstancesMetaPath } from "./storage.js";
 import { getActiveProxy, getProxyById } from "./proxies.js";
+import { logger } from "./logger.js";
 
 const CONFIG_PATH = getProxyConfigPath();
 const INSTANCES_META_PATH = getInstancesMetaPath();
@@ -35,7 +36,7 @@ try {
     }
   }
 } catch (e) {
-  console.warn("[instances] Failed to read proxy_config.json, using defaults:", e);
+  logger.warn("[instances] Failed to read proxy_config.json, using defaults:", e);
 }
 
 export function getProxyConfig(): ProxyConfiguration {
@@ -87,7 +88,7 @@ export function updateProxyConfig(updates: Partial<ProxyConfiguration>): ProxyCo
   try {
     writeJsonAtomic(CONFIG_PATH, currentConfig);
   } catch (err) {
-    console.error("[instances] Failed to persist proxy config:", err);
+    logger.error("[instances] Failed to persist proxy config:", err);
   }
 
   return { ...currentConfig };
@@ -199,7 +200,7 @@ function saveInstancesMeta() {
   try {
     writeJsonAtomic(INSTANCES_META_PATH, persistentMeta);
   } catch (e) {
-    console.error("[instances] Error saving instances meta:", e);
+    logger.error("[instances] Error saving instances meta:", e);
   }
 }
 

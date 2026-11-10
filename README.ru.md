@@ -76,7 +76,13 @@
 ├── client/                    # Нативный десктопный клиент (PEC-App)
 │   ├── Windows/               # DirectX 11 / Dear ImGui GUI, служба, CLI и NSIS-инсталлятор
 │   └── Linux/                 # Linux CLI, демон и скрипты развертывания systemd
+├── docs/
+│   └── openapi.yaml           # Спецификация OpenAPI 3.1 (модель двух токенов)
+├── public/
+│   ├── dashboard.css          # Стили панели управления
+│   └── dashboard.min.js       # Собранный модульный бандл UI (esbuild)
 ├── src/
+│   ├── client/                # Модульный TypeScript-исходник UI дашборда (core, tabs)
 │   ├── middleware/
 │   │   └── security.ts        # Заголовки безопасности, CORS и sliding-window rate-limiter
 │   ├── routes/
@@ -88,12 +94,15 @@
 │   │   ├── instancesRoutes.ts # /api/instances/*, /api/config
 │   │   ├── builderRoutes.ts   # /api/builder/*, /api/extension/*
 │   │   ├── rotationRoutes.ts  # /api/rotation/*, /api/3xui/test (SSRF-защита)
+│   │   ├── metricsRoutes.ts   # /metrics, /api/metrics (Prometheus-экспозиция метрик)
 │   │   └── systemRoutes.ts    # /healthz, /api/status, /api/github/releases
 │   ├── views/
 │   │   └── dashboardView.ts   # HTML-шаблоны и оформление панели управления
 │   ├── appPackager.ts         # Сборщик инсталляторов клиента, профилей и PowerShell скриптов
 │   ├── releases.ts            # Менеджер релизов, механизм откатов и проверка SHA-256
 │   ├── instances.ts           # Реестр активных устройств с защитой LRU
+│   ├── logger.ts              # Структурированный логгер с маскированием секретов
+│   ├── metrics.ts             # Prometheus-метрики (синхронизация флота, 3x-ui, rate limits)
 │   ├── packager.ts            # Сборщик Chrome CRX, RSA-подпись, генератор GPO
 │   ├── rotate.ts              # Хранилище учетных данных, интеграция 3x-ui, SSRF-валидатор
 │   ├── routing.ts             # Smart PAC генератор, пресеты, парсер geodata
@@ -166,6 +175,10 @@ cp .env.example .env
 | `CODE_SIGN_SUBJECT` | `"Corporate Proxy Code Signing"` | Имя субъекта сертификата при генерации или отображении |
 | `CODE_SIGN_ISSUER` | `"Corporate CA"` | Издатель сертификата |
 | `CODE_SIGN_TIMESTAMP_URL` | `http://timestamp.digicert.com` | URL сервера меток времени RFC 3161 |
+| `LOG_LEVEL` | `info` | Уровень детализации логирования сервера (`debug`, `info`, `warn`, `error`) |
+| `METRICS_PORT` | `3000` | Выделенный порт отдачи метрик Prometheus (по умолчанию совпадает с `PORT`) |
+| `METRICS_AUTH` | `true` | Требовать авторизацию токеном администратора для `/metrics` (или `false` для публичного доступа) |
+| `PEC_METRICS_PUBLIC` | `false` | Разрешить публичный доступ к `/metrics` без передачи `ADMIN_TOKEN` |
 
 > ⚠️ **Предупреждение по безопасности:** Обязательно замените `EXT_SHARED_TOKEN` и задайте отдельный `ADMIN_TOKEN` перед запуском в рабочей среде! Дашборд и management-API авторизуются через `ADMIN_TOKEN` (заголовок `X-Admin-Token`), а не через fleet-токен.
 >
@@ -202,7 +215,10 @@ nano .env   # укажите уникальные EXT_SHARED_TOKEN и ADMIN_TOKE
 npm run dev
 
 # Либо компиляция и production-запуск
-npm run build
+npm run build            # Сборка UI дашборда и серверного бандла (build:ui && build:server)
+npm run build:ui         # Сборка модульного интерфейса дашборда (public/dashboard.min.js)
+npm run build:server     # Сборка серверного бандла (dist/server.cjs)
+npm run build:extension  # Сборка и упаковка расширения Chrome
 npm start
 ```
 

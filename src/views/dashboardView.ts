@@ -2127,7 +2127,7 @@ export function renderDashboardHtml(options: DashboardViewOptions = {}): string 
     </div>
   </div>
 
-  <script src="/dashboard.js"></script>
+  <script src="/dashboard.min.js"></script>
 </body>
 </html>`;
 }

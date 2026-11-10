@@ -6,6 +6,7 @@ import { RotationConfig, RotationHistoryItem } from "./types.js";
 import { executeRotation, validateSafeEndpointUrl } from "./rotate.js";
 import { writeJsonAtomic } from "./jsonStore.js";
 import { getRotationConfigPath, getRotationHistoryPath } from "./storage.js";
+import { logger } from "./logger.js";
 
 const ROTATION_CONFIG_FILE = getRotationConfigPath();
 const HISTORY_FILE = getRotationHistoryPath();
@@ -54,7 +55,7 @@ function loadInitialConfig(): RotationConfig {
       loaded = JSON.parse(raw);
     }
   } catch (e) {
-    console.warn("[scheduler] Error reading rotation_config.json:", e);
+    logger.warn("[scheduler] Error reading rotation_config.json:", e);
   }
 
   // Merge: Never let an empty adminPass or placeholder panelUrl wipe out environment variables
@@ -117,7 +118,7 @@ function saveState() {
     }
     writeJsonAtomic(HISTORY_FILE, rotationHistory.slice(0, MAX_HISTORY_ENTRIES));
   } catch (err) {
-    console.error("[scheduler] Error persisting state:", err);
+    logger.error("[scheduler] Error persisting state:", err);
   }
 }
 
@@ -245,7 +246,7 @@ export function startScheduler() {
   }
 
   if (!currentConfig.enabled) {
-    console.log("[scheduler] Automatic credential rotation is disabled.");
+    logger.info("[scheduler] Automatic credential rotation is disabled.");
     return;
   }
 
@@ -264,14 +265,14 @@ export function startScheduler() {
 
   const intervalMs = intervalMinutes * 60 * 1000;
   currentConfig.nextRotationAt = new Date(Date.now() + intervalMs).toISOString();
-  console.log(`[scheduler] Started rotation timer: interval=${intervalMinutes}m, next=${currentConfig.nextRotationAt}`);
+  logger.info(`[scheduler] Started rotation timer: interval=${intervalMinutes}m, next=${currentConfig.nextRotationAt}`);
 
   timerHandle = setInterval(async () => {
-    console.log("[scheduler] Triggering scheduled password rotation...");
+    logger.info("[scheduler] Triggering scheduled password rotation...");
     try {
       await runManualRotation();
     } catch (err) {
-      console.error("[scheduler] Scheduled rotation error:", err);
+      logger.error("[scheduler] Scheduled rotation error:", err);
     }
   }, intervalMs);
   // Background job: must not keep the process alive on its own (the HTTP
@@ -281,4 +282,12 @@ export function startScheduler() {
 
 export function restartScheduler() {
   startScheduler();
+}
+
+export function stopScheduler(): void {
+  if (timerHandle) {
+    clearInterval(timerHandle);
+    timerHandle = null;
+    logger.info("[scheduler] Stopped rotation timer.");
+  }
 }

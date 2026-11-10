@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PEC - Proxy Extension Corp</title>
+  <title>PEC Corp Proxy</title>
   <script>
     try {
       var m = localStorage.getItem("pec_theme_mode") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
@@ -21,14 +21,14 @@
   </script>
   <style>
     :root, [data-theme="dark"] {
-      --primary: #0284c7;
+      --primary: #38bdf8;
       --bg: #0b1120;
       --card: #131d36;
       --card-inner: #16223b;
-      --border: #4c566a;
+      --border: #334155;
       --text: #f1f5f9;
       --text-muted: #94a3b8;
-      --primary-rgb: 2, 132, 199;
+      --primary-rgb: 56, 189, 248;
       --success: #10b981;
       --success-rgb: 16, 185, 129;
       --danger: #e05252;
@@ -110,13 +110,6 @@
       --bg: #fffbeb !important; --card: #ffffff !important; --card-inner: #fef3c7 !important; --border: #fde68a; --text: #78350f !important; --text-muted: #92400e; --primary: #b45309; --primary-rgb: 180, 83, 9;
     }
 
-    
-    /* Custom User Theme Overrides */
-    body[data-palette], body[data-theme] {
-      --primary: #0284c7 !important; --primary-rgb: 2, 132, 199 !important; --accent-color: var(--primary) !important;
-      --bg: #0b1120 !important;
-      --card: #131d36 !important;
-    }
     
 
     /* Layout 1. Terminal: 0px razor-sharp retro-terminal corners */
@@ -916,14 +909,14 @@
     .btn-sec:hover { background: var(--border); }
   </style>
 </head>
-<body data-palette="nord" data-layout="terminal" data-theme="light">
+<body data-palette="cyber" data-layout="console" data-theme="dark">
   <header>
     <div class="brand">
       <div class="brand-icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       </div>
-      <span>PEC Corp</span>
-      <span class="version-tag">v1.0.8</span>
+      <span>PEC</span>
+      <span class="version-tag">v1.0.0</span>
     </div>
     <div class="header-actions">
       <button id="btnThemeToggle" class="btn-theme-toggle" title="Переключить тему (День / Ночь)" aria-label="Toggle theme"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg></button>

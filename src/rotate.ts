@@ -10,6 +10,8 @@ const requireCompat = typeof require === "function" ? require : createRequire(pa
 import { RotationConfig, RotationHistoryItem, Panel3xuiConfig } from "./types.js";
 import { writeJsonAtomic, readJsonStore } from "./jsonStore.js";
 import { getCredsStorePath, get3xuiPanelsPath, getRotationConfigPath } from "./storage.js";
+import { logger } from "./logger.js";
+import { recordRotation } from "./metrics.js";
 
 export { getCredsStorePath, get3xuiPanelsPath };
 
@@ -39,11 +41,11 @@ export function readCurrentCreds(): { user: string; pass: string; updatedAt?: st
     } else {
       // Auto-heal missing creds store (random password, never a hardcoded one)
       const defaultCreds = ensureCredsStore(storePath);
-      console.log(`[rotate] Auto-healed missing creds store at ${storePath}`);
+      logger.info(`[rotate] Auto-healed missing creds store at ${storePath}`);
       return defaultCreds;
     }
   } catch (err) {
-    console.error("[rotate] Error reading creds store:", err);
+    logger.error("[rotate] Error reading creds store:", err);
   }
   return null;
 }
@@ -65,10 +67,10 @@ export async function readCurrentCredsAsync(): Promise<{ user: string; pass: str
     if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
       // Auto-heal missing creds store (rare; the sync write is fine here)
       const defaultCreds = ensureCredsStore(storePath);
-      console.log(`[rotate] Auto-healed missing creds store at ${storePath}`);
+      logger.info(`[rotate] Auto-healed missing creds store at ${storePath}`);
       return defaultCreds;
     }
-    console.error("[rotate] Error reading creds store:", err);
+    logger.error("[rotate] Error reading creds store:", err);
   }
   return null;
 }
@@ -287,7 +289,7 @@ function getFetchDispatcher(insecureTls?: boolean): Agent | undefined {
     };
     return agent;
   } catch (e: any) {
-    console.warn("[rotate] Unable to load undici.Agent for insecureTls:", e?.message || e);
+    logger.warn("[rotate] Unable to load undici.Agent for insecureTls:", e?.message || e);
     return undefined;
   }
 }
@@ -722,9 +724,10 @@ async function doExecuteRotation(customConfig?: Partial<RotationConfig>): Promis
           });
         }
       } catch (proxyErr) {
-        console.warn("[rotate] Failed to sync rotated password to active proxy node:", proxyErr);
+        logger.warn("[rotate] Failed to sync rotated password to active proxy node:", proxyErr);
       }
 
+      recordRotation("3x-ui", "success");
       return {
         id: crypto.randomBytes(4).toString("hex"),
         timestamp: new Date().toISOString(),
@@ -733,6 +736,7 @@ async function doExecuteRotation(customConfig?: Partial<RotationConfig>): Promis
         success: true,
       };
     } catch (err: unknown) {
+      recordRotation("3x-ui", "failure");
       failureReason = err instanceof Error ? err.message : String(err);
       throw new Error(
         `3x-ui rotation failed; credentials were NOT changed to avoid desynchronizing the fleet. Fix the panel connection, then retry. Original error: ${failureReason}`
@@ -753,6 +757,7 @@ async function doExecuteRotation(customConfig?: Partial<RotationConfig>): Promis
   const newPassword = crypto.randomBytes(18).toString("base64url");
   atomicWriteCreds(credsStorePath, { user: currentUsername, pass: newPassword });
 
+  recordRotation("standalone", "success");
   return {
     id: crypto.randomBytes(4).toString("hex"),
     timestamp: new Date().toISOString(),
@@ -793,7 +798,7 @@ function autoMigratePanelsIfNeeded(): void {
       }
     }
   } catch (err) {
-    console.warn("[rotate] Auto-migration of legacy 3x-ui panel failed:", err);
+    logger.warn("[rotate] Auto-migration of legacy 3x-ui panel failed:", err);
   }
 
   writeJsonAtomic(panelsFile, panels);

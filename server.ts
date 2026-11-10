@@ -3,7 +3,7 @@ import express, { Request, Response, NextFunction } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { ensureKeyExists, packageExtension } from "./src/packager.js";
-import { startScheduler } from "./src/scheduler.js";
+import { startScheduler, stopScheduler } from "./src/scheduler.js";
 import { atomicWriteCreds, ensureCredsStore, getCredsStorePath } from "./src/rotate.js";
 import { securityHeadersMiddleware, safeCorsMiddleware, createTokenAuthMiddleware, resolveAdminToken } from "./src/middleware/security.js";
 import { createCredsRouter } from "./src/routes/credsRoutes.js";
@@ -17,6 +17,9 @@ import { createAuthRouter, createCookieAuthenticator } from "./src/routes/authRo
 import { createProxiesRouter } from "./src/routes/proxiesRoutes.js";
 import { createReleasesRouter } from "./src/routes/releasesRoutes.js";
 import { createAppSyncRouter } from "./src/routes/appSyncRoutes.js";
+import { createMetricsRouter } from "./src/routes/metricsRoutes.js";
+import { recordRateLimitBlock } from "./src/metrics.js";
+import { logger } from "./src/logger.js";
 import { initDefaultProxyIfNeeded } from "./src/proxies.js";
 import { initDashboardCredentials } from "./src/auth.js";
 import { renderDashboardHtml } from "./src/views/dashboardView.js";
@@ -33,7 +36,7 @@ const HOST = process.env.HOST || "0.0.0.0";
 // Express 4 does not route async rejections to the error handler; this net
 // keeps an unforeseen rejected promise from taking the whole server down.
 process.on("unhandledRejection", (reason) => {
-  console.error("[unhandledRejection]", reason);
+  logger.error("[unhandledRejection]", reason);
 });
 
 // Trust proxy configuration: controls how Express resolves client IPs from
@@ -54,8 +57,8 @@ const EXT_SHARED_TOKEN = process.env.EXT_SHARED_TOKEN || DEFAULT_TOKEN;
 const isDefaultTokenInUse = EXT_SHARED_TOKEN === DEFAULT_TOKEN;
 
 if (process.env.NODE_ENV === "production" && isDefaultTokenInUse) {
-  console.error("[FATAL SECURITY ERROR] EXT_SHARED_TOKEN is set to the default insecure value in production!");
-  console.error("Please configure a strong random EXT_SHARED_TOKEN in .env or environment variables.");
+  logger.error("[FATAL SECURITY ERROR] EXT_SHARED_TOKEN is set to the default insecure value in production!");
+  logger.error("Please configure a strong random EXT_SHARED_TOKEN in .env or environment variables.");
   process.exit(1);
 }
 
@@ -71,11 +74,11 @@ try {
   ADMIN_TOKEN = resolved.token;
   adminTokenGenerated = resolved.generated;
 } catch (err) {
-  console.error("[pec-server] FATAL:", err instanceof Error ? err.message : err);
+  logger.error("[pec-server] FATAL:", err instanceof Error ? err.message : err);
   process.exit(1);
 }
 if (ADMIN_TOKEN === EXT_SHARED_TOKEN) {
-  console.error("[SECURITY WARNING] ADMIN_TOKEN must be distinct from EXT_SHARED_TOKEN - the fleet token ships in public artifacts.");
+  logger.error("[SECURITY WARNING] ADMIN_TOKEN must be distinct from EXT_SHARED_TOKEN - the fleet token ships in public artifacts.");
   process.exit(1);
 }
 
@@ -85,13 +88,13 @@ if (ADMIN_TOKEN === EXT_SHARED_TOKEN) {
 const PUBLIC_BASE_URL_RAW = (process.env.PUBLIC_BASE_URL || "").trim();
 if (PUBLIC_BASE_URL_RAW) {
   if (!/^https?:\/\/[a-z0-9.\-]+(:\d{1,5})?$/i.test(PUBLIC_BASE_URL_RAW.replace(/\/+$/, "")) || PUBLIC_BASE_URL_RAW !== PUBLIC_BASE_URL_RAW.replace(/\/+$/, "")) {
-    console.error(
+    logger.error(
       `[pec-server] FATAL: PUBLIC_BASE_URL must be a bare origin like https://pec.example.corp (no path, no trailing slash). Got: "${PUBLIC_BASE_URL_RAW}"`
     );
     process.exit(1);
   }
 } else {
-  console.warn(
+  logger.warn(
     "[SECURITY WARNING] PUBLIC_BASE_URL is not set - generated artifacts (updates.xml, GPO, pacUrl) will be derived from the incoming Host header. Set PUBLIC_BASE_URL in .env for production."
   );
 }
@@ -103,11 +106,11 @@ const CREDS_STORE = getCredsStorePath();
 const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase() || "admin";
 const credBootstrap = initDashboardCredentials({ username: ADMIN_USERNAME, fallbackPassword: ADMIN_TOKEN, autoCreate: false });
 if (credBootstrap.setupRequired) {
-  console.log(
+  logger.info(
     "[auth] Initial setup required. Open the dashboard to authenticate with ADMIN_TOKEN and configure your credentials."
   );
 } else if (credBootstrap.usingFallbackPassword) {
-  console.warn(
+  logger.warn(
     "[SECURITY WARNING] Dashboard password defaults to ADMIN_TOKEN (username: " + ADMIN_USERNAME + "). " +
       "Set ADMIN_PASSWORD in .env or change the password in the dashboard settings."
   );
@@ -115,7 +118,7 @@ if (credBootstrap.setupRequired) {
 
 // Initialize initial credentials if not found (random password, never hardcoded)
 if (!fs.existsSync(CREDS_STORE)) {
-  console.log(`[pec-server] Initializing credentials storage at ${CREDS_STORE}`);
+  logger.info(`[pec-server] Initializing credentials storage at ${CREDS_STORE}`);
   ensureCredsStore(CREDS_STORE);
 }
 initDefaultProxyIfNeeded();
@@ -125,9 +128,9 @@ try {
   ensureKeyExists();
   const initialBaseUrl = (process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, "");
   packageExtension(initialBaseUrl);
-  console.log(`[pec-server] Initial Chrome Extension package generated for ${initialBaseUrl}`);
+  logger.info(`[pec-server] Initial Chrome Extension package generated for ${initialBaseUrl}`);
 } catch (err) {
-  console.warn("[pec-server] Initial packaging notice:", err);
+  logger.warn("[pec-server] Initial packaging notice:", err);
 }
 
 // Start background rotation scheduler
@@ -169,9 +172,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       tag = "[PROXIES]";
     }
 
-    const level = status >= 500 ? "ERROR" : status >= 400 ? "WARN" : "INFO";
-    const ts = new Date().toISOString();
-    console.log(`${ts} ${tag} [${level}] ${req.method} ${url} ${status} - ${duration}ms [${clientIp}]`);
+    if (status === 429) {
+      recordRateLimitBlock(url.split("?")[0]);
+    }
+
+    const logMessage = `${tag} ${req.method} ${url} ${status} - ${duration}ms [${clientIp}]`;
+    if (status >= 500) {
+      logger.error(logMessage);
+    } else if (status >= 400) {
+      logger.warn(logMessage);
+    } else {
+      logger.info(logMessage);
+    }
   });
 
   next();
@@ -288,6 +300,13 @@ app.use(
     credsStorePath: CREDS_STORE,
   })
 );
+const isMetricsPublic = process.env.PEC_METRICS_PUBLIC === "true";
+app.use(
+  createMetricsRouter({
+    adminAuthMiddleware: adminAuth,
+    allowPublic: isMetricsPublic,
+  })
+);
 
 // Management Dashboard UI
 app.get("/", (req: Request, res: Response) => {
@@ -352,9 +371,9 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     }
 
     if (status >= 400 && status < 500) {
-      console.warn(`[HTTP] [WARN] ${req.method} ${req.url} ${status} - ${message}`);
+      logger.warn(`[HTTP] [WARN] ${req.method} ${req.url} ${status} - ${message}`);
     } else {
-      console.error(`[HTTP] [ERROR] ${req.method} ${req.url} ${status} -`, err);
+      logger.error(`[HTTP] [ERROR] ${req.method} ${req.url} ${status} -`, err);
     }
 
     if (res.headersSent) {
@@ -370,7 +389,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 if (process.env.NODE_ENV !== "test" && process.env.PEC_DISABLE_LISTEN !== "true") {
-  app.listen(PORT, HOST, () => {
+  const server = app.listen(PORT, HOST, () => {
     const publicUrl = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
     const displayHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
     const baseDisplayUrl = publicUrl || `http://${displayHost}:${PORT}`;
@@ -392,6 +411,61 @@ if (process.env.NODE_ENV !== "test" && process.env.PEC_DISABLE_LISTEN !== "true"
         `[SECURITY WARNING] ADMIN_TOKEN is not configured - generated a development-only admin token for this run: ${ADMIN_TOKEN}\n` +
           `[SECURITY WARNING] Development only: restarting the server will change this token. Set ADMIN_TOKEN in .env for a stable value.`
       );
+    }
+  });
+
+  let isShuttingDown = false;
+  server.on("request", (_req, res) => {
+    if (isShuttingDown && !res.headersSent) {
+      res.setHeader("Connection", "close");
+    }
+  });
+
+  const gracefulShutdown = (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    logger.info(`[pec-server] Received ${signal} - initiating graceful shutdown...`);
+
+    try {
+      stopScheduler();
+    } catch (err) {
+      logger.error("[pec-server] Error stopping scheduler:", err);
+    }
+
+    const forceTimer = setTimeout(() => {
+      logger.warn("[pec-server] Shutdown timeout reached, forcing exit.");
+      process.exit(0);
+    }, 5000);
+    forceTimer.unref?.();
+
+    const idleTimer = setTimeout(() => {
+      if (typeof server.closeIdleConnections === "function") {
+        server.closeIdleConnections();
+      }
+    }, 500);
+    idleTimer.unref?.();
+
+    server.close((err) => {
+      clearTimeout(forceTimer);
+      clearTimeout(idleTimer);
+      if (err) {
+        logger.error("[pec-server] Error during server close:", err);
+        process.exit(1);
+      }
+      logger.info("[pec-server] Server closed gracefully.");
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("message", (msg) => {
+    if (
+      msg === "SIGTERM" ||
+      msg === "shutdown" ||
+      (typeof msg === "object" && msg !== null && (msg as any).type === "SIGTERM")
+    ) {
+      gracefulShutdown("SIGTERM");
     }
   });
 }
