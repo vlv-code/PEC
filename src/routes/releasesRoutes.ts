@@ -126,7 +126,11 @@ export function createReleasesRouter(
       res.json({
         ok: true,
         activeVersion: result.activeVersion,
-        message: `Active ${type} version switched to ${result.activeVersion}`,
+        isForwardRollback: result.isForwardRollback,
+        rollbackFrom: result.rollbackFrom,
+        message: result.isForwardRollback
+          ? `Forward-rollback to v${result.activeVersion} (from v${result.rollbackFrom}) successfully released`
+          : `Active ${type} version switched to ${result.activeVersion}`,
       });
     } catch (err: any) {
       res.status(400).json({ ok: false, error: err.message || "Failed to set active release" });

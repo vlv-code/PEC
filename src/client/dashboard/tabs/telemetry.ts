@@ -6,6 +6,7 @@ import { t, I18N } from '../core/theme.js';
 import { openEditRuleModal, moveRuleUp, moveRuleDown, removeRule, openGeobaseInspector, addPresetRule, toggleRuleEnabled, toggleInspectorEntry } from './routing.js';
 import { deleteAppProcessRule, updateAppProcessRuleField } from './studio.js';
 import { activateProxy, checkProxy, syncProxy, openEditProxyModal, deleteProxy, fetchProxies } from './proxies.js';
+import { compareSemver, bumpPatchVersion } from '../../../utils/semver.js';
 
 declare let currentLang: string;
 declare const formatRelativeTime: any;
@@ -1813,14 +1814,41 @@ export let currentActiveAppVer = '';
     export async function setActiveReleaseVersion(type, version) {
       const isRu = currentLang === 'ru';
       const label = type === 'extension' ? (isRu ? 'расширения' : 'extension') : (isRu ? 'десктоп-агента' : 'desktop app');
-      const audienceWarning = isRu
-        ? `Внимание: переключение активной версии затронет все рабочие станции флота при следующей синхронизации.\n\nПереключить активную версию ${label} на v${version} (откат)?`
-        : `Warning: switching active release will affect all fleet workstations on their next sync.\n\nSwitch active ${label} version to v${version} (rollback)?`;
-      if (!await pecConfirm({
-        title: isRu ? 'Смена активной версии' : 'Switch Active Version',
-        message: audienceWarning,
-        isDanger: true
-      })) return;
+
+      let isForwardRollback = false;
+      let nextVer = '';
+
+      if (type === 'extension') {
+        const extReleases = (currentReleasesList || []).filter((r: any) => r.type === 'extension');
+        let highestVersion = currentActiveExtVer || '';
+        for (const r of extReleases) {
+          if (r.version && (!highestVersion || compareSemver(r.version, highestVersion) > 0)) {
+            highestVersion = r.version;
+          }
+        }
+        if (highestVersion && compareSemver(version, highestVersion) < 0) {
+          isForwardRollback = true;
+          nextVer = bumpPatchVersion(highestVersion);
+        }
+      }
+
+      if (isForwardRollback) {
+        const rollbackMsg = isRu
+          ? `Внимание: Chromium блокирует занижение версий. Откат на v${version} будет автоматически выпущен как форвард-обновление v${nextVer}, чтобы все запущенные браузеры флота немедленно применили его без блокировок.\n\nПродолжить?`
+          : `Warning: Chromium blocks version downgrades. Rollback to v${version} will be automatically released as forward-update v${nextVer} so all running fleet browsers apply it immediately without locks.\n\nProceed?`;
+
+        if (!await pecConfirm(rollbackMsg, { isDanger: true })) return;
+      } else {
+        const audienceWarning = isRu
+          ? `Внимание: переключение активной версии затронет все рабочие станции флота при следующей синхронизации.\n\nПереключить активную версию ${label} на v${version} (откат)?`
+          : `Warning: switching active release will affect all fleet workstations on their next sync.\n\nSwitch active ${label} version to v${version} (rollback)?`;
+
+        if (!await pecConfirm({
+          title: isRu ? 'Смена активной версии' : 'Switch Active Version',
+          message: audienceWarning,
+          isDanger: true
+        })) return;
+      }
 
       try {
         const res = await adminFetch('/api/releases/set-active', {
@@ -1830,7 +1858,16 @@ export let currentActiveAppVer = '';
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-          toast(isRu ? `Активная версия ${label} изменена на v${version}` : `Active ${label} version switched to v${version}`, 'success');
+          if (data.isForwardRollback) {
+            toast(
+              isRu
+                ? `Форвард-откат выполнен! Выпущена версия v${data.activeVersion} из проверенной сборки v${data.rollbackFrom}`
+                : `Forward-rollback complete! Released version v${data.activeVersion} from verified build v${data.rollbackFrom}`,
+              'success'
+            );
+          } else {
+            toast(isRu ? `Активная версия ${label} изменена на v${version}` : `Active ${label} version switched to v${version}`, 'success');
+          }
           await loadReleases();
         } else {
           toast(data.error || (isRu ? 'Ошибка смены активной версии' : 'Failed to switch active release'), 'error');

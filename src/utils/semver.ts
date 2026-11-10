@@ -83,3 +83,21 @@ export function isNewerVersion(candidate: string, current: string): boolean {
   if (!current || !current.trim()) return true;
   return compareSemver(candidate, current) > 0;
 }
+
+/**
+ * Increment the patch component of a semver string (e.g. "1.0.13" -> "1.0.14").
+ */
+export function bumpPatchVersion(version: string): string {
+  const clean = String(version || "").trim().replace(/^[vV]/, "");
+  const withoutBuild = clean.split("+")[0];
+  const [base] = withoutBuild.split("-");
+  const parts = base.split(".").map((n) => {
+    const num = parseInt(n, 10);
+    return isNaN(num) ? 0 : num;
+  });
+  while (parts.length < 3) {
+    parts.push(0);
+  }
+  parts[2] = (parts[2] || 0) + 1;
+  return parts.slice(0, 3).join(".");
+}

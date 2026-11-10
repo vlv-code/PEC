@@ -1,3 +1,6 @@
+import AdmZip from "adm-zip";
+import crypto from "node:crypto";
+import { ensureKeyExists, packCrxBuffer } from "../src/packager.js";
 import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert";
@@ -55,35 +58,35 @@ test("Releases API: GET /api/releases requires admin authentication", async () =
   });
 });
 
-test("Releases API: POST /api/releases/set-active changes active version and rolls back", async () => {
+test("Releases API: POST /api/releases/set-active changes active version and rolls back (app)", async () => {
   resetReleasesStore();
 
   // Create fake files
-  const releaseDir1 = path.join(TEST_TMP_DIR, "releases/extensions/1.0.0");
-  const releaseDir2 = path.join(TEST_TMP_DIR, "releases/extensions/1.1.0");
+  const releaseDir1 = path.join(TEST_TMP_DIR, "releases/apps/1.0.0");
+  const releaseDir2 = path.join(TEST_TMP_DIR, "releases/apps/1.1.0");
   fs.mkdirSync(releaseDir1, { recursive: true });
   fs.mkdirSync(releaseDir2, { recursive: true });
-  const crx1 = path.join(releaseDir1, "pec-extension.crx");
-  const crx2 = path.join(releaseDir2, "pec-extension.crx");
-  fs.writeFileSync(crx1, "crx1-data");
-  fs.writeFileSync(crx2, "crx2-data");
+  const zip1 = path.join(releaseDir1, "pec-client-windows-x64.zip");
+  const zip2 = path.join(releaseDir2, "pec-client-windows-x64.zip");
+  fs.writeFileSync(zip1, "zip1-data");
+  fs.writeFileSync(zip2, "zip2-data");
 
   recordRelease({
-    type: "extension",
+    type: "app",
     version: "1.0.0",
     builtAt: new Date().toISOString(),
     sha256: "sha-1",
-    fileName: "pec-extension.crx",
-    filePath: crx1,
+    fileName: "pec-client-windows-x64.zip",
+    filePath: zip1,
   });
 
   recordRelease({
-    type: "extension",
+    type: "app",
     version: "1.1.0",
     builtAt: new Date().toISOString(),
     sha256: "sha-2",
-    fileName: "pec-extension.crx",
-    filePath: crx2,
+    fileName: "pec-client-windows-x64.zip",
+    filePath: zip2,
     isActive: true,
   });
 
@@ -106,7 +109,7 @@ test("Releases API: POST /api/releases/set-active changes active version and rol
         "Content-Type": "application/json",
         "X-Admin-Token": TEST_ADMIN_TOKEN,
       },
-      body: JSON.stringify({ type: "extension", version: "1.0.0" }),
+      body: JSON.stringify({ type: "app", version: "1.0.0" }),
     });
     assert.strictEqual(resRollback.status, 200);
     const body = await resRollback.json();
@@ -115,9 +118,84 @@ test("Releases API: POST /api/releases/set-active changes active version and rol
 
     // Check updates directory has mirrored 1.0.0
     const updatesDir = path.join(TEST_TMP_DIR, "updates");
+    const activeZip = path.join(updatesDir, "pec-client-windows-x64.zip");
+    assert.ok(fs.existsSync(activeZip));
+    assert.strictEqual(fs.readFileSync(activeZip, "utf-8"), "zip1-data");
+  });
+});
+
+test("Releases API: POST /api/releases/set-active triggers forward-rollback for extension", async () => {
+  resetReleasesStore();
+
+  const zip = new AdmZip();
+  zip.addFile(
+    "manifest.json",
+    Buffer.from(
+      JSON.stringify({
+        manifest_version: 3,
+        name: "PEC Extension",
+        version: "1.0.0",
+      })
+    )
+  );
+  zip.addFile("background.js", Buffer.from("console.log('v1.0.0');"));
+  const zipBuf = zip.toBuffer();
+
+  const privKey = ensureKeyExists();
+  const crxBuf100 = packCrxBuffer(zipBuf, privKey);
+  const sha100 = crypto.createHash("sha256").update(crxBuf100).digest("hex");
+
+  const releaseDir1 = path.join(TEST_TMP_DIR, "releases/extensions/1.0.0");
+  const releaseDir2 = path.join(TEST_TMP_DIR, "releases/extensions/1.1.0");
+  fs.mkdirSync(releaseDir1, { recursive: true });
+  fs.mkdirSync(releaseDir2, { recursive: true });
+  const crx1 = path.join(releaseDir1, "pec-extension.crx");
+  const crx2 = path.join(releaseDir2, "pec-extension.crx");
+  fs.writeFileSync(crx1, crxBuf100);
+  fs.writeFileSync(crx2, crxBuf100);
+
+  recordRelease({
+    type: "extension",
+    version: "1.0.0",
+    builtAt: new Date().toISOString(),
+    sha256: sha100,
+    fileName: "pec-extension.crx",
+    filePath: crx1,
+  });
+
+  recordRelease({
+    type: "extension",
+    version: "1.1.0",
+    builtAt: new Date().toISOString(),
+    sha256: sha100,
+    fileName: "pec-extension.crx",
+    filePath: crx2,
+    isActive: true,
+  });
+
+  await withServer(async (base) => {
+    // Rollback to 1.0.0 -> forward-rollback to 1.1.1
+    const resRollback = await fetch(`${base}/api/releases/set-active`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Token": TEST_ADMIN_TOKEN,
+      },
+      body: JSON.stringify({ type: "extension", version: "1.0.0" }),
+    });
+    assert.strictEqual(resRollback.status, 200);
+    const body = await resRollback.json();
+    assert.strictEqual(body.ok, true);
+    assert.strictEqual(body.activeVersion, "1.1.1");
+    assert.strictEqual(body.isForwardRollback, true);
+    assert.strictEqual(body.rollbackFrom, "1.0.0");
+
+    // Check updates directory has mirrored forward-rollback 1.1.1
+    const updatesDir = path.join(TEST_TMP_DIR, "updates");
     const activeCrx = path.join(updatesDir, "pec-extension.crx");
     assert.ok(fs.existsSync(activeCrx));
-    assert.strictEqual(fs.readFileSync(activeCrx, "utf-8"), "crx1-data");
+    const activeCrxBuf = fs.readFileSync(activeCrx);
+    assert.strictEqual(activeCrxBuf.subarray(0, 4).toString(), "Cr24");
   });
 });
 

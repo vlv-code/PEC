@@ -3,6 +3,9 @@ import test from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
+import AdmZip from "adm-zip";
+import { ensureKeyExists, packCrxBuffer } from "../src/packager.js";
 import { TEST_TMP_DIR } from "./helpers/setup.js";
 import {
   getAllReleases,
@@ -37,44 +40,44 @@ test("Release Manager: records a new release and marks it active if first of its
   assert.strictEqual(active?.version, "1.2.0");
 });
 
-test("Release Manager: allows setting a prior release active (rollback)", () => {
+test("Release Manager: allows setting a prior release active (desktop app rollback)", () => {
   resetReleasesStore();
 
   recordRelease({
-    type: "extension",
+    type: "app",
     version: "1.2.0",
     builtAt: new Date().toISOString(),
     sha256: "test-sha-120",
-    fileName: "pec-extension.crx",
-    filePath: path.join(TEST_TMP_DIR, "releases/extensions/1.2.0/pec-extension.crx"),
+    fileName: "pec-client-windows-x64.zip",
+    filePath: path.join(TEST_TMP_DIR, "releases/apps/1.2.0/pec-client-windows-x64.zip"),
   });
 
   const rel2 = recordRelease({
-    type: "extension",
+    type: "app",
     version: "1.2.1",
     builtAt: new Date().toISOString(),
     sha256: "test-sha-121",
-    fileName: "pec-extension.crx",
-    filePath: path.join(TEST_TMP_DIR, "releases/extensions/1.2.1/pec-extension.crx"),
+    fileName: "pec-client-windows-x64.zip",
+    filePath: path.join(TEST_TMP_DIR, "releases/apps/1.2.1/pec-client-windows-x64.zip"),
     isActive: true,
   });
 
   assert.strictEqual(rel2.isActive, true);
-  assert.strictEqual(getAllReleases().activeExtensionVersion, "1.2.1");
+  assert.strictEqual(getAllReleases().activeAppVersion, "1.2.1");
 
   // Rollback to 1.2.0
-  const res = setActiveRelease("extension", "1.2.0");
+  const res = setActiveRelease("app", "1.2.0");
   assert.strictEqual(res.ok, true);
   assert.strictEqual(res.activeVersion, "1.2.0");
 
   const store = getAllReleases();
-  assert.strictEqual(store.activeExtensionVersion, "1.2.0");
+  assert.strictEqual(store.activeAppVersion, "1.2.0");
   const rel120 = store.releases.find((r) => r.version === "1.2.0");
   const rel121 = store.releases.find((r) => r.version === "1.2.1");
   assert.strictEqual(rel120?.isActive, true);
   assert.strictEqual(rel121?.isActive, false);
 
-  const active = getActiveRelease("extension");
+  const active = getActiveRelease("app");
   assert.strictEqual(active?.version, "1.2.0");
 });
 
@@ -208,4 +211,89 @@ test("Release Manager: deleteRelease safely ignores deletion when filePath is no
   assert.strictEqual(deleted, true);
   // Target outside file must NOT be deleted
   assert.ok(fs.existsSync(fakeOutsidePath));
+});
+
+test("Release Manager: rolling back to an older extension version triggers automatic Forward-Rollback with bumped semver and signed CRX", () => {
+  resetReleasesStore();
+
+  // Create a minimal valid CRX package for version 1.0.0
+  const zip = new AdmZip();
+  zip.addFile(
+    "manifest.json",
+    Buffer.from(
+      JSON.stringify({
+        manifest_version: 3,
+        name: "PEC Extension",
+        version: "1.0.0",
+      })
+    )
+  );
+  zip.addFile("background.js", Buffer.from("console.log('v1.0.0');"));
+  const zipBuf = zip.toBuffer();
+
+  const privKey = ensureKeyExists();
+  const crxBuf100 = packCrxBuffer(zipBuf, privKey);
+  const sha100 = crypto.createHash("sha256").update(crxBuf100).digest("hex");
+
+  const rel100Dir = path.join(TEST_TMP_DIR, "releases/extensions/1.0.0");
+  fs.mkdirSync(rel100Dir, { recursive: true });
+  const crx100Path = path.join(rel100Dir, "pec-extension.crx");
+  fs.writeFileSync(crx100Path, crxBuf100);
+
+  recordRelease({
+    type: "extension",
+    version: "1.0.0",
+    builtAt: new Date().toISOString(),
+    sha256: sha100,
+    fileName: "pec-extension.crx",
+    filePath: crx100Path,
+    isActive: false,
+  });
+
+  // Record a newer version 1.0.5 as active
+  const rel105Dir = path.join(TEST_TMP_DIR, "releases/extensions/1.0.5");
+  fs.mkdirSync(rel105Dir, { recursive: true });
+  const crx105Path = path.join(rel105Dir, "pec-extension.crx");
+  fs.writeFileSync(crx105Path, crxBuf100);
+
+  recordRelease({
+    type: "extension",
+    version: "1.0.5",
+    builtAt: new Date().toISOString(),
+    sha256: sha100,
+    fileName: "pec-extension.crx",
+    filePath: crx105Path,
+    isActive: true,
+  });
+
+  assert.strictEqual(getAllReleases().activeExtensionVersion, "1.0.5");
+
+  // Trigger rollback to 1.0.0 -> must create forward-rollback 1.0.6
+  const res = setActiveRelease("extension", "1.0.0");
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(res.isForwardRollback, true);
+  assert.strictEqual(res.activeVersion, "1.0.6");
+  assert.strictEqual(res.rollbackFrom, "1.0.0");
+
+  const store = getAllReleases();
+  assert.strictEqual(store.activeExtensionVersion, "1.0.6");
+  const rel106 = store.releases.find((r) => r.version === "1.0.6");
+  assert.ok(rel106);
+  assert.strictEqual(rel106.isActive, true);
+  assert.strictEqual(rel106.notes, "Forward-rollback to v1.0.0");
+
+  // Verify signed CRX binary and modified manifest
+  assert.ok(fs.existsSync(rel106.filePath));
+  const newCrx = fs.readFileSync(rel106.filePath);
+  assert.strictEqual(newCrx.subarray(0, 4).toString(), "Cr24");
+
+  const headerLen = newCrx.readUInt32LE(8);
+  const unpackedZip = new AdmZip(newCrx.subarray(12 + headerLen));
+  const unpackedManifest = JSON.parse(unpackedZip.readAsText("manifest.json"));
+  assert.strictEqual(unpackedManifest.version, "1.0.6");
+
+  // Verify updates.xml mirror
+  const updatesDir = path.resolve(process.env.PEC_UPDATES_DIR || path.join(TEST_TMP_DIR, "updates"));
+  const updatesXml = fs.readFileSync(path.join(updatesDir, "updates.xml"), "utf-8");
+  assert.ok(updatesXml.includes("version='1.0.6'"));
 });
