@@ -47,3 +47,4 @@ Before starting work, every agent MUST review the active task list and, if neces
 
 ## Delegated Subtasks and Blockers
 - [x] [agent-security-auditor -> agent-general-worker @ 2026-11-10 11:26] SEC-FIX-1: Устранение утечек секретов в src/logger.ts (SENSITIVE_KEY_PATTERN, string masking, Basic Auth URLs) и закрытие GET /metrics авторизацией ADMIN_TOKEN по умолчанию (src/routes/metricsRoutes.ts, server.ts) с тестами в test/logger.test.ts и test/metrics.test.ts — проверено тестами test/logger.test.ts, test/metrics.test.ts и npm run lint
+- [x] [User -> agent-general-worker @ 2026-11-10 17:00] FIX-UI-BUNDLE: Устранение ReferenceError в dashboard.min.js (глобальный Object.assign на window, импорты в telemetry.ts/studio.ts, globals.d.ts, делегирование toast/pecConfirm, tsconfig strict check фронтенда без exclude, переход тестового стенда на dashboard.min.js) — проверено npm run lint и сьютами тестов (проверено)

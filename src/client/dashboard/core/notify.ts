@@ -8,6 +8,9 @@ export function trackModalOpener(el?: HTMLElement) {
 }
 
 export function toast(message: string, type?: string) {
+  if (typeof window !== 'undefined' && typeof (window as any).toast === 'function' && (window as any).toast !== toast) {
+    return (window as any).toast(message, type);
+  }
   let host = document.getElementById('toastHost');
   if (!host) {
     host = document.createElement('div');
@@ -274,10 +277,16 @@ export function showPecDialog(mode: 'confirm' | 'prompt', messageOrOpts: any, de
 }
 
 export function pecConfirm(message: string | PecDialogOptions, options?: PecDialogOptions): Promise<boolean> {
+  if (typeof window !== 'undefined' && typeof (window as any).pecConfirm === 'function' && (window as any).pecConfirm !== pecConfirm) {
+    return (window as any).pecConfirm(message, options);
+  }
   return showPecDialog('confirm', message, null, options);
 }
 
 export function pecPrompt(message: string | PecDialogOptions, defaultValue?: string, options?: PecDialogOptions): Promise<string | null> {
+  if (typeof window !== 'undefined' && typeof (window as any).pecPrompt === 'function' && (window as any).pecPrompt !== pecPrompt) {
+    return (window as any).pecPrompt(message, defaultValue, options);
+  }
   return showPecDialog('prompt', message, defaultValue, options);
 }
 

@@ -21,8 +21,10 @@ test("packager: getBuildInfo correctly computes hasPrivateKey from PEM env var",
     const info = getBuildInfo();
     assert.strictEqual(info.hasPrivateKey, true, "hasPrivateKey must be true when PEC_PRIVATE_KEY_PEM is provided");
   } finally {
-    process.env.PEC_PRIVATE_KEY_PEM = origPem;
-    process.env.PEC_PRIVATE_KEY_PATH = origPath;
+    if (origPem !== undefined) process.env.PEC_PRIVATE_KEY_PEM = origPem;
+    else delete process.env.PEC_PRIVATE_KEY_PEM;
+    if (origPath !== undefined) process.env.PEC_PRIVATE_KEY_PATH = origPath;
+    else delete process.env.PEC_PRIVATE_KEY_PATH;
   }
 });
 
@@ -40,8 +42,10 @@ test("packager: getBuildInfo correctly computes hasPrivateKey from PATH env var"
     const info = getBuildInfo();
     assert.strictEqual(info.hasPrivateKey, true, "hasPrivateKey must be true when PEC_PRIVATE_KEY_PATH points to an existing file");
   } finally {
-    process.env.PEC_PRIVATE_KEY_PEM = origPem;
-    process.env.PEC_PRIVATE_KEY_PATH = origPath;
+    if (origPem !== undefined) process.env.PEC_PRIVATE_KEY_PEM = origPem;
+    else delete process.env.PEC_PRIVATE_KEY_PEM;
+    if (origPath !== undefined) process.env.PEC_PRIVATE_KEY_PATH = origPath;
+    else delete process.env.PEC_PRIVATE_KEY_PATH;
   }
 });
 

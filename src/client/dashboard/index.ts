@@ -17,6 +17,7 @@ export * from './tabs/proxies.js';
 export * from './tabs/routing.js';
 export * from './tabs/studio.js';
 export * from './tabs/telemetry.js';
+export { APP_THEME_PRESETS } from './core/theme.js';
 
 // Immediate theme boot to prevent FOUC (Flash of Unstyled Content)
 try {
@@ -256,23 +257,21 @@ export async function refreshAll(isInitialBoot: boolean = false) {
 
 // Attach all functions to window for backwards compatibility with inline HTML and tests
 if (typeof window !== 'undefined') {
-  const win = window as any;
-
-  // Tabs & Navigation
-  win.switchTab = switchTab;
-  win.refreshAll = refreshAll;
-  win.bootDashboard = bootDashboard;
-  win.initHashRouting = initHashRouting;
-  win.initTabsAccessibility = initTabsAccessibility;
-
-  // Assign APIs
-  Object.assign(win, api);
-  Object.assign(win, notify);
-  Object.assign(win, theme);
-  Object.assign(win, proxies);
-  Object.assign(win, routing);
-  Object.assign(win, studio);
-  Object.assign(win, telemetry);
+  Object.assign(window, {
+    ...api,
+    ...notify,
+    ...theme,
+    ...proxies,
+    ...routing,
+    ...studio,
+    ...telemetry,
+    switchTab,
+    initHashRouting,
+    bootDashboard,
+    refreshAll,
+    getTabNameFromHash,
+    initTabsAccessibility,
+  });
 
   // Tab pause/resume on visibility change
   document.addEventListener('visibilitychange', function() {

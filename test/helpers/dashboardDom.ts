@@ -29,7 +29,7 @@ export interface DashboardDomEnv {
   teardown: () => void;
 }
 
-const DASHBOARD_JS_PATH = path.resolve("public/dashboard.js");
+const DASHBOARD_JS_PATH = path.resolve("public/dashboard.min.js");
 let cachedDashboardJs: string | null = null;
 
 function getDashboardJsCode(): string {

@@ -10,7 +10,10 @@ import { setupDashboardDom } from "./helpers/dashboardDom.js";
 test("dashboard regression: 1.1 default tab initialization activates routing tab", () => {
   const env = setupDashboardDom({ authenticated: true });
   try {
-    const { document } = env;
+    const { document, window } = env;
+
+    assert.equal(typeof window.switchTab, "function", "window.switchTab must be exposed globally on window");
+    assert.equal(typeof window.openEditRuleModal, "function", "window.openEditRuleModal must be exposed globally on window");
 
     const routingBtn = document.getElementById("tabBtnRouting");
     const routingPane = document.getElementById("tab-routing");
@@ -37,12 +40,8 @@ test("dashboard regression: 1.2 tab switching to Proxies activates proxy pane an
     const { window, document, fetchCalls } = env;
 
     // Switch to proxy settings
-    if (typeof window.switchTab === "function") {
-      window.switchTab("proxy-settings");
-    } else {
-      const btn = document.getElementById("tabBtnProxySettings");
-      btn?.click();
-    }
+    assert.equal(typeof window.switchTab, "function", "window.switchTab must be a function on window");
+    window.switchTab("proxy-settings");
 
     const proxyBtn = document.getElementById("tabBtnProxySettings");
     const proxyPane = document.getElementById("tab-proxy-settings");

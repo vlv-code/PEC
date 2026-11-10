@@ -3,6 +3,69 @@ import { state } from '../core/state.js';
 import { adminFetch, esc, escapeHtml, extractError } from '../core/api.js';
 import { toast, pecConfirm, pecPrompt, registerModalCloser } from '../core/notify.js';
 import { t, applyThemeSyncToConstructors, closeCustomizationPopover } from '../core/theme.js';
+import { fetchExtensionInfo, loadReleases } from './telemetry.js';
+
+let currentProxiesList: any[] = [];
+export let extensionFiles: Record<string, string> = {};
+export let cachedReleases: any = null;
+export let currentAppCustomIconDataUrl = '';
+export let isAppCustomIconUploaded = false;
+
+export function setAppCustomIconDataUrl(dataUrl: string, isUploaded: boolean = false, triggerSave: boolean = false) {
+  currentAppCustomIconDataUrl = dataUrl || '';
+  isAppCustomIconUploaded = Boolean(isUploaded && dataUrl);
+
+  const previewBox = document.getElementById('appCustomIconPreviewBox');
+  const previewImg = document.getElementById('appCustomIconPreviewImg');
+  if (currentAppCustomIconDataUrl && isAppCustomIconUploaded) {
+    if (previewImg) (previewImg as any).src = currentAppCustomIconDataUrl;
+    if (previewBox) previewBox.style.display = 'inline-flex';
+  } else {
+    if (previewImg) (previewImg as any).src = '';
+    if (previewBox) previewBox.style.display = 'none';
+    const fileInput = document.getElementById('appIconFileInput');
+    if (fileInput) (fileInput as any).value = '';
+  }
+
+  if (typeof updateAppLivePreview === 'function') {
+    updateAppLivePreview();
+  }
+  if (triggerSave && typeof onAppConfigChangeLive === 'function') {
+    onAppConfigChangeLive();
+  }
+}
+
+export function clearAppCustomIcon() {
+  setAppCustomIconDataUrl('', false, true);
+}
+
+export function onAppIconFileSelected(e: any) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt: any) {
+    const rawUrl = evt.target.result;
+    const img = new Image();
+    img.onload = function() {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.drawImage(img, 0, 0, 128, 128);
+        const pngDataUrl = canvas.toDataURL('image/png');
+        setAppCustomIconDataUrl(pngDataUrl, true, true);
+      } catch(err) {
+        setAppCustomIconDataUrl(rawUrl, true, true);
+      }
+    };
+    img.onerror = function() {
+      setAppCustomIconDataUrl(rawUrl, true, true);
+    };
+    img.src = rawUrl;
+  };
+  reader.readAsDataURL(file);
+}
 
 declare let currentLang: string;
 if (typeof window !== 'undefined' && !('currentLang' in window)) {
@@ -185,7 +248,7 @@ export let isCustomIconUploaded = false;
         img.onerror = function() {
           setCustomIconDataUrl(rawUrl, true, true);
         };
-        img.src = rawUrl;
+        img.src = rawUrl as string;
       };
       reader.readAsDataURL(file);
     };
@@ -1620,7 +1683,7 @@ export let currentAppLayout = 'console';
       if (Array.isArray(info.coreModulesIntegrity)) {
         modules = info.coreModulesIntegrity;
       } else if (info.coreModulesIntegrity && typeof info.coreModulesIntegrity === 'object') {
-        modules = Object.entries(info.coreModulesIntegrity).map(([k, v]) => ({ name: k, ...v }));
+        modules = Object.entries(info.coreModulesIntegrity).map(([k, v]) => ({ name: k, ...(v as any) }));
       }
 
       let integrityEl = document.getElementById('appCoreModulesIntegrity');
@@ -2586,9 +2649,6 @@ export let currentAppLayout = 'console';
     window.openBuildLogModal = openBuildLogModal;
     window.closeBuildLogModal = closeBuildLogModal;
     window.copyBuildLogToClipboard = copyBuildLogToClipboard;
-    window.openEditRuleModal = openEditRuleModal;
-    window.closeEditRuleModal = closeEditRuleModal;
-    window.saveEditedRule = saveEditedRule;
     window.setAppLayout = setAppLayout;
     window.importSelectedRoutingProfileRules = importSelectedRoutingProfileRules;
     window.renderAppStudioBuildInfo = renderAppStudioBuildInfo;
@@ -2917,18 +2977,9 @@ export let currentAppLayout = 'console';
     }
     window.loadAppStudioConfig = loadAppStudioConfig;
     window.setAppPalette = setAppPalette;
-    window.setServerTheme = setServerTheme;
-    window.setServerThemeMode = setServerThemeMode;
-    window.setGlobalBrandIcon = setGlobalBrandIcon;
-    window.setGlobalBrandIconSource = setGlobalBrandIconSource;
-    window.setGlobalBrandCustomIcon = setGlobalBrandCustomIcon;
-    window.clearGlobalBrandCustomIcon = clearGlobalBrandCustomIcon;
-    window.onGlobalBrandIconFileSelected = onGlobalBrandIconFileSelected;
     window.setAppCustomIconDataUrl = setAppCustomIconDataUrl;
     window.clearAppCustomIcon = clearAppCustomIcon;
     window.onAppIconFileSelected = onAppIconFileSelected;
-    window.toggleSyncThemeWithApps = toggleSyncThemeWithApps;
-    window.applyThemeSyncToConstructors = applyThemeSyncToConstructors;
     window.toggleVersionPopover = toggleVersionPopover;
     window.closeVersionPopover = closeVersionPopover;
     window.refreshGitHubReleasesNow = refreshGitHubReleasesNow;

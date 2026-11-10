@@ -2,9 +2,21 @@
 import { state } from '../core/state.js';
 import { adminFetch, esc, escapeHtml, extractError } from '../core/api.js';
 import { toast, pecConfirm, pecPrompt, registerModalCloser } from '../core/notify.js';
-import { t } from '../core/theme.js';
+import { t, I18N } from '../core/theme.js';
+import { openEditRuleModal, moveRuleUp, moveRuleDown, removeRule, openGeobaseInspector, addPresetRule, toggleRuleEnabled, toggleInspectorEntry } from './routing.js';
+import { deleteAppProcessRule, updateAppProcessRuleField } from './studio.js';
+import { activateProxy, checkProxy, syncProxy, openEditProxyModal, deleteProxy, fetchProxies } from './proxies.js';
 
 declare let currentLang: string;
+declare const formatRelativeTime: any;
+let loadInstancesSeq = 0;
+let loadDesktopInstancesSeq = 0;
+let fetchStatusSeq = 0;
+let currentProxiesList: any[] = [];
+export let allProfiles: any[] = [];
+export let globalGpo: any = null;
+export let globalKillSwitch = false;
+
 if (typeof window !== 'undefined' && !('currentLang' in window)) {
   Object.defineProperty(window, 'currentLang', {
     get() { return state.currentLang || 'ru'; },
@@ -149,7 +161,7 @@ export let lastFleetFetchTime = 0;
       });
 
       // Memoize profile and proxy structures to avoid re-looping on every instance
-      const memoizedProfiles = (allProfiles || []).map(p => ({
+      const memoizedProfiles = (state.allProfiles || allProfiles || []).map(p => ({
         id: p.id,
         name: esc(p.name)
       }));
@@ -245,7 +257,7 @@ export let lastFleetFetchTime = 0;
       const selectAll = document.getElementById('fleetSelectAll');
 
       const count = selectedFleetInstances.size;
-      if (countEl) countEl.textContent = count;
+      if (countEl) countEl.textContent = String(count);
 
       if (bar) {
         bar.style.display = count > 0 ? 'flex' : 'none';
@@ -286,7 +298,7 @@ export let lastFleetFetchTime = 0;
       if (profileSelect) {
         const currentVal = profileSelect.value;
         profileSelect.innerHTML = `<option value="">${isRu ? 'По умолчанию (Авто)' : 'Default (Auto)'}</option>` +
-          (allProfiles || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+          (state.allProfiles || allProfiles || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
         if (currentVal) profileSelect.value = currentVal;
       }
     }
@@ -1203,7 +1215,7 @@ export let currentGpoBrowser = 'chrome'; // 'chrome', 'edge', 'yandex', 'opera'
         return;
       }
       const rotInsecure = document.getElementById('rotInsecureTls');
-      const payload = {
+      const payload: any = {
         panelUrl: document.getElementById('rotPanelUrl').value.trim(),
         adminUser: document.getElementById('rotAdminUser').value.trim(),
         inboundRemark: document.getElementById('rotRemark').value.trim(),
@@ -1250,7 +1262,7 @@ export let currentGpoBrowser = 'chrome'; // 'chrome', 'edge', 'yandex', 'opera'
       const out = document.getElementById('test3xuiResult');
       out.textContent = 'Testing connection to 3x-ui API...';
       const enteredPass = document.getElementById('rotAdminPass').value;
-      const payload = {
+      const payload: any = {
         panelUrl: document.getElementById('rotPanelUrl').value.trim(),
         adminUser: document.getElementById('rotAdminUser').value.trim(),
         inboundRemark: document.getElementById('rotRemark').value.trim()
@@ -1293,7 +1305,7 @@ export let currentGpoBrowser = 'chrome'; // 'chrome', 'edge', 'yandex', 'opera'
         const data = await res.json();
         if (data.ok) {
           toast(isRu ? ('Успешно! Новый пользователь: ' + data.result.user) : ('Rotated! New user: ' + data.result.user + ' (source: ' + data.result.source + ')'), 'success');
-          refreshAll();
+          if (typeof (window as any).refreshAll === 'function') (window as any).refreshAll();
         } else {
           toast((isRu ? 'Ошибка ротации: ' : 'Rotation error: ') + data.error, 'error');
         }
@@ -1367,7 +1379,7 @@ export let currentPanelsList = [];
       }
     }
 
-    export function openAdd3xuiPanelModal(panel) {
+    export function openAdd3xuiPanelModal(panel?: any) {
       const idInp = document.getElementById('panelIdInput');
       const nameInp = document.getElementById('panelName');
       const urlInp = document.getElementById('panelUrl');
@@ -1883,12 +1895,6 @@ export let currentActiveAppVer = '';
     window.setActiveReleaseVersion = setActiveReleaseVersion;
     window.deleteReleaseVersion = deleteReleaseVersion;
     window.downloadReleaseVersion = downloadReleaseVersion;
-    window.refreshAll = refreshAll;
-    window.bootDashboard = bootDashboard;
-    window.initHashRouting = initHashRouting;
-    window.initTabsAccessibility = initTabsAccessibility;
-    window.initModalBackdropHandlers = initModalBackdropHandlers;
-    window.switchTab = switchTab;
 
 
 // Register modal closers

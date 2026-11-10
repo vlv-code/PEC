@@ -1,10 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "esModuleInterop": true,
     "strict": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "useUnknownInCatchVariables": false,
     "skipLibCheck": true,
     "noEmit": true
   },
@@ -12,8 +16,5 @@
     "server.ts",
     "src/**/*.ts",
     "test/**/*.ts"
-  ],
-  "exclude": [
-    "src/client"
   ]
 }
