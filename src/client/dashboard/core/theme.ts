@@ -1,6 +1,9 @@
 // Themes, Layouts & Localization Module for PEC Dashboard
 // Theme Invariant: 100% parity with client/Windows/gui/pec_imgui_theme.h
 import { state } from './state.js';
+import { I18N } from './i18n.js';
+
+export { I18N };
 
 export interface ThemePalette {
   accent: string;
@@ -261,94 +264,96 @@ export function applyThemeSyncToConstructors() {
   if (aCard) aCard.classList.toggle('locked-by-sync', syncEnabled);
 }
 
-// Localization dictionary
-export const I18N: Record<string, Record<string, string>> = {
-  en: {
-    appTitle: 'PEC - Proxy Extension Corp',
-    appSubtitle: 'Enterprise Proxy Synchronization',
-    statusGatewayActive: 'Gateway Active',
-    statusGatewayOffline: 'Gateway Offline',
-    btnRefreshAllTitle: 'Refresh All',
-    btnLogoutTitle: 'Log out',
-    btnCustomizationTitle: 'Appearance & Themes',
-    popoverTitle: 'Appearance',
-    tabBtnRouting: 'Routing & GeoBases',
-    tabBtnBuilder: 'Extension Constructor Studio',
-    tabBtnAppStudio: 'App Studio',
-    tabBtnFleet: 'Fleet',
-    tabBtnProxySettings: 'Proxy Settings',
-    tabBtnLogs: 'Audit & Tester',
-    lblSettingsLayout: '1. Dashboard Layout Style',
-    lblSettingsTheme: '2. Color Palette Scheme',
-    lblSettingsThemeMode: 'Theme Mode:',
-    lblThemeDark: '🌙 Dark',
-    lblThemeLight: '☀️ Light',
-    lblGlobalBrandIcon: 'Corporate Brand Icon:',
-    lblBrandIconPreset: 'Emoji (Preset)',
-    lblBrandIconCustom: 'Custom Logo (PNG/SVG)',
-    btnUploadCorporateIcon: 'Upload Logo (PNG / SVG)',
-    lblSyncThemeWithApps: 'Synchronize theme and icon with extensions & apps',
-    msgThemeLockedBySync: 'Synchronized with corporate dashboard appearance',
-    btnCloseModal: 'Close',
-  },
-  ru: {
-    appTitle: 'PEC - Proxy Extension Corp',
-    appSubtitle: 'Корпоративная синхронизация прокси',
-    statusGatewayActive: 'Шлюз активен',
-    statusGatewayOffline: 'Шлюз недоступен',
-    btnRefreshAllTitle: 'Обновить всё',
-    btnLogoutTitle: 'Выйти из системы',
-    btnCustomizationTitle: 'Внешний вид и темы',
-    popoverTitle: 'Внешний вид',
-    tabBtnRouting: 'Маршрутизация и Гео-базы',
-    tabBtnBuilder: 'Конструктор расширения',
-    tabBtnAppStudio: 'Конструктор приложения',
-    tabBtnFleet: 'Флот',
-    tabBtnProxySettings: 'Настройки прокси',
-    tabBtnLogs: 'Аудит и Тестер API',
-    lblSettingsLayout: '1. Стиль интерфейса сервера (Layout)',
-    lblSettingsTheme: '2. Цветовая палитра (Color Scheme)',
-    lblSettingsThemeMode: 'Режим темы:',
-    lblThemeDark: '🌙 Темная',
-    lblThemeLight: '☀️ Светлая',
-    lblGlobalBrandIcon: 'Корпоративный значок:',
-    lblBrandIconPreset: 'Эмодзи',
-    lblBrandIconCustom: 'Свой логотип',
-    btnUploadCorporateIcon: 'Загрузить логотип (PNG / SVG)',
-    lblSyncThemeWithApps: 'Синхронизировать тему и значок с расширениями и приложениями',
-    msgThemeLockedBySync: 'Синхронизировано с корпоративным оформлением панели',
-    btnCloseModal: 'Закрыть',
-  }
-};
-
 export function t(key: string, fallback?: string): string {
   const dict = I18N[state.currentLang] || {};
   return dict[key] || fallback || key;
 }
 
 export function setLanguage(lang: string) {
-  if (lang !== 'ru' && lang !== 'en') lang = 'ru';
-  state.currentLang = lang;
-  try { localStorage.setItem('pec_lang', lang); } catch (_) {}
-  if (document.documentElement) document.documentElement.lang = lang;
+  const currentLang = (lang === 'en' || lang === 'ru') ? lang : 'ru';
+  state.currentLang = currentLang;
+  if (typeof window !== 'undefined') (window as any).currentLang = currentLang;
+  if (document.documentElement) {
+    document.documentElement.lang = currentLang;
+  }
+  try { localStorage.setItem('pec_lang', currentLang); } catch (_) {}
 
-  const btnRu = document.getElementById('langBtnRu');
-  const btnEn = document.getElementById('langBtnEn');
-  if (btnRu) btnRu.classList.toggle('active', lang === 'ru');
-  if (btnEn) btnEn.classList.toggle('active', lang === 'en');
+  const btnEn = document.getElementById('btnLangEn');
+  const btnRu = document.getElementById('btnLangRu');
+  if (btnEn && btnRu) {
+    if (currentLang === 'en') {
+      btnEn.classList.add('active');
+      btnRu.classList.remove('active');
+    } else {
+      btnRu.classList.add('active');
+      btnEn.classList.remove('active');
+    }
+  }
 
-  // Update elements with data-i18n
+  const modalRu = document.getElementById('modalLangRu');
+  const modalEn = document.getElementById('modalLangEn');
+  if (modalRu && modalEn) {
+    if (currentLang === 'ru') {
+      modalRu.className = 'btn';
+      modalEn.className = 'btn-secondary';
+    } else {
+      modalEn.className = 'btn';
+      modalRu.className = 'btn-secondary';
+    }
+  }
+
+  const dict = I18N[currentLang] || {};
+
+  // Update all elements with data-i18n attributes
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
-    if (!key) return;
-    const translation = t(key);
-    if (translation) el.innerHTML = translation;
+    if (key && dict[key]) {
+      if (dict[key].includes('<')) {
+        el.innerHTML = dict[key];
+      } else {
+        const icon = el.querySelector('img.icon-inline, svg');
+        if (icon) {
+          const clone = icon.cloneNode(true);
+          el.innerHTML = '';
+          el.appendChild(clone);
+          el.appendChild(document.createTextNode(' ' + dict[key]));
+        } else {
+          el.textContent = dict[key];
+        }
+      }
+    }
   });
 
+  // Update placeholders with data-i18n-ph attributes
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-ph');
+    if (key && dict[key]) {
+      el.setAttribute('placeholder', dict[key]);
+    }
+  });
+
+  // Update titles with data-i18n-title attributes
   document.querySelectorAll('[data-i18n-title]').forEach((el) => {
     const key = el.getAttribute('data-i18n-title');
-    if (!key) return;
-    const translation = t(key);
-    if (translation) el.setAttribute('title', translation);
+    if (key && dict[key]) {
+      el.setAttribute('title', dict[key]);
+    }
   });
+
+  // Update elements by ID if present in dictionary
+  for (const key in dict) {
+    const el = document.getElementById(key);
+    if (el && !el.hasAttribute('data-i18n')) {
+      if (dict[key].includes('<')) {
+        el.innerHTML = dict[key];
+      } else {
+        el.textContent = dict[key];
+      }
+    }
+  }
+
+  const btnKill = document.getElementById('btnKillSwitch');
+  if (btnKill) {
+    btnKill.textContent = state.globalKillSwitch ? dict.btnKillSwitchOn : dict.btnKillSwitchOff;
+  }
 }
