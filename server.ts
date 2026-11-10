@@ -3,7 +3,7 @@ import express, { Request, Response, NextFunction } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { ensureKeyExists, packageExtension } from "./src/packager.js";
-import { startScheduler } from "./src/scheduler.js";
+import { startScheduler, stopScheduler } from "./src/scheduler.js";
 import { atomicWriteCreds, ensureCredsStore, getCredsStorePath } from "./src/rotate.js";
 import { securityHeadersMiddleware, safeCorsMiddleware, createTokenAuthMiddleware, resolveAdminToken } from "./src/middleware/security.js";
 import { createCredsRouter } from "./src/routes/credsRoutes.js";
@@ -370,7 +370,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 if (process.env.NODE_ENV !== "test" && process.env.PEC_DISABLE_LISTEN !== "true") {
-  app.listen(PORT, HOST, () => {
+  const server = app.listen(PORT, HOST, () => {
     const publicUrl = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
     const displayHost = HOST === "0.0.0.0" ? "127.0.0.1" : HOST;
     const baseDisplayUrl = publicUrl || `http://${displayHost}:${PORT}`;
@@ -392,6 +392,61 @@ if (process.env.NODE_ENV !== "test" && process.env.PEC_DISABLE_LISTEN !== "true"
         `[SECURITY WARNING] ADMIN_TOKEN is not configured - generated a development-only admin token for this run: ${ADMIN_TOKEN}\n` +
           `[SECURITY WARNING] Development only: restarting the server will change this token. Set ADMIN_TOKEN in .env for a stable value.`
       );
+    }
+  });
+
+  let isShuttingDown = false;
+  server.on("request", (_req, res) => {
+    if (isShuttingDown && !res.headersSent) {
+      res.setHeader("Connection", "close");
+    }
+  });
+
+  const gracefulShutdown = (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`[pec-server] Received ${signal} - initiating graceful shutdown...`);
+
+    try {
+      stopScheduler();
+    } catch (err) {
+      console.error("[pec-server] Error stopping scheduler:", err);
+    }
+
+    const forceTimer = setTimeout(() => {
+      console.warn("[pec-server] Shutdown timeout reached, forcing exit.");
+      process.exit(0);
+    }, 5000);
+    forceTimer.unref?.();
+
+    const idleTimer = setTimeout(() => {
+      if (typeof server.closeIdleConnections === "function") {
+        server.closeIdleConnections();
+      }
+    }, 500);
+    idleTimer.unref?.();
+
+    server.close((err) => {
+      clearTimeout(forceTimer);
+      clearTimeout(idleTimer);
+      if (err) {
+        console.error("[pec-server] Error during server close:", err);
+        process.exit(1);
+      }
+      console.log("[pec-server] Server closed gracefully.");
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("message", (msg) => {
+    if (
+      msg === "SIGTERM" ||
+      msg === "shutdown" ||
+      (typeof msg === "object" && msg !== null && (msg as any).type === "SIGTERM")
+    ) {
+      gracefulShutdown("SIGTERM");
     }
   });
 }

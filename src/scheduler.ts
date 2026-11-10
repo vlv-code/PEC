@@ -282,3 +282,11 @@ export function startScheduler() {
 export function restartScheduler() {
   startScheduler();
 }
+
+export function stopScheduler(): void {
+  if (timerHandle) {
+    clearInterval(timerHandle);
+    timerHandle = null;
+    console.log("[scheduler] Stopped rotation timer.");
+  }
+}

@@ -1000,9 +1000,17 @@ test("purity: background.js responds to both msg.action and msg.type with full p
 });
 
 test("purity: 1:1 parity between extension/ static files and src/extensionTemplates.ts", async () => {
-  const { BACKGROUND_TEMPLATE, MANAGED_SCHEMA_TEMPLATE } = await import("../src/extensionTemplates.js");
+  const {
+    BACKGROUND_TEMPLATE,
+    MANAGED_SCHEMA_TEMPLATE,
+    renderPopupHtml,
+    renderPopupJs,
+  } = await import("../src/extensionTemplates.js");
+
   const bgPath = path.join(REPO_ROOT, "extension", "background.js");
   const schemaPath = path.join(REPO_ROOT, "extension", "managed_schema.json");
+  const popupHtmlPath = path.join(REPO_ROOT, "extension", "popup.html");
+  const popupJsPath = path.join(REPO_ROOT, "extension", "popup.js");
 
   const bgDisk = fs.readFileSync(bgPath, "utf-8").replace(/\r\n/g, "\n").trim();
   const bgTmpl = BACKGROUND_TEMPLATE.replace(/\r\n/g, "\n").trim();
@@ -1011,4 +1019,12 @@ test("purity: 1:1 parity between extension/ static files and src/extensionTempla
   const schemaDisk = fs.readFileSync(schemaPath, "utf-8").replace(/\r\n/g, "\n").trim();
   const schemaTmpl = MANAGED_SCHEMA_TEMPLATE.replace(/\r\n/g, "\n").trim();
   assert.strictEqual(schemaDisk, schemaTmpl, "extension/managed_schema.json must match MANAGED_SCHEMA_TEMPLATE exactly");
+
+  const popupHtmlDisk = fs.readFileSync(popupHtmlPath, "utf-8").replace(/\r\n/g, "\n").trim();
+  const popupHtmlTmpl = renderPopupHtml().replace(/\r\n/g, "\n").trim();
+  assert.strictEqual(popupHtmlDisk, popupHtmlTmpl, "extension/popup.html must match renderPopupHtml() exactly");
+
+  const popupJsDisk = fs.readFileSync(popupJsPath, "utf-8").replace(/\r\n/g, "\n").trim();
+  const popupJsTmpl = renderPopupJs().replace(/\r\n/g, "\n").trim();
+  assert.strictEqual(popupJsDisk, popupJsTmpl, "extension/popup.js must match renderPopupJs() exactly");
 });

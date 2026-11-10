@@ -145,8 +145,14 @@ inline void ApplyProfileTheme(const PBProfile* prof, ImGuiStyle* dst = nullptr)
             PecTheme::HoverAccent   = ImVec4(0.506f, 0.631f, 0.757f, 1.0f); // #81a1c1
             PecTheme::ActiveAccent  = ImVec4(0.298f, 0.416f, 0.569f, 1.0f); // #4c6a91
         }
-        else {
+        else if (preset == "enterprise-light" || preset == "light" || preset == "minimal-light") {
             // Default Enterprise / Cyber Light
+            PecTheme::PrimaryAccent = ImVec4(0.145f, 0.388f, 0.922f, 1.0f); // #2563eb Blue
+            PecTheme::HoverAccent   = ImVec4(0.231f, 0.510f, 0.965f, 1.0f); // #3b82f6
+            PecTheme::ActiveAccent  = ImVec4(0.114f, 0.306f, 0.847f, 1.0f); // #1d4ed8
+        }
+        else {
+            // Fallback Light
             PecTheme::PrimaryAccent = ImVec4(0.145f, 0.388f, 0.922f, 1.0f); // #2563eb Blue
             PecTheme::HoverAccent   = ImVec4(0.231f, 0.510f, 0.965f, 1.0f); // #3b82f6
             PecTheme::ActiveAccent  = ImVec4(0.114f, 0.306f, 0.847f, 1.0f); // #1d4ed8
