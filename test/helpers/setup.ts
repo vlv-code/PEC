@@ -9,6 +9,9 @@ import vm from "node:vm";
 if (typeof (globalThis as any).Iterator === "undefined") {
   (globalThis as any).Iterator = class Iterator {
     constructor() {}
+    [Symbol.iterator]() {
+      return this;
+    }
     static from(val: any) {
       if (val && typeof val[Symbol.iterator] === "function") {
         return val[Symbol.iterator]();

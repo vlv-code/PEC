@@ -6,6 +6,9 @@ const vm = require("node:vm");
 if (typeof globalThis.Iterator === "undefined") {
   globalThis.Iterator = class Iterator {
     constructor() {}
+    [Symbol.iterator]() {
+      return this;
+    }
     static from(val) {
       if (val && typeof val[Symbol.iterator] === "function") {
         return val[Symbol.iterator]();
