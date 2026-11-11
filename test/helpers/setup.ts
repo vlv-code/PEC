@@ -5,7 +5,18 @@ import zlib from "node:zlib";
 import workerThreads from "node:worker_threads";
 import vm from "node:vm";
 
-// Node 20 compatibility: polyfill global Iterator, zlib and worker_threads APIs required by undici/jsdom
+// Node 20 compatibility: polyfill Promise.withResolvers, global Iterator, zlib and worker_threads APIs required by undici/jsdom
+if (typeof (Promise as any).withResolvers !== "function") {
+  (Promise as any).withResolvers = function () {
+    let resolve: any, reject: any;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 if (typeof (globalThis as any).Iterator === "undefined") {
   (globalThis as any).Iterator = class Iterator {
     constructor() {}
@@ -25,24 +36,37 @@ if (typeof vm.createContext === "function") {
   const origCreateContext = vm.createContext;
   vm.createContext = function (...args: any[]) {
     const ctx = origCreateContext.apply(this, args as any);
-    if (ctx && typeof ctx === "object" && !("Iterator" in ctx)) {
-      try {
-        ctx.Iterator = (globalThis as any).Iterator;
-      } catch (_) {}
+    if (ctx && typeof ctx === "object") {
+      if (!("Iterator" in ctx)) {
+        try {
+          ctx.Iterator = (globalThis as any).Iterator;
+        } catch (_) {}
+      }
+      if (ctx.Promise && typeof ctx.Promise.withResolvers !== "function") {
+        try {
+          ctx.Promise.withResolvers = (Promise as any).withResolvers;
+        } catch (_) {}
+      }
     }
     return ctx;
   };
 
   const origScriptRunInContext = vm.Script.prototype.runInContext;
   vm.Script.prototype.runInContext = function (contextifiedObject: any, options: any) {
-    if (
-      contextifiedObject &&
-      typeof contextifiedObject === "object" &&
-      !("Iterator" in contextifiedObject)
-    ) {
-      try {
-        contextifiedObject.Iterator = (globalThis as any).Iterator;
-      } catch (_) {}
+    if (contextifiedObject && typeof contextifiedObject === "object") {
+      if (!("Iterator" in contextifiedObject)) {
+        try {
+          contextifiedObject.Iterator = (globalThis as any).Iterator;
+        } catch (_) {}
+      }
+      if (
+        contextifiedObject.Promise &&
+        typeof contextifiedObject.Promise.withResolvers !== "function"
+      ) {
+        try {
+          contextifiedObject.Promise.withResolvers = (Promise as any).withResolvers;
+        } catch (_) {}
+      }
     }
     return origScriptRunInContext.call(this, contextifiedObject, options);
   };
