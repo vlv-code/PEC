@@ -1,6 +1,7 @@
 // Polyfill Node 22+ APIs required by undici@8 / jsdom@30 when running on Node 20
 const zlib = require("node:zlib");
 const workerThreads = require("node:worker_threads");
+const vm = require("node:vm");
 
 if (typeof globalThis.Iterator === "undefined") {
   globalThis.Iterator = class Iterator {
@@ -11,6 +12,36 @@ if (typeof globalThis.Iterator === "undefined") {
       }
       return val;
     }
+  };
+}
+
+// In Node 20, JSDOM inspects `name in global` and attempts to run `vm.runInContext(globalName, window)`
+// for each global in `jsGlobals`. Since `globalThis.Iterator` was added above, JSDOM runs
+// `vm.runInContext("Iterator", window)` inside newly created VM contexts which don't natively have Iterator.
+if (typeof vm.createContext === "function") {
+  const origCreateContext = vm.createContext;
+  vm.createContext = function (...args) {
+    const ctx = origCreateContext.apply(this, args);
+    if (ctx && typeof ctx === "object" && !("Iterator" in ctx)) {
+      try {
+        ctx.Iterator = globalThis.Iterator;
+      } catch (_) {}
+    }
+    return ctx;
+  };
+
+  const origScriptRunInContext = vm.Script.prototype.runInContext;
+  vm.Script.prototype.runInContext = function (contextifiedObject, options) {
+    if (
+      contextifiedObject &&
+      typeof contextifiedObject === "object" &&
+      !("Iterator" in contextifiedObject)
+    ) {
+      try {
+        contextifiedObject.Iterator = globalThis.Iterator;
+      } catch (_) {}
+    }
+    return origScriptRunInContext.call(this, contextifiedObject, options);
   };
 }
 

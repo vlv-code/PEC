@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import workerThreads from "node:worker_threads";
+import vm from "node:vm";
 
 // Node 20 compatibility: polyfill global Iterator, zlib and worker_threads APIs required by undici/jsdom
 if (typeof (globalThis as any).Iterator === "undefined") {
@@ -14,6 +15,33 @@ if (typeof (globalThis as any).Iterator === "undefined") {
       }
       return val;
     }
+  };
+}
+
+if (typeof vm.createContext === "function") {
+  const origCreateContext = vm.createContext;
+  vm.createContext = function (...args: any[]) {
+    const ctx = origCreateContext.apply(this, args as any);
+    if (ctx && typeof ctx === "object" && !("Iterator" in ctx)) {
+      try {
+        ctx.Iterator = (globalThis as any).Iterator;
+      } catch (_) {}
+    }
+    return ctx;
+  };
+
+  const origScriptRunInContext = vm.Script.prototype.runInContext;
+  vm.Script.prototype.runInContext = function (contextifiedObject: any, options: any) {
+    if (
+      contextifiedObject &&
+      typeof contextifiedObject === "object" &&
+      !("Iterator" in contextifiedObject)
+    ) {
+      try {
+        contextifiedObject.Iterator = (globalThis as any).Iterator;
+      } catch (_) {}
+    }
+    return origScriptRunInContext.call(this, contextifiedObject, options);
   };
 }
 if (typeof (zlib as any).createZstdDecompress !== "function") {
