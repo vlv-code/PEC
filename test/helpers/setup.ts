@@ -2,12 +2,33 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
+import workerThreads from "node:worker_threads";
 
-// Node 20 compatibility: polyfill zlib.createZstdDecompress stub required by undici/jsdom
+// Node 20 compatibility: polyfill zlib and worker_threads APIs required by undici/jsdom
 if (typeof (zlib as any).createZstdDecompress !== "function") {
   (zlib as any).createZstdDecompress = () => {
+    const stream = new (require("node:stream").Transform)();
+    return stream;
+  };
+}
+if (!(zlib as any).constants) {
+  (zlib as any).constants = {};
+}
+if ((zlib as any).constants.ZSTD_d_windowLogMax === undefined) {
+  (zlib as any).constants.ZSTD_d_windowLogMax = 0;
+}
+if (typeof (zlib as any).zstdCompressSync !== "function") {
+  (zlib as any).zstdCompressSync = () => {
     throw new Error("zstd is not supported on this Node.js version");
   };
+}
+if (typeof (zlib as any).zstdDecompressSync !== "function") {
+  (zlib as any).zstdDecompressSync = () => {
+    throw new Error("zstd is not supported on this Node.js version");
+  };
+}
+if (typeof (workerThreads as any).markAsUncloneable !== "function") {
+  (workerThreads as any).markAsUncloneable = (val: any) => val;
 }
 
 /**

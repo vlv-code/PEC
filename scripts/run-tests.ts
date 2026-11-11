@@ -11,17 +11,36 @@ const testFiles = fs
   .map((f) => path.join("test", f));
 
 const tsxCli = require.resolve("tsx/cli");
+const patchScript = path.resolve("scripts/patch-node20.cjs").replace(/\\/g, "/");
+
+const userArgs = process.argv.slice(2);
+const hasExplicitFiles = userArgs.some(
+  (arg) => !arg.startsWith("-") && (arg.endsWith(".ts") || arg.endsWith(".js"))
+);
+const filesToRun = hasExplicitFiles ? [] : testFiles;
+
+const prevNodeOptions = process.env.NODE_OPTIONS || "";
+const requireOption = `--require ${patchScript.includes(" ") ? `"${patchScript}"` : patchScript}`;
+const nodeOptions = prevNodeOptions
+  ? `${prevNodeOptions} ${requireOption}`
+  : requireOption;
+
 const args = [
+  "--require",
+  patchScript,
   tsxCli,
   "--test",
   "--test-concurrency=1",
-  ...process.argv.slice(2),
-  ...testFiles,
+  ...userArgs,
+  ...filesToRun,
 ];
 
 const res = spawnSync(process.execPath, args, {
   stdio: "inherit",
-  env: process.env,
+  env: {
+    ...process.env,
+    NODE_OPTIONS: nodeOptions,
+  },
 });
 
 process.exit(res.status ?? (res.error ? 1 : 0));
