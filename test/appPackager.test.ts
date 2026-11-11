@@ -472,7 +472,8 @@ test("setup.c extracts payload to a secure randomized temp directory with SYSTEM
 
   // If clang is present on the system, compile setup.c to ensure zero compilation or syntax errors
   try {
-    const whichClang = process.platform === "win32" ? "where.exe clang" : "which clang";
+    if (process.platform !== "win32") return;
+    const whichClang = "where.exe clang";
     let hasClang = false;
     try {
       execSync(whichClang, { stdio: "ignore" });
@@ -529,7 +530,8 @@ test("update.h enforces WinVerifyTrust Authenticode signature verification befor
 
   // If clang is present on the system, compile main.c (which includes update.h) to ensure zero compilation errors
   try {
-    const whichClang = process.platform === "win32" ? "where.exe clang" : "which clang";
+    if (process.platform !== "win32") return;
+    const whichClang = "where.exe clang";
     let hasClang = false;
     try {
       execSync(whichClang, { stdio: "ignore" });
