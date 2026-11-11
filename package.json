@@ -19,7 +19,7 @@
     "sync:templates": "tsx scripts/sync-templates.ts",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit && biome check .",
-    "test": "tsx --test \"test/**/*.test.ts\" --test-concurrency=1",
+    "test": "tsx --test --test-concurrency=1",
     "test:coverage": "tsx --test --test-concurrency=1 --experimental-test-coverage"
   },
   "dependencies": {
