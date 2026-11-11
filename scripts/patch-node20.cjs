@@ -2,6 +2,18 @@
 const zlib = require("node:zlib");
 const workerThreads = require("node:worker_threads");
 
+if (typeof globalThis.Iterator === "undefined") {
+  globalThis.Iterator = class Iterator {
+    constructor() {}
+    static from(val) {
+      if (val && typeof val[Symbol.iterator] === "function") {
+        return val[Symbol.iterator]();
+      }
+      return val;
+    }
+  };
+}
+
 if (typeof zlib.createZstdDecompress !== "function") {
   zlib.createZstdDecompress = function () {
     const stream = new (require("node:stream").Transform)();

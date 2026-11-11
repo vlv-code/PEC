@@ -4,7 +4,18 @@ import path from "node:path";
 import zlib from "node:zlib";
 import workerThreads from "node:worker_threads";
 
-// Node 20 compatibility: polyfill zlib and worker_threads APIs required by undici/jsdom
+// Node 20 compatibility: polyfill global Iterator, zlib and worker_threads APIs required by undici/jsdom
+if (typeof (globalThis as any).Iterator === "undefined") {
+  (globalThis as any).Iterator = class Iterator {
+    constructor() {}
+    static from(val: any) {
+      if (val && typeof val[Symbol.iterator] === "function") {
+        return val[Symbol.iterator]();
+      }
+      return val;
+    }
+  };
+}
 if (typeof (zlib as any).createZstdDecompress !== "function") {
   (zlib as any).createZstdDecompress = () => {
     const stream = new (require("node:stream").Transform)();
