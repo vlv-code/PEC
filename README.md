@@ -6,8 +6,13 @@
 > **Enterprise Threat Model & Architectural Boundaries**
 > PEC is strictly designed for on-premise deployment in closed corporate intranets and enterprise VPNs. Chrome extensions and desktop clients are distributed via Active Directory Group Policies (GPO: ExtensionInstallForcelist, Registry). Security is enforced through perimeter network isolation, AD Security Filtering, and dynamic credential rotation — not via client-side secret obfuscation.
 
+> [!NOTE]
+> **Project Status: Public Alpha / Active Development**
+> The server core, dynamic PAC generation, and browser extension synchronization are battle-tested and running in production. However, native desktop clients (DirectX 11 GUI, WinDivert driver, Linux daemon) and specialized Active Directory GPO deployment scenarios across diverse Windows editions and RDS terminal farms are in public alpha testing. Feedback, issue reports, and contributions are welcome.
+
 [![CI Status](https://github.com/vlv-code/PEC/actions/workflows/ci.yml/badge.svg)](https://github.com/vlv-code/PEC/actions)
-[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/vlv-code/PEC/releases)
+[![Release](https://img.shields.io/badge/release-v0.9.0--alpha-blue.svg)](https://github.com/vlv-code/PEC/releases)
+[![Status: Public Alpha](https://img.shields.io/badge/status-public--alpha-orange.svg)]()
 [![Node.js](https://img.shields.io/badge/node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
 [![Chrome Extension](https://img.shields.io/badge/chrome%20extension-MV3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -15,7 +20,7 @@
 [![Boosty](https://img.shields.io/badge/Donate-Boosty-F15F2C.svg)](https://boosty.to/oovlvoo)
 [![USDT TON](https://img.shields.io/badge/Donate-USDT%20TON-26A17B.svg)](#support-the-project)
 
-**PEC - Proxy Extension Corp** is an enterprise solution for central proxy fleet management, browser extension construction & packaging (Chrome Manifest V3), Windows Active Directory GPO distribution, and automated credential rotation with Xray / 3x-ui panels.
+**PEC - Proxy Extension Corp** is an open-source platform for central proxy fleet management, browser extension construction & packaging (Chrome Manifest V3), Windows Active Directory GPO distribution, and automated credential rotation with Xray / 3x-ui panels.
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "name": "pec-proxy-extension-corp",
-  "version": "1.0.0",
+  "version": "0.9.0-alpha",
   "description": "PEC - Proxy Extension Corp: Enterprise proxy synchronization server, live extension builder studio, GPO policies & 3x-ui rotator",
   "license": "AGPL-3.0-or-later",
   "author": "PEC Team (https://github.com/vlv-code/PEC)",

@@ -6,16 +6,21 @@
 > **Корпоративная модель угроз и архитектурные границы**
 > PEC разработан строго для on-premise развертывания в закрытых корпоративных интрасетях и корпоративных VPN. Расширения Chrome и десктопные клиенты доставляются через групповые политики Active Directory (GPO: ExtensionInstallForcelist, реестр). Безопасность обеспечивается сетевой изоляцией периметра, фильтрацией безопасности AD и динамической ротацией учетных данных, а не сокрытием секретов на стороне клиента.
 
+> [!NOTE]
+> **Статус проекта: Public Alpha / Active Development**
+> Серверное ядро, генерация PAC-скриптов и веб-синхронизация расширений проверены в бою и эксплуатируются автором в продакшене. Нативные десктопные клиенты (DirectX 11 GUI, драйвер WinDivert, Linux-демон) и специализированные сценарии GPO (различные редакции Windows, RDS-терминалы) находятся на этапе открытого альфа-тестирования. Приветствуются обратная связь, отчеты об ошибках и тестирование на различных конфигурациях парка машин.
+
 [![CI Status](https://github.com/vlv-code/PEC/actions/workflows/ci.yml/badge.svg)](https://github.com/vlv-code/PEC/actions)
 [![Node.js](https://img.shields.io/badge/node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
 [![Chrome Extension](https://img.shields.io/badge/chrome%20extension-MV3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/)
-[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/vlv-code/PEC/releases)
+[![Release](https://img.shields.io/badge/release-v0.9.0--alpha-blue.svg)](https://github.com/vlv-code/PEC/releases)
+[![Status: Public Alpha](https://img.shields.io/badge/status-public--alpha-orange.svg)]()
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Boosty](https://img.shields.io/badge/Donate-Boosty-F15F2C.svg)](https://boosty.to/oovlvoo)
 [![USDT TON](https://img.shields.io/badge/Donate-USDT%20TON-26A17B.svg)](#поддержать-проект)
 
-**PEC - Proxy Extension Corp** — корпоративная система безопасного управления прокси, сборки и кастомизации браузерных расширений (Chrome Manifest V3), распространения через Active Directory GPO и автоматической ротации учетных данных в панелях Xray / 3x-ui.
+**PEC - Proxy Extension Corp** — открытая платформа для централизованного управления парком прокси, сборки и кастомизации браузерных расширений (Chrome Manifest V3), распространения через Active Directory GPO и автоматической ротации учетных данных в панелях Xray / 3x-ui.
 
 ---
 
