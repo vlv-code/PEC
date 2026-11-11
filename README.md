@@ -13,7 +13,7 @@
 [![Chrome Extension](https://img.shields.io/badge/chrome%20extension-MV3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Boosty](https://img.shields.io/badge/Donate-Boosty-F15F2C.svg)](https://boosty.to/oovlvoo)
-[![USDT TON](https://img.shields.io/badge/Donate-USDT%20TON-26A17B.svg)](#поддержать-проект)
+[![USDT TON](https://img.shields.io/badge/Donate-USDT%20TON-26A17B.svg)](#support-the-project)
 
 **PEC - Proxy Extension Corp** is an enterprise solution for central proxy fleet management, browser extension construction & packaging (Chrome Manifest V3), Windows Active Directory GPO distribution, and automated credential rotation with Xray / 3x-ui panels.
 
@@ -317,12 +317,12 @@ The packaged ZIP and CRX artifacts are generated in `dist/updates/`, and the rea
 
 ---
 
-## Поддержать проект
+## Support the Project
 
-Если PEC оказался полезным, можно поддержать развитие:
+If PEC has been useful to you, you can support its development:
 
 - [Boosty](https://boosty.to/oovlvoo)
-- Криптовалюта: USDT, сеть TON (только USDT и только эта сеть, иначе средства будут потеряны):
+- Cryptocurrency: USDT, TON network (USDT only and only this network, otherwise funds will be lost):
   UQDASKlEmcoPuBr5-u5jSjLdXWfCiSfARjPc_wWW0qLbSreC
 
 ---

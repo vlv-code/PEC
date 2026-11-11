@@ -6,12 +6,14 @@
 > **Корпоративная модель угроз и архитектурные границы**
 > PEC разработан строго для on-premise развертывания в закрытых корпоративных интрасетях и корпоративных VPN. Расширения Chrome и десктопные клиенты доставляются через групповые политики Active Directory (GPO: ExtensionInstallForcelist, реестр). Безопасность обеспечивается сетевой изоляцией периметра, фильтрацией безопасности AD и динамической ротацией учетных данных, а не сокрытием секретов на стороне клиента.
 
-[![CI](https://github.com/vlv-code/PEC/actions/workflows/ci.yml/badge.svg)](https://github.com/vlv-code/PEC/actions/workflows/ci.yml)
+[![CI Status](https://github.com/vlv-code/PEC/actions/workflows/ci.yml/badge.svg)](https://github.com/vlv-code/PEC/actions)
 [![Node.js](https://img.shields.io/badge/node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
 [![Chrome Extension](https://img.shields.io/badge/chrome%20extension-MV3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/)
 [![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/vlv-code/PEC/releases)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Boosty](https://img.shields.io/badge/Donate-Boosty-F15F2C.svg)](https://boosty.to/oovlvoo)
+[![USDT TON](https://img.shields.io/badge/Donate-USDT%20TON-26A17B.svg)](#поддержать-проект)
 
 **PEC - Proxy Extension Corp** — корпоративная система безопасного управления прокси, сборки и кастомизации браузерных расширений (Chrome Manifest V3), распространения через Active Directory GPO и автоматической ротации учетных данных в панелях Xray / 3x-ui.
 
@@ -315,6 +317,16 @@ PEC_SERVER_URL=https://pec.example.corp npm run pack:extension
 > [!WARNING]
 > Всегда загружайте **`dist/unpacked/`** в `chrome://extensions` (Режим разработчика -> "Загрузить распакованное расширение").
 > **Никогда не загружайте исходный каталог `extension/` напрямую**: он содержит неподставленные плейсхолдеры сборки (`__PEC_SERVER_BASE__`) и не сможет подключиться к вашему серверу.
+
+---
+
+## Поддержать проект
+
+Если PEC оказался полезным, можно поддержать развитие:
+
+- [Boosty](https://boosty.to/oovlvoo)
+- Криптовалюта: USDT, сеть TON (только USDT и только эта сеть, иначе средства будут потеряны):
+  UQDASKlEmcoPuBr5-u5jSjLdXWfCiSfARjPc_wWW0qLbSreC
 
 ---
 
