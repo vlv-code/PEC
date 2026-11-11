@@ -19,8 +19,8 @@
     "sync:templates": "tsx scripts/sync-templates.ts",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit && biome check .",
-    "test": "tsx --test --test-concurrency=1",
-    "test:coverage": "tsx --test --test-concurrency=1 --experimental-test-coverage"
+    "test": "tsx --test --test-concurrency=1 test/*.test.ts",
+    "test:coverage": "tsx --test --test-concurrency=1 --experimental-test-coverage test/*.test.ts"
   },
   "dependencies": {
     "@types/adm-zip": "^0.5.8",

@@ -2206,13 +2206,11 @@ export function compileBinariesWithMinGW(outDir?: string, customVersion?: string
         return;
       }
       fs.copyFileSync(sourcePath, path.join(winTemplatesDir, name));
-      const rootWin = path.resolve("./templates/app/windows");
-      if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
-        try { fs.copyFileSync(sourcePath, path.join(rootWin, name)); } catch {}
-      }
-      const pristineP = path.join(rootWin, ".pristine", name);
-      if (fs.existsSync(path.dirname(pristineP))) {
-        try { fs.copyFileSync(sourcePath, pristineP); } catch {}
+      if (!process.env.PEC_TEMPLATES_DIR) {
+        const rootWin = path.resolve("./templates/app/windows");
+        if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
+          try { fs.copyFileSync(sourcePath, path.join(rootWin, name)); } catch {}
+        }
       }
     }
   };
@@ -2585,13 +2583,11 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
         return;
       }
       fs.copyFileSync(sourcePath, path.join(winTemplatesDir, name));
-      const rootWin = path.resolve("./templates/app/windows");
-      if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
-        try { fs.copyFileSync(sourcePath, path.join(rootWin, name)); } catch {}
-      }
-      const pristineP = path.join(rootWin, ".pristine", name);
-      if (fs.existsSync(path.dirname(pristineP))) {
-        try { fs.copyFileSync(sourcePath, pristineP); } catch {}
+      if (!process.env.PEC_TEMPLATES_DIR) {
+        const rootWin = path.resolve("./templates/app/windows");
+        if (fs.existsSync(rootWin) && rootWin !== winTemplatesDir) {
+          try { fs.copyFileSync(sourcePath, path.join(rootWin, name)); } catch {}
+        }
       }
     }
   };
@@ -2950,9 +2946,11 @@ export function buildAppBinaries(customVersion?: string): BuildAppBinariesResult
       const msiRes = buildMsiPackage(cfg, "http://127.0.0.1:3000", winTemplatesDir, destMsi);
       if (msiRes.success && fs.existsSync(destMsi)) {
         if (!builtFiles.includes("PEC-App.msi")) builtFiles.push("PEC-App.msi");
-        const rootMsi = path.resolve("./templates/app/windows/PEC-App.msi");
-        if (rootMsi !== destMsi) {
-          try { fs.copyFileSync(destMsi, rootMsi); } catch {}
+        if (!process.env.PEC_TEMPLATES_DIR) {
+          const rootMsi = path.resolve("./templates/app/windows/PEC-App.msi");
+          if (rootMsi !== destMsi) {
+            try { fs.copyFileSync(destMsi, rootMsi); } catch {}
+          }
         }
         log(`[MSI] Enterprise MSI installer package built successfully (${Math.round(fs.statSync(destMsi).size / 1024)} KB)`);
       }
