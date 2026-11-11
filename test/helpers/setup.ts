@@ -23,6 +23,56 @@ if (typeof (globalThis as any).Iterator === "undefined") {
     [Symbol.iterator]() {
       return this;
     }
+    find(predicate: any) {
+      let index = 0;
+      for (const item of (this as any)) {
+        if (predicate(item, index++)) return item;
+      }
+      return undefined;
+    }
+    some(predicate: any) {
+      let index = 0;
+      for (const item of (this as any)) {
+        if (predicate(item, index++)) return true;
+      }
+      return false;
+    }
+    every(predicate: any) {
+      let index = 0;
+      for (const item of (this as any)) {
+        if (!predicate(item, index++)) return false;
+      }
+      return true;
+    }
+    forEach(fn: any) {
+      let index = 0;
+      for (const item of (this as any)) {
+        fn(item, index++);
+      }
+    }
+    toArray() {
+      const arr = [];
+      for (const item of (this as any)) {
+        arr.push(item);
+      }
+      return arr;
+    }
+    reduce(fn: any, initialValue: any) {
+      let acc = initialValue;
+      let hasAcc = arguments.length >= 2;
+      let index = 0;
+      for (const item of (this as any)) {
+        if (!hasAcc) {
+          acc = item;
+          hasAcc = true;
+        } else {
+          acc = fn(acc, item, index);
+        }
+        index++;
+      }
+      if (!hasAcc) throw new TypeError("Reduce of empty iterator with no initial value");
+      return acc;
+    }
     static from(val: any) {
       if (val && typeof val[Symbol.iterator] === "function") {
         return val[Symbol.iterator]();
