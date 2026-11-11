@@ -1,3 +1,4 @@
+import "./setup.js";
 import { JSDOM } from "jsdom";
 import fs from "node:fs";
 import path from "node:path";

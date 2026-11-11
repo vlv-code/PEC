@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
+
+// Node 20 compatibility: polyfill zlib.createZstdDecompress stub required by undici/jsdom
+if (typeof (zlib as any).createZstdDecompress !== "function") {
+  (zlib as any).createZstdDecompress = () => {
+    throw new Error("zstd is not supported on this Node.js version");
+  };
+}
 
 /**
  * Test isolation: every state store is redirected into a per-run temp
