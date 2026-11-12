@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import express, { Router, Request, Response } from "express";
-import { getProxyConfig, registerHeartbeat, enrollInstanceToken, getInstanceMeta, assignInstanceProxy, isSafeInstanceId } from "../instances.js";
+import { getProxyConfig, registerHeartbeat, enrollInstanceToken, getInstanceMeta, assignInstanceProxy, isSafeInstanceId, revokeInstanceToken } from "../instances.js";
+import { isDomainUserAllowed, adSyncService } from "../adSync.js";
+import { RoutingProfile, ProxyConfiguration } from "../types.js";
 import { probeProxyTcp, getAllProxies, getProxyById, getActiveProxy } from "../proxies.js";
 import { resolveProfileForInstance, getProfileById, generatePacScript, expandRuleDomains } from "../routing.js";
 import { readCurrentCredsAsync } from "../rotate.js";
@@ -112,6 +114,32 @@ export function resetFallbackPacSecretForTest(): void {
   inMemoryPacSecret = null;
 }
 
+export function renderPacForInstance(
+  instanceId: string | undefined,
+  profile?: RoutingProfile,
+  targetProxyConfig?: ProxyConfiguration
+): string {
+  if (instanceId) {
+    const meta = getInstanceMeta(instanceId);
+    if (meta?.revoked) {
+      return '// Corp Proxy: Access Revoked\nfunction FindProxyForURL(url, host) { return "DIRECT"; }\n';
+    }
+    const adConfig = adSyncService.getConfig();
+    if (adConfig.enabled) {
+      if (meta?.domainUser && !isDomainUserAllowed(meta.domainUser)) {
+        return '// Corp Proxy: Access Revoked\nfunction FindProxyForURL(url, host) { return "DIRECT"; }\n';
+      }
+      if (!meta?.domainUser && adConfig.rejectUnknownUsers) {
+        return '// Corp Proxy: Access Revoked\nfunction FindProxyForURL(url, host) { return "DIRECT"; }\n';
+      }
+    }
+  }
+
+  const effectiveProfile = profile || resolveProfileForInstance(instanceId);
+  const effectiveConfig = targetProxyConfig || getProxyConfig();
+  return generatePacScript(effectiveProfile, effectiveConfig);
+}
+
 export function resolvePacSecret(getSharedToken?: () => string): string {
   const envSecret = typeof process.env.PAC_SIGNING_SECRET === "string" ? process.env.PAC_SIGNING_SECRET.trim() : "";
   let tokenSecret = "";
@@ -196,6 +224,34 @@ export function createCredsRouter(getSharedToken: () => string): Router {
         return res.status(403).json({ detail: "Forbidden" });
       }
 
+      const meta = instanceId ? getInstanceMeta(instanceId) : undefined;
+      const adConfig = adSyncService.getConfig();
+      if (adConfig.enabled) {
+        if (!meta?.domainUser && adConfig.rejectUnknownUsers) {
+          recordAudit({
+            ip: clientHost,
+            endpoint: "/creds",
+            status: 403,
+            result: "REJECTED_TOKEN",
+            details: "AD identity required on /creds",
+          });
+          return res.status(403).json({ detail: "Forbidden: AD identity required" });
+        }
+        if (meta?.domainUser && !isDomainUserAllowed(meta.domainUser)) {
+          if (instanceId) {
+            revokeInstanceToken(instanceId);
+          }
+          recordAudit({
+            ip: clientHost,
+            endpoint: "/creds",
+            status: 403,
+            result: "REJECTED_TOKEN",
+            details: `Access revoked by Active Directory on /creds for: ${meta.domainUser}`,
+          });
+          return res.status(403).json({ detail: "Forbidden: Access revoked by Active Directory" });
+        }
+      }
+
       const creds = await readCurrentCredsAsync();
       if (!creds) {
         recordAudit({
@@ -249,7 +305,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       const xExtToken = Array.isArray(xExtTokenHeader) ? xExtTokenHeader[0] : xExtTokenHeader;
       const token = getSharedToken();
 
-      const { instanceId: bodyInstanceId, version, extensionId, activeProxyMode, group, selectedProxyId } = req.body || {};
+      const { instanceId: bodyInstanceId, version, extensionId, activeProxyMode, group, selectedProxyId, domainUser } = req.body || {};
       const headerInstanceId = req.headers["x-instance-id"];
       const rawInstanceId = bodyInstanceId !== undefined && bodyInstanceId !== null
         ? bodyInstanceId
@@ -273,6 +329,66 @@ export function createCredsRouter(getSharedToken: () => string): Router {
           details: "Invalid or missing X-Ext-Token",
         });
         return res.status(403).json({ detail: "Forbidden" });
+      }
+
+      const existingMeta = instanceId ? getInstanceMeta(instanceId) : undefined;
+      const cleanDomainUser = typeof domainUser === "string" ? domainUser.trim() : undefined;
+
+      // Anti-spoofing check: bind instanceId to the first registered domainUser.
+      // Any attempt to switch domainUser on an existing instance without admin reset is rejected.
+      if (instanceId && existingMeta?.domainUser && cleanDomainUser) {
+        if (existingMeta.domainUser.toLowerCase() !== cleanDomainUser.toLowerCase()) {
+          recordAudit({
+            ip: clientHost,
+            endpoint: "/api/sync",
+            status: 403,
+            result: "REJECTED_TOKEN",
+            details: `Domain user spoofing attempt: instance '${instanceId}' bound to '${existingMeta.domainUser}' but presented '${cleanDomainUser}'`,
+          });
+          return res.status(403).json({
+            ok: false,
+            error: "Domain user mismatch: instance is bound to a different domain user",
+            action: "DISABLE_PROXY",
+          });
+        }
+      }
+
+      // Active Directory membership & Kill-Switch
+      const adConfig = adSyncService.getConfig();
+      if (adConfig.enabled) {
+        const effectiveUser = cleanDomainUser || existingMeta?.domainUser;
+        if (!effectiveUser) {
+          if (adConfig.rejectUnknownUsers) {
+            recordAudit({
+              ip: clientHost,
+              endpoint: "/api/sync",
+              status: 403,
+              result: "REJECTED_TOKEN",
+              details: "AD identity required: domainUser is missing",
+            });
+            return res.status(403).json({
+              ok: false,
+              error: "AD identity required",
+              action: "DISABLE_PROXY",
+            });
+          }
+        } else if (!isDomainUserAllowed(effectiveUser)) {
+          if (instanceId) {
+            revokeInstanceToken(instanceId);
+          }
+          recordAudit({
+            ip: clientHost,
+            endpoint: "/api/sync",
+            status: 403,
+            result: "REJECTED_TOKEN",
+            details: `Access revoked by Active Directory for user: ${effectiveUser}`,
+          });
+          return res.status(403).json({
+            ok: false,
+            error: "Access revoked by Active Directory",
+            action: "DISABLE_PROXY",
+          });
+        }
       }
 
       const bldCfg = getBuildConfig();
@@ -336,6 +452,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
             userAgent: req.headers["user-agent"],
             activeProxyMode: activeProxyMode ? String(activeProxyMode) : undefined,
             group: group ? String(group) : undefined,
+            domainUser: domainUser ? String(domainUser).trim() : undefined,
           });
           if (inst.assignedProfileId) {
             const p = getProfileById(inst.assignedProfileId);
@@ -350,7 +467,8 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       const pacSecret = resolvePacSecret(getSharedToken);
       const { exp, sig } = signPacUrlParams(assignedProfile.id, pacSecret, 86400);
       const pacProxyQuery = effectiveNode ? `&proxyId=${encodeURIComponent(effectiveNode.id)}` : "";
-      const pacUrl = `${getBaseUrl(req)}/proxy.pac?profileId=${encodeURIComponent(assignedProfile.id)}&exp=${exp}&sig=${sig}${pacProxyQuery}`;
+      const pacInstanceQuery = instanceId ? `&instanceId=${encodeURIComponent(instanceId)}` : "";
+      const pacUrl = `${getBaseUrl(req)}/proxy.pac?profileId=${encodeURIComponent(assignedProfile.id)}&exp=${exp}&sig=${sig}${pacProxyQuery}${pacInstanceQuery}`;
 
       recordAudit({
         ip: clientHost,
@@ -455,7 +573,7 @@ export function createCredsRouter(getSharedToken: () => string): Router {
       const targetProxyConfig = targetNode
         ? { ...proxyConfig, host: targetNode.host, port: targetNode.port, protocol: targetNode.protocol, isExplicit: true }
         : proxyConfig;
-      const pacContent = generatePacScript(profile, targetProxyConfig);
+      const pacContent = renderPacForInstance(instanceId, profile, targetProxyConfig);
       res.setHeader("Content-Type", "application/x-ns-proxy-autoconfig");
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.send(pacContent);

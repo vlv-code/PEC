@@ -2,7 +2,8 @@ import "./helpers/setup.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { generateGpoConfig } from "../src/packager.js";
+import { generateGpoConfig, buildGpoPackage } from "../src/packager.js";
+import { renderGppRegistryXml } from "../src/templates/gpoTemplates.js";
 
 test("generateGpoConfig generates multi-browser policies for HKCU and HKLM", () => {
   const extId = "abcdefghijklmnopabcdefghijklmnop";
@@ -114,6 +115,7 @@ test("generateGpoDeploymentPack creates valid zip with all deployment artifacts"
   assert.ok(entries.includes("extension-settings-chrome.json"), "must include chrome settings");
   assert.ok(entries.includes("extension-settings-edge.json"), "must include edge settings");
   assert.ok(entries.includes("extension-settings-yandex.json"), "must include yandex settings");
+  assert.ok(entries.includes("Registry.xml"), "must include Registry.xml");
   assert.ok(entries.includes("README-GPO.md"), "must include readme");
 
   // Verify secret hygiene
@@ -156,4 +158,38 @@ test("X-02: deploy-pec-gpo.ps1 merges ExtensionSettings and preserves other exte
       execFileSync("powershell", ["-NoProfile", "-Command", testParseCmd], { stdio: "pipe" });
     }, "deployScript must parse without PowerShell syntax errors");
   }
+});
+
+
+test("renderGppRegistryXml produces valid MS-GPPREG XML with required CLSIDs, action='R', removePolicy='1', and domainUser", () => {
+  const extId = "abcdefghijklmnopabcdefghijklmnop";
+  const serverUrl = "https://pec.corp.local";
+  const token = "corp-token-xyz";
+
+  const xml = renderGppRegistryXml(extId, serverUrl, token, "FinanceGroup");
+
+  assert.ok(xml.startsWith('<?xml version="1.0" encoding="utf-8"?>'), "XML must have standard declaration");
+  assert.ok(xml.includes('clsid="{A3CCFC41-DFDB-43a5-8D26-0FE8B954DA51}"'), "Root must have MS-GPPREG CLSID");
+  assert.ok(xml.includes('clsid="{9CD4B2F7-2C92-116a-9E29-EEB64A588655}"'), "Items must have Registry item CLSID");
+  assert.ok(xml.includes('action="R"'), "Items must have action='R'");
+  assert.ok(xml.includes('removePolicy="1"'), "Items must have removePolicy='1'");
+  assert.ok(xml.includes('bypassErrors="1"'), "Items must have bypassErrors='1'");
+
+  // Parameter ExtensionSettings
+  assert.ok(xml.includes('name="ExtensionSettings"'), "ExtensionSettings must be present");
+  assert.ok(xml.includes('force_installed'), "Chrome/Edge must have force_installed");
+  assert.ok(xml.includes('normal_installed'), "Yandex must have normal_installed");
+
+  // Parameter domainUser
+  assert.ok(xml.includes('name="domainUser"'), "domainUser registry entry must be present");
+  assert.ok(xml.includes('value="%USERDOMAIN%\\%USERNAME%"'), "domainUser value must be %USERDOMAIN%\\%USERNAME%");
+
+  // Token and URLs
+  assert.ok(xml.includes(`value="${token}"`), "extToken must be present");
+  assert.ok(xml.includes(`value="${serverUrl}/api/sync"`), "syncUrl must be present");
+  assert.ok(xml.includes(`value="${serverUrl}/creds"`), "credsUrl must be present");
+
+  // buildGpoPackage alias verification
+  const gpoPack = buildGpoPackage(serverUrl, token);
+  assert.ok(gpoPack.zipBuffer.length > 0, "buildGpoPackage must return valid zipBuffer");
 });

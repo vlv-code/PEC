@@ -96,6 +96,7 @@ export interface ExtensionInstance {
   enrolledAt?: string;
   revoked?: boolean;
   username?: string;
+  domainUser?: string;
   pairedAppId?: string;
   pairedHostname?: string;
   verifiedByApp?: boolean;

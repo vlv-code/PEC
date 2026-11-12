@@ -16,7 +16,7 @@ const LEVEL_WEIGHTS: Record<LogLevel, number> = {
 };
 
 const SENSITIVE_KEY_PATTERN =
-  /(?:token|password|passwd|pass$|adminPass|xuiPass|clientPass|secret|cookie|auth|authorization|admin_token|ext_shared_token|key\.pem|private_key|credential)/i;
+  /(?:adPass|adBindPassword|ad_bind_password|token|password|passwd|pass$|adminPass|xuiPass|clientPass|secret|cookie|auth|authorization|admin_token|ext_shared_token|key\.pem|private_key|credential)/i;
 
 /**
  * Recursively sanitizes data by redacting sensitive keys and masking credential patterns in strings.
@@ -32,7 +32,7 @@ export function sanitizeLogValue(val: unknown, seen = new WeakSet<object>()): un
       .replace(/(https?:\/\/)([^:\s\/]+):([^@\s\/]+)@/gi, "$1$2:[REDACTED]@")
       // 2. Mask key-value credentials in strings (e.g. adminPass="secret", token: "xyz")
       .replace(
-        /((?:adminPass|xuiPass|clientPass|password|passwd|secret|token|x-admin-token|x-ext-token|x-fleet-token)\s*[:=]\s*["']?)[^"',\s&}]+/gi,
+        /((?:adminPass|xuiPass|clientPass|adPass|adBindPassword|ad_bind_password|password|passwd|secret|token|x-admin-token|x-ext-token|x-fleet-token)\s*[:=]\s*["']?)[^"',\s&}]+/gi,
         "$1[REDACTED]"
       )
       // 3. Mask query parameters
@@ -52,6 +52,10 @@ export function sanitizeLogValue(val: unknown, seen = new WeakSet<object>()): un
       sanitized.includes(extToken)
     ) {
       sanitized = sanitized.split(extToken).join("[REDACTED]");
+    }
+    const adBindPass = (process.env.AD_BIND_PASSWORD || "").trim();
+    if (adBindPass.length >= 4 && sanitized.includes(adBindPass)) {
+      sanitized = sanitized.split(adBindPass).join("[REDACTED]");
     }
 
     return sanitized;

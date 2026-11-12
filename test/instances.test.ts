@@ -83,3 +83,34 @@ test("routingMode defaults to 'pac', can be updated to 'fixed', and validates in
   assert.strictEqual(usePacWithPac, true, "when routingMode is pac, usePac must evaluate to true (pac_script)");
 });
 
+
+
+test("registerHeartbeat stores domainUser and populates username when empty without breaking compatibility", () => {
+  // 1. Extension without domainUser maintains backward compatibility
+  const inst1 = registerHeartbeat({
+    instanceId: "inst_no_domain",
+    ip: "10.0.0.10",
+    version: "1.0.0",
+  });
+  assert.strictEqual(inst1.domainUser, undefined);
+  assert.strictEqual(inst1.username, undefined);
+
+  // 2. Extension with domainUser populates both domainUser and username
+  const inst2 = registerHeartbeat({
+    instanceId: "inst_with_domain",
+    ip: "10.0.0.11",
+    version: "1.0.0",
+    domainUser: "CORP\\john.doe",
+  });
+  assert.strictEqual(inst2.domainUser, "CORP\\john.doe");
+  assert.strictEqual(inst2.username, "CORP\\john.doe");
+
+  // 3. Subsequent heartbeat without domainUser preserves existing domainUser and username
+  const inst2Next = registerHeartbeat({
+    instanceId: "inst_with_domain",
+    ip: "10.0.0.11",
+    version: "1.0.1",
+  });
+  assert.strictEqual(inst2Next.domainUser, "CORP\\john.doe");
+  assert.strictEqual(inst2Next.username, "CORP\\john.doe");
+});

@@ -48,6 +48,10 @@ export function getDashboardAuthPath(): string {
   return path.resolve(process.env.DASHBOARD_AUTH_PATH || path.join(getDataDir(), "dashboard_auth.json"));
 }
 
+export function getAdCachePath(): string {
+  return path.resolve(process.env.AD_CACHE_PATH || path.join(getDataDir(), "ad_cache.json"));
+}
+
 export function getBuilderConfigPath(): string {
   return path.resolve(process.env.BUILDER_CONFIG || path.join(getDataDir(), "extension_build_config.json"));
 }

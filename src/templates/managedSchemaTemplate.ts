@@ -25,6 +25,10 @@ export const MANAGED_SCHEMA_TEMPLATE = `{
     "targetGroup": {
       "type": "string",
       "description": "Fleet group this device belongs to (used for group-scoped routing profiles)."
+    },
+    "domainUser": {
+      "type": "string",
+      "description": "Active Directory domain user identity (e.g. DOMAIN\\username) delivered via GPO / GPP."
     }
   }
 }

@@ -298,6 +298,7 @@ async function getManagedConfig() {
       "syncUrl",
       "autoConfigureProxy",
       "targetGroup",
+      "domainUser",
     ]);
 
     const token = managed.extToken || memoryInstanceToken || FALLBACK_TOKEN || null;
@@ -306,8 +307,9 @@ async function getManagedConfig() {
     const rawAuto = managed.autoConfigureProxy;
     const autoConfigureProxy = rawAuto === undefined ? true : (rawAuto !== false && rawAuto !== 0 && rawAuto !== "0" && rawAuto !== "false");
     const targetGroup = managed.targetGroup || DEFAULT_TARGET_GROUP || "Default Fleet";
+    const domainUser = (managed.domainUser && typeof managed.domainUser === "string") ? managed.domainUser.trim() : undefined;
 
-    return { token, credsUrl, syncUrl, autoConfigureProxy, targetGroup };
+    return { token, credsUrl, syncUrl, autoConfigureProxy, targetGroup, domainUser };
   } catch (e) {
     return {
       token: memoryInstanceToken || FALLBACK_TOKEN || null,
@@ -315,6 +317,7 @@ async function getManagedConfig() {
       syncUrl: DEFAULT_SYNC_URL,
       autoConfigureProxy: true,
       targetGroup: DEFAULT_TARGET_GROUP || "Default Fleet",
+      domainUser: undefined,
     };
   }
 }
@@ -1213,7 +1216,7 @@ async function executeSync(forceRefresh = false, applyConfig = true, selectedPro
 
   syncPromise = (async () => {
     try {
-      const { token, syncUrl, credsUrl, autoConfigureProxy, targetGroup } = await getManagedConfig();
+      const { token, syncUrl, credsUrl, autoConfigureProxy, targetGroup, domainUser } = await getManagedConfig();
       const manifest = chrome.runtime.getManifest();
 
       try {
@@ -1249,6 +1252,7 @@ async function executeSync(forceRefresh = false, applyConfig = true, selectedPro
             activeProxyMode: currentProxyState.protocol,
             group: targetGroup,
             selectedProxyId: effectiveSelectedProxyId,
+            domainUser: domainUser || undefined,
           }),
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
@@ -1345,6 +1349,24 @@ async function executeSync(forceRefresh = false, applyConfig = true, selectedPro
             }
           }
         } else {
+          try {
+            const errData = await res.clone().json();
+            if (errData && errData.action === "DISABLE_PROXY") {
+              console.warn("[PEC] Server returned DISABLE_PROXY action:", errData.error);
+              logEvent("error", "Proxy disabled by server: " + (errData.error || "Access revoked"));
+              if (chrome.proxy && chrome.proxy.settings && chrome.proxy.settings.set) {
+                await chrome.proxy.settings.set({
+                  value: { mode: "direct" },
+                  scope: "regular",
+                });
+              }
+              currentProxyState.enabled = false;
+              persistProxyState();
+              updateBadge("OFF", "#ef4444");
+              return;
+            }
+          } catch (e) {}
+
           const statusMsg = "HTTP " + res.status + (res.statusText ? " " + res.statusText : "");
           console.warn("[PEC] Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");
           logEvent("warn", "Sync endpoint /api/sync returned " + statusMsg + ". Falling back to /creds");

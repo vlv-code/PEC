@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { Router, Request, Response } from "express";
-import { getClientIp } from "../audit.js";
+import { getClientIp, recordAudit } from "../audit.js";
 import { createRateLimiter, timingSafeEqualString } from "../middleware/security.js";
 import {
   registerDesktopHeartbeat,
@@ -12,7 +12,9 @@ import {
   getInstanceMeta,
   enrollInstanceToken,
   acquireInstanceMutex,
+  revokeInstanceToken,
 } from "../instances.js";
+import { isDomainUserAllowed, adSyncService } from "../adSync.js";
 import { getActiveProxy, getProxyById, getAllProxies } from "../proxies.js";
 import { ProxyNode } from "../types.js";
 import { getActiveRelease } from "../releases.js";
@@ -108,6 +110,56 @@ export function createAppSyncRouter(
         return res.status(400).json({ ok: false, error: "appInstanceId is required and must be non-empty" });
       }
 
+      const clientIp = getClientIp(req);
+      const existingMeta = cleanAppId ? getInstanceMeta(cleanAppId) : undefined;
+      const cleanUsername = typeof username === "string" ? username.trim() : "";
+
+      // Anti-spoofing check for desktop client:
+      // Bind appInstanceId to the first registered username/domainUser.
+      // Any attempt to switch username on an existing instance without admin reset is rejected.
+      const boundUser = existingMeta?.domainUser || existingMeta?.username;
+      if (cleanAppId && boundUser && cleanUsername && boundUser.toLowerCase() !== cleanUsername.toLowerCase()) {
+        recordAudit({
+          ip: clientIp,
+          endpoint: "/api/app/sync",
+          status: 403,
+          result: "REJECTED_TOKEN",
+          details: `Desktop username spoofing attempt: instance '${cleanAppId}' bound to '${boundUser}' but presented '${cleanUsername}'`,
+        });
+        return res.status(403).json({
+          ok: false,
+          error: "Forbidden: Username mismatch: instance is bound to a different domain user",
+          action: "DISABLE_PROXY",
+        });
+      }
+
+      // Active Directory membership check for desktop app (Kill-Switch)
+      const adConfig = adSyncService.getConfig();
+      if (adConfig.enabled) {
+        const effectiveUser = cleanUsername || boundUser;
+        if (!effectiveUser) {
+          if (adConfig.rejectUnknownUsers) {
+            if (cleanAppId) {
+              revokeInstanceToken(cleanAppId);
+            }
+            return res.status(403).json({
+              ok: false,
+              error: "Forbidden: AD identity required",
+              action: "DISABLE_PROXY",
+            });
+          }
+        } else if (!isDomainUserAllowed(effectiveUser)) {
+          if (cleanAppId) {
+            revokeInstanceToken(cleanAppId);
+          }
+          return res.status(403).json({
+            ok: false,
+            error: "Forbidden: Access revoked by Active Directory",
+            action: "DISABLE_PROXY",
+          });
+        }
+      }
+
       if (pairedExtension !== undefined && pairedExtension !== null) {
         if (typeof pairedExtension !== "object" || Array.isArray(pairedExtension)) {
           return res.status(400).json({ ok: false, error: "pairedExtension must be an object" });
@@ -119,7 +171,6 @@ export function createAppSyncRouter(
         }
       }
 
-      const clientIp = getClientIp(req);
       const desktopRecord = registerDesktopHeartbeat({
         appInstanceId: cleanAppId,
         hostname: hostname || "unknown-host",

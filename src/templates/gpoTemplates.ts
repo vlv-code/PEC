@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 /**
  * GPO Templates: PowerShell deployment and diagnostics scripts + AD GPMC Readme
  */
@@ -283,6 +284,7 @@ foreach ($b in $browsers) {
     Set-ItemProperty -Path $policyPath -Name "extToken" -Value $Token -Type String
     Set-ItemProperty -Path $policyPath -Name "syncUrl" -Value $SyncUrl -Type String
     Set-ItemProperty -Path $policyPath -Name "credsUrl" -Value $CredsUrl -Type String
+    Set-ItemProperty -Path $policyPath -Name "domainUser" -Value "$env:USERDOMAIN\$env:USERNAME" -Type String
     Set-ItemProperty -Path $policyPath -Name "autoConfigureProxy" -Value 1 -Type DWord
     if (-not [string]::IsNullOrWhiteSpace($TargetGroup)) {
         Set-ItemProperty -Path $policyPath -Name "targetGroup" -Value $TargetGroup -Type String
@@ -675,4 +677,177 @@ gpupdate /force
 - **Edge:** \`edge://policy\` → кнопка *«Перезагрузить политики»*
 - **Яндекс.Браузер:** \`browser://policy\` → кнопка *«Перезагрузить политики»*
 `;
+}
+
+
+export function renderGppRegistryXml(
+  extensionId: string,
+  serverUrl: string,
+  token: string,
+  targetGroup: string = ""
+): string {
+  const safeExtId = extensionId.replace(/["`$]/g, "").trim();
+  const safeServerUrl = serverUrl.replace(/["`$]/g, "").replace(/\/+$/, "").trim();
+  const safeToken = token.replace(/["`$]/g, "").trim();
+  const safeTargetGroup = targetGroup.replace(/["`$]/g, "").trim();
+
+  const updateUrl = `${safeServerUrl}/updates/updates.xml`;
+  const credsUrl = `${safeServerUrl}/creds`;
+  const syncUrl = `${safeServerUrl}/api/sync`;
+  const forcelistVal = `${safeExtId};${updateUrl}`;
+
+  const escapeXmlAttr = (val: string): string => {
+    return val
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  };
+
+  const getGuid = (key: string, name: string): string => {
+    const hash = crypto.createHash("md5").update(`${safeExtId}:${key}:${name}`).digest("hex");
+    return `{${hash.substring(0, 8)}-${hash.substring(8, 12)}-${hash.substring(12, 16)}-${hash.substring(16, 20)}-${hash.substring(20, 32)}}`.toUpperCase();
+  };
+
+  const buildExtensionSettings = (mode: "force_installed" | "normal_installed") => {
+    const obj: any = {
+      "*": {
+        install_sources: [`${safeServerUrl}/*`],
+      },
+      [safeExtId]: {
+        installation_mode: mode,
+        update_url: updateUrl,
+        override_update_url: true,
+        extToken: safeToken,
+        credsUrl: credsUrl,
+        syncUrl: syncUrl,
+        ...(safeTargetGroup ? { targetGroup: safeTargetGroup } : {}),
+      },
+    };
+    return JSON.stringify(obj);
+  };
+
+  const browsers: Array<{
+    name: string;
+    key: string;
+    mode: "force_installed" | "normal_installed";
+  }> = [
+    { name: "Google Chrome", key: "Software\\Policies\\Google\\Chrome", mode: "force_installed" },
+    { name: "Microsoft Edge", key: "Software\\Policies\\Microsoft\\Edge", mode: "force_installed" },
+    { name: "Yandex Browser", key: "Software\\Policies\\YandexBrowser", mode: "normal_installed" },
+    { name: "Opera", key: "Software\\Policies\\Opera Software\\Opera", mode: "force_installed" },
+  ];
+
+  type RegItem = {
+    key: string;
+    name: string;
+    type: "REG_SZ" | "REG_DWORD";
+    value: string;
+    desc: string;
+  };
+
+  const items: RegItem[] = [];
+
+  for (const b of browsers) {
+    // 1. ExtensionSettings
+    items.push({
+      key: b.key,
+      name: "ExtensionSettings",
+      type: "REG_SZ",
+      value: buildExtensionSettings(b.mode),
+      desc: `${b.name} - ExtensionSettings`,
+    });
+
+    // 2. ExtensionInstallForcelist
+    items.push({
+      key: `${b.key}\\ExtensionInstallForcelist`,
+      name: "1",
+      type: "REG_SZ",
+      value: forcelistVal,
+      desc: `${b.name} - ExtensionInstallForcelist`,
+    });
+
+    // 3. ExtensionInstallAllowlist
+    items.push({
+      key: `${b.key}\\ExtensionInstallAllowlist`,
+      name: "1",
+      type: "REG_SZ",
+      value: safeExtId,
+      desc: `${b.name} - ExtensionInstallAllowlist`,
+    });
+
+    // 4. Managed Storage policy parameters
+    const policyKey = `${b.key}\\3rdparty\\extensions\\${safeExtId}\\policy`;
+
+    items.push({
+      key: policyKey,
+      name: "domainUser",
+      type: "REG_SZ",
+      value: "%USERDOMAIN%\\%USERNAME%",
+      desc: `${b.name} - domainUser`,
+    });
+
+    items.push({
+      key: policyKey,
+      name: "extToken",
+      type: "REG_SZ",
+      value: safeToken,
+      desc: `${b.name} - extToken`,
+    });
+
+    items.push({
+      key: policyKey,
+      name: "syncUrl",
+      type: "REG_SZ",
+      value: syncUrl,
+      desc: `${b.name} - syncUrl`,
+    });
+
+    items.push({
+      key: policyKey,
+      name: "credsUrl",
+      type: "REG_SZ",
+      value: credsUrl,
+      desc: `${b.name} - credsUrl`,
+    });
+
+    items.push({
+      key: policyKey,
+      name: "autoConfigureProxy",
+      type: "REG_DWORD",
+      value: "00000001",
+      desc: `${b.name} - autoConfigureProxy`,
+    });
+
+    if (safeTargetGroup) {
+      items.push({
+        key: policyKey,
+        name: "targetGroup",
+        type: "REG_SZ",
+        value: safeTargetGroup,
+        desc: `${b.name} - targetGroup`,
+      });
+    }
+  }
+
+  const timestamp = "2026-01-01 00:00:00";
+
+  let xml = '<?xml version="1.0" encoding="utf-8"?>\r\n';
+  xml += '<RegistrySettings clsid="{A3CCFC41-DFDB-43a5-8D26-0FE8B954DA51}">\r\n';
+
+  for (const item of items) {
+    const uid = getGuid(item.key, item.name);
+    const escapedKey = escapeXmlAttr(item.key);
+    const escapedName = escapeXmlAttr(item.name);
+    const escapedVal = escapeXmlAttr(item.value);
+    const escapedDesc = escapeXmlAttr(item.desc);
+
+    xml += `  <Registry clsid="{9CD4B2F7-2C92-116a-9E29-EEB64A588655}" name="${escapedDesc}" status="${escapedDesc}" image="11" changed="${timestamp}" uid="${uid}" bypassErrors="1" userContext="1" removePolicy="1">\r\n`;
+    xml += `    <Properties action="R" displayDecimal="0" default="0" hive="HKEY_CURRENT_USER" key="${escapedKey}" name="${escapedName}" type="${item.type}" value="${escapedVal}" bypassErrors="1" removePolicy="1" />\r\n`;
+    xml += '  </Registry>\r\n';
+  }
+
+  xml += '</RegistrySettings>\r\n';
+  return xml;
 }

@@ -15,6 +15,7 @@ import {
   renderDeployGpoScript,
   renderVerifyGpoScript,
   renderGpoReadme,
+  renderGppRegistryXml,
 } from "./templates/gpoTemplates.js";
 import { writeJsonAtomic, writeFileAtomic } from "./jsonStore.js";
 import { getBuilderConfigPath, getReleasesDir } from "./storage.js";
@@ -324,6 +325,7 @@ export function generateGpoConfig(
       content += `"extToken"="${regEscape(token)}"\n`;
       content += `"credsUrl"="${regEscape(credsUrl)}"\n`;
       content += `"syncUrl"="${regEscape(syncUrl)}"\n`;
+      content += `"domainUser"="${regEscape("%USERDOMAIN%\\%USERNAME%")}"\n`;
       if (targetGroup) {
         content += `"targetGroup"="${targetGroup}"\n`;
       }
@@ -350,6 +352,12 @@ export function generateGpoConfig(
     options?.targetGroup || ""
   );
   const verifyScript = renderVerifyGpoScript(extensionId, serverBaseUrl, token);
+  const registryXml = renderGppRegistryXml(
+    extensionId,
+    serverBaseUrl,
+    token,
+    options?.targetGroup || ""
+  );
   const readmeContent = renderGpoReadme(extensionId, serverBaseUrl);
 
   return {
@@ -363,6 +371,7 @@ export function generateGpoConfig(
     deployScript,
     verifyScript,
     readmeContent,
+    registryXml,
   };
 }
 
@@ -1135,6 +1144,8 @@ export function packageExtension(baseUrl: string = ""): ExtensionBuildInfo & { z
   return result;
 }
 
+export const buildGpoPackage = generateGpoDeploymentPack;
+
 export function generateGpoDeploymentPack(
   baseUrl: string = "",
   token: string = ""
@@ -1190,6 +1201,7 @@ export function generateGpoDeploymentPack(
     "extension-settings-yandex.json",
     Buffer.from(JSON.stringify(gpo.extensionSettingsEntries.yandex, null, 2), "utf-8")
   );
+  zip.addFile("Registry.xml", Buffer.from(gpo.registryXml, "utf-8"));
   zip.addFile("README-GPO.md", Buffer.from(gpo.readmeContent, "utf-8"));
   const gpoLicense = path.resolve("./LICENSE");
   if (fs.existsSync(gpoLicense)) {

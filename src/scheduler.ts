@@ -7,6 +7,7 @@ import { executeRotation, validateSafeEndpointUrl } from "./rotate.js";
 import { writeJsonAtomic } from "./jsonStore.js";
 import { getRotationConfigPath, getRotationHistoryPath } from "./storage.js";
 import { logger } from "./logger.js";
+import { startAdSync, stopAdSync } from "./adSync.js";
 
 const ROTATION_CONFIG_FILE = getRotationConfigPath();
 const HISTORY_FILE = getRotationHistoryPath();
@@ -239,7 +240,12 @@ export function updateRotationConfig(updates: Partial<RotationConfig>): Rotation
   return { ...currentConfig };
 }
 
+export function periodicAdSyncTask(): void {
+  startAdSync();
+}
+
 export function startScheduler() {
+  periodicAdSyncTask();
   if (timerHandle) {
     clearInterval(timerHandle);
     timerHandle = null;
@@ -290,4 +296,5 @@ export function stopScheduler(): void {
     timerHandle = null;
     logger.info("[scheduler] Stopped rotation timer.");
   }
+  stopAdSync();
 }
